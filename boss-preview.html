@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Boss 图鉴预览</title></head>
+<body style="margin:0;background:#888">
+<canvas id="game"></canvas>
+<script src="main.js"></script>
+<script>
+// 预览模式：把 10 个 Boss 摆成图鉴，静态展示
+resetGame();
+state = 'preview';
+enemies = [];
+for (let s = 1; s <= 10; s++) {
+  const col = (s - 1) % 2, row = Math.floor((s - 1) / 2);
+  enemies.push({
+    id: 900 + s, type: 'boss', boss: true, arch: BOSS_DEFS[s - 1].arch, stage: s, name: BOSS_DEFS[s - 1].name,
+    r: Math.min(BOSS_DEFS[s - 1].r, 44), x: 90 + col * 280, y: 30 + row * 170,
+    walk: 1.2, hitCd: 0, flash: 0, squash: 0, dotT: 0, dotDps: 0,
+    vx: 0, vy: 0, kbx: 0, kby: 0, mode: 'chase', modeT: 9, chargeDx: 1, chargeDy: 0,
+    phase: 1, hp: 100, maxhp: 100
+  });
+}
+player.x = -400; player.y = -400;  // 玩家移出画面
+// 画 Boss 编号
+const _render = render;
+</script>
+</body>
+</html>
