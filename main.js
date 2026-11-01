@@ -1716,9 +1716,8 @@ function render() {
   ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
   ctx.save();
   if (shakeT > 0) ctx.translate((Math.random() - 0.5) * 5, (Math.random() - 0.5) * 5);
-  ctx.translate(W / 2, H / 2);
+  // camX/camY 已经是缩放后视野的世界左上角，直接平移即可让玩家保持屏幕居中
   ctx.scale(ZOOM, ZOOM);
-  ctx.translate(-W / 2, -H / 2);
   ctx.translate(-camX, -camY);
 
   drawPaper(curStage || 1);
