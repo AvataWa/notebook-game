@@ -964,7 +964,8 @@ function update(dt) {
   if (keys['d'] || keys['arrowright']) mx += 1;
   if (joy.active) { mx = joy.dx; my = joy.dy; }
   const ml = Math.hypot(mx, my);
-  if (ml > 1) { mx /= ml; my /= ml; }
+  // 摇杆只提供方向：只要产生拖动，就按当前最大移动速度前进
+  if (ml > 0) { mx /= ml; my /= ml; }
   player.hurtBoostT = Math.max(0, player.hurtBoostT - dt);
   player.leechT += dt;
   if (player.leechT >= 1) { player.leechT %= 1; player.leechN = 0; }
