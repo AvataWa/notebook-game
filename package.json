@@ -1,0 +1,9 @@
+{
+  "name": "notebook-game",
+  "private": true,
+  "version": "0.1.0",
+  "description": "我穿越到笔记本了 - 圆珠笔涂鸦风幸存者like",
+  "scripts": {
+    "dev": "node server.js"
+  }
+}
