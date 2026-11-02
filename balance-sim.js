@@ -1,6 +1,6 @@
 // 数值对比模拟：正常攻击/生命，固定种子，自动走位与选卡；不修改 main.js
 const fs = require('fs');
-const baseSrc = fs.readFileSync(__dirname + '/main.js', 'utf8').replace("'use strict';", '');
+const baseSrc = fs.readFileSync(__dirname + '/enemy-config.js', 'utf8') + '\n' + fs.readFileSync(__dirname + '/main.js', 'utf8').replace("'use strict';", '');
 const variants = [
   { name: '当前', base: 1, time: 0.35, stage: 0.22, boss: 1 },
   { name: '保守推荐', base: 1.2, time: 0.38, stage: 0.24, boss: 1.1 },

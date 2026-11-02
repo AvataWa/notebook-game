@@ -1,5 +1,5 @@
 // 无头冒烟测试：模拟一整局 10 关 100 波，验证关卡制 + Boss 链 + 胜利条件
-const src = require('fs').readFileSync(__dirname + '/main.js', 'utf8').replace("'use strict';", '');
+const src = require('fs').readFileSync(__dirname + '/enemy-config.js', 'utf8') + '\n' + require('fs').readFileSync(__dirname + '/main.js', 'utf8').replace("'use strict';", '');
 
 const fakeCtx = new Proxy({}, {
   get(t, k) {

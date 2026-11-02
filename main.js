@@ -372,13 +372,7 @@ function skillCalc(a) {
 }
 function toast(txt) { toasts.push({ txt, t: 2.8 }); if (toasts.length > 3) toasts.shift(); }
 
-/* ---------- 敌人 ---------- */
-const ENEMY_DEFS = {
-  stick:  { hp: 20, sp: 55,  dmg: 14, r: 12, xp: 1 },
-  spider: { hp: 10, sp: 105, dmg: 9,  r: 9,  xp: 1 },
-  rage:   { hp: 85, sp: 32,  dmg: 22, r: 16, xp: 3 },
-  plane:  { hp: 14, sp: 175, dmg: 12, r: 10, xp: 1 }
-};
+/* ---------- 敌人（基础生命/攻击在 enemy-config.js 中配置） ---------- */
 /* ---------- 关卡定义：10 页作业本 ---------- */
 const STAGE_NAMES = ['横线练习本', '数学方格本', '田字格本', '英语本', '米字格本', '作文本', '五线谱本', '点阵本', '坐标纸', '草稿纸'];
 // 每关纸色：米白/淡绿/米黄/淡蓝/暖黄/奶油/灰白/淡紫灰/淡青/旧黄
@@ -398,17 +392,19 @@ const BOSS_DEFS = [
 function curSt() { return Math.min(10, Math.ceil(player.level / 10)); }
 function spawnEnemy() {
   if (enemies.length > 260) return;
-  const t = gameTime, r = Math.random();
-  let type = 'stick';
-  if (t > 150 && r < 0.15) type = 'plane';
-  else if (t > 90 && r < 0.30) type = 'rage';
-  else if (t > 45 && r < 0.55) type = 'spider';
+  const t = gameTime;
+  const normalPool = Object.keys(ENEMY_DEFS).filter(k => !ENEMY_DEFS[k].elite && t >= ENEMY_DEFS[k].after);
+  const elitePool = Object.keys(ENEMY_DEFS).filter(k => ENEMY_DEFS[k].elite && t >= ENEMY_DEFS[k].after);
+  let type = normalPool[Math.floor(Math.random() * normalPool.length)] || 'stick';
+  // 精英约 4.5% 概率替换本次普通刷怪，不解锁时仍刷普通怪
+  if (elitePool.length && Math.random() < 0.045) type = elitePool[Math.floor(Math.random() * elitePool.length)];
   const a = Math.random() * Math.PI * 2, d = 430 + Math.random() * 120;
   const d0 = ENEMY_DEFS[type];
   const st = curSt();
   const scale = (1 + t / 60 * 0.38) * (1 + (st - 1) * 0.24);
   const e = {
-    id: nextId++, type, x: clampW(player.x + Math.cos(a) * d, 20), y: clampH(player.y + Math.sin(a) * d, 20),
+    id: nextId++, type, name: d0.name, elite: !!d0.elite,
+    x: clampW(player.x + Math.cos(a) * d, 20), y: clampH(player.y + Math.sin(a) * d, 20),
     r: d0.r, hp: d0.hp * scale * 1.2, sp: d0.sp, dmg: Math.round(d0.dmg * (1 + t / 60 * 0.15) * (1 + (st - 1) * 0.12)), xp: d0.xp + st,
     walk: Math.random() * 6, hitCd: 0, flash: 0, squash: 0, dotT: 0, dotDps: 0,
     vx: 0, vy: 0, kbx: 0, kby: 0
@@ -526,7 +522,7 @@ function killEnemy(e) {
     return;
   }
   if (hasItem('bookmark') && Math.random() < 0.08) gems.push({ x: e.x + 8, y: e.y + 8, v: 1 });
-  const rate = e.type === 'rage' ? 0.15 : 0.025;
+  const rate = e.elite ? 0.35 : (e.type === 'rage' ? 0.15 : 0.025);
   if (Math.random() < rate && drops.length < 12) {
     drops.push({ x: e.x, y: e.y, item: ITEM_KEYS[Math.floor(Math.random() * ITEM_KEYS.length)], bob: Math.random() * 6 });
   }
@@ -545,10 +541,11 @@ function hurtEnemy(e, dmg, dotDps, sx, sy, vuln, critAdd, bossMul, hitCol) {
   const kx = e.x - (sx === undefined ? player.x : sx);
   const ky = e.y - (sy === undefined ? player.y : sy);
   const kd = Math.hypot(kx, ky) || 1;
-  e.kbx = kx / kd * KNOCK_V * (e.boss ? 0.1 : 1); e.kby = ky / kd * KNOCK_V * (e.boss ? 0.1 : 1);
+  const kbMul = e.boss ? 0.1 : (e.elite ? 0.35 : 1);
+  e.kbx = kx / kd * KNOCK_V * kbMul; e.kby = ky / kd * KNOCK_V * kbMul;
   if (dotDps) { e.dotDps = Math.max(e.dotDps, dotDps); e.dotT = 3; }
   sparks.push({ x: e.x + (Math.random() - 0.5) * e.r, y: e.y + (Math.random() - 0.5) * e.r, t: 0.18, color: hitCol || INK });
-  floats.push({ x: e.x, y: e.y - e.r - 6, txt: Math.round(dmg) + '', t: 0.7, color: crit ? RED : (hitCol || INK), crit });
+  floats.push({ x: e.x, y: e.y - e.r - 6, txt: Math.round(dmg) + (crit ? '!' : ''), t: 0.7, color: hitCol || INK, crit });
   if (e.hp <= 0) killEnemy(e);
 }
 // 范围/打击统一命中结算；双标签技能可同时获得两系辅助，纯范围技能不吃打击加成
@@ -1690,6 +1687,29 @@ function drawEnemy(e) {
       jline(e.x + Math.cos(a) * e.r * 0.6, e.y + Math.sin(a) * e.r * 0.6,
             e.x + Math.cos(a) * e.r * 2.1, e.y + Math.sin(a) * e.r * 2.1, c, 1.5);
     }
+  } else if (e.type === 'crumple') {   // 皱纸团：不规则折边 + 内部折痕
+    for (let i = 0; i < 9; i++) {
+      const a0 = i / 9 * Math.PI * 2, a1 = (i + 1) / 9 * Math.PI * 2;
+      const r0 = e.r * (0.82 + srand() * 0.3), r1 = e.r * (0.82 + srand() * 0.3);
+      jline(e.x + Math.cos(a0) * r0, e.y + Math.sin(a0) * r0,
+            e.x + Math.cos(a1) * r1, e.y + Math.sin(a1) * r1, c, 2);
+    }
+    jline(e.x - e.r * 0.7, e.y - 3, e.x + e.r * 0.55, e.y + 5, c, 1.2);
+    jline(e.x - 3, e.y - e.r * 0.75, e.x + 4, e.y + e.r * 0.65, c, 1.2);
+    jline(e.x - e.r * 0.45, e.y + e.r * 0.5, e.x + e.r * 0.5, e.y - e.r * 0.45, c, 1.2);
+  } else if (e.type === 'scissors') {   // 剪刀怪：双圆柄 + 交叉刀刃
+    jcircle(e.x - 8, e.y + 7, 4.5, c, 2);
+    jcircle(e.x + 1, e.y + 9, 4.5, c, 2);
+    jline(e.x - 5, e.y + 3, e.x + 13, e.y - 13, c, 2.2);
+    jline(e.x, e.y + 5, e.x + 14, e.y + 1, c, 2.2);
+    jline(e.x + 13, e.y - 13, e.x + 4, e.y - 3, c, 1.4);
+    jline(e.x + 14, e.y + 1, e.x + 5, e.y - 1, c, 1.4);
+  } else if (e.type === 'ink') {   // 浓墨团：厚墨身体 + 滴落小墨珠
+    jcircle(e.x, e.y, e.r, c, 3);
+    ctx.save(); ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 0.82, 0, 7); ctx.clip();
+    scribbleFill(e.x - e.r, e.y - e.r, e.r * 2, e.r * 2, c); ctx.restore();
+    jcircle(e.x - e.r * 0.75, e.y + e.r * 0.7, 3, c, 1.5);
+    jcircle(e.x + e.r * 0.65, e.y + e.r * 0.9, 2.5, c, 1.5);
   } else if (e.type === 'rage') {
     jcircle(e.x, e.y, e.r, c, 2.5);
     jline(e.x - e.r * 0.55, e.y - e.r * 0.45, e.x - e.r * 0.12, e.y - e.r * 0.12, c, 2);
@@ -1701,7 +1721,45 @@ function drawEnemy(e) {
     const lx = e.x - c1 * 8 - s1 * 10, ly = e.y - s1 * 8 + c1 * 10;
     const rx = e.x - c1 * 8 + s1 * 10, ry = e.y - s1 * 8 - c1 * 10;
     jline(tx, ty, lx, ly, c, 2); jline(tx, ty, rx, ry, c, 2); jline(lx, ly, rx, ry, c, 2);
+  } else if (e.type === 'elitePencil') {   // 精英：高瘦铅笔统领
+    const r = e.r;
+    jline(e.x - r * 0.45, e.y - r * 0.7, e.x + r * 0.45, e.y - r * 0.7, c, 3);
+    jline(e.x - r * 0.45, e.y - r * 0.7, e.x - r * 0.45, e.y + r * 0.65, c, 3);
+    jline(e.x + r * 0.45, e.y - r * 0.7, e.x + r * 0.45, e.y + r * 0.65, c, 3);
+    jline(e.x - r * 0.45, e.y + r * 0.65, e.x, e.y + r * 1.15, c, 3);
+    jline(e.x + r * 0.45, e.y + r * 0.65, e.x, e.y + r * 1.15, c, 3);
+    jline(e.x - r * 0.45, e.y - r * 0.25, e.x + r * 0.45, e.y - r * 0.25, c, 2);
+    jline(e.x - r * 0.45, e.y - r * 0.7, e.x - r * 0.25, e.y - r * 1.15, RED, 2.5);
+    jline(e.x, e.y - r * 0.7, e.x, e.y - r * 1.25, RED, 2.5);
+    jline(e.x + r * 0.45, e.y - r * 0.7, e.x + r * 0.25, e.y - r * 1.15, RED, 2.5);
+  } else if (e.type === 'eliteEraser') {   // 精英：宽厚橡皮霸主
+    const r = e.r;
+    jrect(e.x - r * 0.85, e.y - r * 0.65, r * 1.7, r * 1.3, c, 3.5);
+    jline(e.x - r * 0.85, e.y - r * 0.1, e.x + r * 0.85, e.y - r * 0.1, c, 2);
+    jline(e.x - r * 0.35, e.y - r * 0.65, e.x - r * 0.05, e.y + r * 0.65, c, 2);
+    jcircle(e.x - r * 0.38, e.y + r * 0.25, 2.5, c, 1.5);
+    jcircle(e.x + r * 0.38, e.y + r * 0.25, 2.5, c, 1.5);
+    jline(e.x - r * 0.2, e.y + r * 0.48, e.x + r * 0.2, e.y + r * 0.48, c, 2);
+  } else if (e.type === 'eliteEye') {   // 精英：红笔魔眼
+    const r = e.r;
+    jline(e.x - r, e.y, e.x - r * 0.45, e.y - r * 0.62, c, 3);
+    jline(e.x - r * 0.45, e.y - r * 0.62, e.x + r * 0.45, e.y - r * 0.62, c, 3);
+    jline(e.x + r * 0.45, e.y - r * 0.62, e.x + r, e.y, c, 3);
+    jline(e.x - r, e.y, e.x - r * 0.45, e.y + r * 0.62, c, 3);
+    jline(e.x - r * 0.45, e.y + r * 0.62, e.x + r * 0.45, e.y + r * 0.62, c, 3);
+    jline(e.x + r * 0.45, e.y + r * 0.62, e.x + r, e.y, c, 3);
+    jcircle(e.x, e.y, r * 0.38, RED, 3);
+    jcircle(e.x, e.y, r * 0.12, c, 2);
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2;
+      jline(e.x + Math.cos(a) * r * 1.05, e.y + Math.sin(a) * r * 0.75,
+            e.x + Math.cos(a) * r * 1.28, e.y + Math.sin(a) * r * 0.95, RED, 1.8);
+    }
   } else if (e.boss) drawBoss(e, c);
+  if (e.elite) {   // 精英统一外圈，和普通怪快速区分
+    setSeed(e.id + 90);
+    jcircle(e.x, e.y, e.r + 5, c, 1.4);
+  }
   if (e.dotT > 0) {
     setSeed(e.id + 31);
     const ey = e.y - e.r - 8;
@@ -1947,14 +2005,10 @@ function render() {
   ctx.textAlign = 'center';
   for (const f of floats) {
     ctx.globalAlpha = Math.min(1, f.t * 2);
-    ctx.fillStyle = f.color; ctx.font = 'bold 13px ' + FONT;
+    ctx.fillStyle = f.color;
+    // 暴击沿用本次属性伤害颜色，仅放大、加粗，并在数值后显示“!”
+    ctx.font = (f.crit ? '900 18px ' : 'bold 13px ') + FONT;
     ctx.fillText(f.txt, f.x, f.y);
-    if (f.crit) {
-      setSeed(6100);
-      const w = ctx.measureText(f.txt).width;
-      jline(f.x - w / 2, f.y + 3, f.x + w / 2, f.y + 3, RED, 1.5);
-      jline(f.x - w / 2, f.y + 6, f.x + w / 2, f.y + 6, RED, 1.5);
-    }
   }
   ctx.globalAlpha = 1;
   ctx.restore();
