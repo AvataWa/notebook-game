@@ -23,7 +23,7 @@ const ENEMY_GROWTH = {
   hpBase: 1.2,
   hpPerMinute: 0.38,
   hpPerStage: 0.24,
-  hpPerWave: 0,
+  hpPerWave: 0.03,
   dmgPerMinute: 0.15,
   dmgPerStage: 0.12,
   dmgPerWave: 0
@@ -32,6 +32,7 @@ const ENEMY_GROWTH = {
 const ENEMY_DEFS = {
   // 普通小怪
   stick:    { name: '火柴人',     hp: 20,  dmg: 14, sp: 55,  r: 12, xp: 1, after: 0 },
+  doodle:   { name: '小人潮',     hp: 12,  dmg: 10, sp: 72,  r: 9,  xp: 0.5, after: 0, swarm: true },
   spider:   { name: '墨线蜘蛛',   hp: 10,  dmg: 9,  sp: 105, r: 9,  xp: 1, after: 35 },
   crumple:  { name: '皱纸团',     hp: 48,  dmg: 16, sp: 44,  r: 14, xp: 2, after: 55 },
   scissors: { name: '剪刀怪',     hp: 24,  dmg: 18, sp: 132, r: 11, xp: 2, after: 75 },
