@@ -122,6 +122,17 @@ const SKILL_DEFS = {
   cola:     { name: '冰可乐新星', desc: '冰可乐炸开，冻慢身边一圈敌人' },
   dash:     { name: '闪现粉笔',   desc: '向前方瞬移一段，路径留下伤敌墨痕' }
 };
+const SKILL_EVOLUTIONS = {
+  cyclone:  { 3: '质变：增加反向旋转的外圈笔迹', 5: '觉醒：三重蜡笔风暴，范围和频率提升' },
+  volcanic: { 3: '质变：裂缝向左右分支', 5: '觉醒：延长火山带，末端大范围喷发' },
+  tornado:  { 3: '质变：纸飞机额外分裂一代', 5: '觉醒：三架大飞机编队，连续分裂' },
+  arc:      { 3: '质变：主电弧额外分叉', 5: '觉醒：连锁落点留下持续雷网' },
+  srs:      { 3: '质变：出现远程涂鸦小鬼', 5: '觉醒：召唤小鬼王带领冲锋' },
+  cola:     { 3: '质变：新星后留下减速冰面', 5: '觉醒：冻结怪群并引发连环碎冰' }
+};
+function activeUpgradeDesc(id, lvl) {
+  return (SKILL_EVOLUTIONS[id] && SKILL_EVOLUTIONS[id][lvl]) || '伤害 +15%，冷却 -4%';
+}
 /* 技能标签：proj=子弹 area=范围 strike=打击（辅助按标签过滤，双标签可吃两系） */
 const SKILL_TAGS = {
   cyclone: ['strike', 'area'], volcanic: ['area', 'strike'], tornado: ['proj'], chainclip: ['proj'],
@@ -265,18 +276,18 @@ const ITEM_KEYS = Object.keys(ITEM_DEFS);
 
 /* ---------- 游戏状态 ---------- */
 let state, gameTime, kills, camX, camY, shakeT, cycAng, crumpleT;
-let player, enemies, bullets, ebullets, gems, drops, floats, lightnings, erupts, minions, totems, sparks, toasts, cards, cardRects, hazards, blades, clouds, brands, novas, followups;
-let spawnAcc, nextId, bossStageSpawned, curStage;
+let player, enemies, bullets, ebullets, gems, drops, floats, lightnings, erupts, minions, totems, sparks, toasts, cards, cardRects, hazards, blades, clouds, brands, novas, followups, fields, erases;
+let spawnAcc, nextId, bossStageSpawned, curStage, nextHordeT, hordeIndex, killChain, killChainT;
 const keys = {};
 const joy = { active: false, id: -1, bx: 0, by: 0, dx: 0, dy: 0 };
 
 function resetGame() {
   state = 'start'; gameTime = 0; kills = 0; shakeT = 0; cycAng = 0; crumpleT = 0;
   camX = 0; camY = 0; spawnAcc = 0; nextId = 1;
-  bossStageSpawned = 0; curStage = 0;
+  bossStageSpawned = 0; curStage = 0; nextHordeT = 12; hordeIndex = 0; killChain = 0; killChainT = 0;
   enemies = []; bullets = []; ebullets = []; gems = []; drops = []; floats = []; lightnings = [];
   erupts = []; minions = []; totems = []; sparks = []; toasts = []; cards = []; cardRects = []; hazards = [];
-  blades = []; clouds = []; brands = []; novas = []; followups = [];
+  blades = []; clouds = []; brands = []; novas = []; followups = []; fields = []; erases = [];
   player = {
     x: 0, y: 0, r: 12, hp: 100, maxhp: 100, speed: 168, faceA: 0,
     level: 1, xp: 0, xpNext: 8, pickup: 60,
@@ -372,13 +383,7 @@ function skillCalc(a) {
 }
 function toast(txt) { toasts.push({ txt, t: 2.8 }); if (toasts.length > 3) toasts.shift(); }
 
-/* ---------- 敌人 ---------- */
-const ENEMY_DEFS = {
-  stick:  { hp: 20, sp: 55,  dmg: 14, r: 12, xp: 1 },
-  spider: { hp: 10, sp: 105, dmg: 9,  r: 9,  xp: 1 },
-  rage:   { hp: 85, sp: 32,  dmg: 22, r: 16, xp: 3 },
-  plane:  { hp: 14, sp: 175, dmg: 12, r: 10, xp: 1 }
-};
+/* ---------- 敌人（基础生命/攻击在 enemy-config.js 中配置） ---------- */
 /* ---------- 关卡定义：10 页作业本 ---------- */
 const STAGE_NAMES = ['横线练习本', '数学方格本', '田字格本', '英语本', '米字格本', '作文本', '五线谱本', '点阵本', '坐标纸', '草稿纸'];
 // 每关纸色：米白/淡绿/米黄/淡蓝/暖黄/奶油/灰白/淡紫灰/淡青/旧黄
@@ -396,20 +401,35 @@ const BOSS_DEFS = [
   { name: '笔记本之主',     arch: 'caster',  hp: 22000, r: 70, dmg: 60, sp: 46 }
 ];
 function curSt() { return Math.min(10, Math.ceil(player.level / 10)); }
-function spawnEnemy() {
+function scaledEnemyStats(d0) {
+  const g = ENEMY_GROWTH, minutes = gameTime / 60, stage = curSt(), wave = Math.max(1, player.level);
+  return {
+    hp: d0.hp * g.hpBase
+      * (1 + minutes * g.hpPerMinute)
+      * (1 + (stage - 1) * g.hpPerStage)
+      * (1 + (wave - 1) * g.hpPerWave),
+    dmg: Math.round(d0.dmg
+      * (1 + minutes * g.dmgPerMinute)
+      * (1 + (stage - 1) * g.dmgPerStage)
+      * (1 + (wave - 1) * g.dmgPerWave))
+  };
+}
+function spawnEnemy(typeOverride, x, y) {
   if (enemies.length > 260) return;
-  const t = gameTime, r = Math.random();
-  let type = 'stick';
-  if (t > 150 && r < 0.15) type = 'plane';
-  else if (t > 90 && r < 0.30) type = 'rage';
-  else if (t > 45 && r < 0.55) type = 'spider';
+  const t = gameTime;
+  const normalPool = Object.keys(ENEMY_DEFS).filter(k => !ENEMY_DEFS[k].elite && t >= ENEMY_DEFS[k].after);
+  const elitePool = Object.keys(ENEMY_DEFS).filter(k => ENEMY_DEFS[k].elite && t >= ENEMY_DEFS[k].after);
+  let type = typeOverride || normalPool[Math.floor(Math.random() * normalPool.length)] || 'stick';
+  // 精英约 4.5% 概率替换本次普通刷怪；编队指定怪物时不随机替换
+  if (!typeOverride && elitePool.length && Math.random() < 0.045) type = elitePool[Math.floor(Math.random() * elitePool.length)];
   const a = Math.random() * Math.PI * 2, d = 430 + Math.random() * 120;
-  const d0 = ENEMY_DEFS[type];
+  const d0 = ENEMY_DEFS[type], grown = scaledEnemyStats(d0);
   const st = curSt();
-  const scale = (1 + t / 60 * 0.38) * (1 + (st - 1) * 0.24);
   const e = {
-    id: nextId++, type, x: clampW(player.x + Math.cos(a) * d, 20), y: clampH(player.y + Math.sin(a) * d, 20),
-    r: d0.r, hp: d0.hp * scale * 1.2, sp: d0.sp, dmg: Math.round(d0.dmg * (1 + t / 60 * 0.15) * (1 + (st - 1) * 0.12)), xp: d0.xp + st,
+    id: nextId++, type, name: d0.name, elite: !!d0.elite, swarm: !!d0.swarm,
+    x: clampW(x === undefined ? player.x + Math.cos(a) * d : x, 20),
+    y: clampH(y === undefined ? player.y + Math.sin(a) * d : y, 20),
+    r: d0.r, hp: grown.hp, sp: d0.sp, dmg: grown.dmg, xp: d0.xp + st,
     walk: Math.random() * 6, hitCd: 0, flash: 0, squash: 0, dotT: 0, dotDps: 0,
     vx: 0, vy: 0, kbx: 0, kby: 0
   };
@@ -419,6 +439,35 @@ function spawnEnemy() {
     e.vx = Math.cos(aa); e.vy = Math.sin(aa);
   }
   enemies.push(e);
+}
+function spawnHorde() {
+  const form = hordeIndex++ % 3, late = gameTime >= 90;
+  const n = gameTime < 30 ? 10 : (late ? 28 : 16);
+  const a = Math.random() * Math.PI * 2, fx = Math.cos(a), fy = Math.sin(a), px = -fy, py = fx;
+  let type = 'doodle', label = '涂鸦人潮涌过来了！';
+  if (form === 1 && gameTime >= 35) { type = 'spider'; label = '墨线蜘蛛从四周围拢！'; }
+  if (form === 2 && gameTime >= 140) { type = 'plane'; label = '纸飞机编队冲进纸面！'; }
+  for (let i = 0; i < n; i++) {
+    let x, y;
+    if (form === 1) {   // 包围圈
+      const aa = i / n * Math.PI * 2 + a, d = 290 + (i % 3) * 24;
+      x = player.x + Math.cos(aa) * d; y = player.y + Math.sin(aa) * d;
+    } else if (form === 2) {   // V 字编队
+      const row = Math.floor(i / 2) + 1, side = i % 2 ? 1 : -1;
+      x = player.x + fx * (430 + row * 22) + px * side * row * 24;
+      y = player.y + fy * (430 + row * 22) + py * side * row * 24;
+    } else {   // 多排人潮
+      const row = Math.floor(i / 5), col = i % 5;
+      x = player.x + fx * (430 + row * 30) + px * (col - 2) * 28;
+      y = player.y + fy * (430 + row * 30) + py * (col - 2) * 28;
+    }
+    spawnEnemy(type, x, y);
+  }
+  if (hordeIndex % 4 === 0 && gameTime >= 100) {
+    const elites = Object.keys(ENEMY_DEFS).filter(k => ENEMY_DEFS[k].elite && gameTime >= ENEMY_DEFS[k].after);
+    if (elites.length) spawnEnemy(elites[Math.floor(Math.random() * elites.length)], player.x + fx * 400, player.y + fy * 400);
+  }
+  toast(label);
 }
 /* ---------- Boss（三种原型：charger 冲刺 / caster 龙息陨石 / blob 弹幕召唤） ---------- */
 function spawnBoss(st) {
@@ -439,10 +488,10 @@ function spawnBoss(st) {
   toast('纸面被揉皱了…… ' + def.name + ' 爬了出来！');
 }
 function summonMob(type, x, y) {
-  const d0 = ENEMY_DEFS[type], s2 = (1 + gameTime / 60 * 0.38) * (1 + (curSt() - 1) * 0.24);
+  const d0 = ENEMY_DEFS[type], grown = scaledEnemyStats(d0);
   const e = {
-    id: nextId++, type, x, y,
-    r: d0.r, hp: d0.hp * s2 * 1.2, sp: d0.sp, dmg: Math.round(d0.dmg * (1 + gameTime / 60 * 0.15)), xp: d0.xp + curSt(),
+    id: nextId++, type, name: d0.name, elite: !!d0.elite, x, y,
+    r: d0.r, hp: grown.hp, sp: d0.sp, dmg: grown.dmg, xp: d0.xp + curSt(),
     walk: Math.random() * 6, hitCd: 0, flash: 0, squash: 0, dotT: 0, dotDps: 0, vx: 0, vy: 0, kbx: 0, kby: 0
   };
   e.maxhp = e.hp;
@@ -513,10 +562,25 @@ function updateBoss(e, dt) {
     }
   }
 }
+function dropGem(x, y, v) {
+  // 怪潮时把附近经验合并成大墨珠，避免经验粒子随击杀数无限增长
+  if (gems.length >= 70) {
+    let best = null, bd = 90 * 90;
+    for (const g of gems) {
+      const d2 = (g.x - x) ** 2 + (g.y - y) ** 2;
+      if (d2 < bd) { bd = d2; best = g; }
+    }
+    if (best) { best.v += v; return; }
+  }
+  gems.push({ x, y, v });
+}
 function killEnemy(e) {
   if (e.dead) return;
   e.dead = true; kills++;
-  gems.push({ x: e.x, y: e.y, v: e.xp });
+  killChain++; killChainT = 1.25;
+  if (killChain === 10 || killChain === 25 || killChain === 50 || killChain === 100) toast(killChain + ' 连擦！');
+  if (killChain % 10 === 0) shakeT = Math.max(shakeT, 0.09);
+  dropGem(e.x, e.y, e.xp);
   if (e.boss) {
     shakeT = 0.5;
     drops.push({ x: e.x, y: e.y, item: ITEM_KEYS[Math.floor(Math.random() * ITEM_KEYS.length)], bob: 0 });
@@ -525,8 +589,10 @@ function killEnemy(e) {
     else toast(e.name + ' 被涂掉了！第 ' + e.stage + ' 页通过！');
     return;
   }
-  if (hasItem('bookmark') && Math.random() < 0.08) gems.push({ x: e.x + 8, y: e.y + 8, v: 1 });
-  const rate = e.type === 'rage' ? 0.15 : 0.025;
+  erases.push({ x: e.x, y: e.y, r: e.r, t: 0.28, seed: e.id });
+  if (erases.length > 140) erases.shift();
+  if (hasItem('bookmark') && Math.random() < 0.08) dropGem(e.x + 8, e.y + 8, 1);
+  const rate = e.elite ? 0.35 : (e.type === 'rage' ? 0.15 : 0.025);
   if (Math.random() < rate && drops.length < 12) {
     drops.push({ x: e.x, y: e.y, item: ITEM_KEYS[Math.floor(Math.random() * ITEM_KEYS.length)], bob: Math.random() * 6 });
   }
@@ -545,10 +611,11 @@ function hurtEnemy(e, dmg, dotDps, sx, sy, vuln, critAdd, bossMul, hitCol) {
   const kx = e.x - (sx === undefined ? player.x : sx);
   const ky = e.y - (sy === undefined ? player.y : sy);
   const kd = Math.hypot(kx, ky) || 1;
-  e.kbx = kx / kd * KNOCK_V * (e.boss ? 0.1 : 1); e.kby = ky / kd * KNOCK_V * (e.boss ? 0.1 : 1);
+  const kbMul = e.boss ? 0.1 : (e.elite ? 0.35 : 1);
+  e.kbx = kx / kd * KNOCK_V * kbMul; e.kby = ky / kd * KNOCK_V * kbMul;
   if (dotDps) { e.dotDps = Math.max(e.dotDps, dotDps); e.dotT = 3; }
   sparks.push({ x: e.x + (Math.random() - 0.5) * e.r, y: e.y + (Math.random() - 0.5) * e.r, t: 0.18, color: hitCol || INK });
-  floats.push({ x: e.x, y: e.y - e.r - 6, txt: Math.round(dmg) + '', t: 0.7, color: crit ? RED : (hitCol || INK), crit });
+  floats.push({ x: e.x + (Math.random() - 0.5) * 40, y: e.y - e.r - 8 - Math.random() * 18, txt: Math.round(dmg) + (crit ? '!' : ''), t: 0.7, color: hitCol || INK, crit });
   if (e.hp <= 0) killEnemy(e);
 }
 // 范围/打击统一命中结算；双标签技能可同时获得两系辅助，纯范围技能不吃打击加成
@@ -624,28 +691,44 @@ function projOpts(c, life) {
 function fireSkill(a, c) {
   const px = player.x, py = player.y;
   if (a.id === 'cyclone') {
-    const rad = 74 * c.rad * (1 + c.sweep);
-    for (const e of enemies) {
-      const d = Math.hypot(e.x - px, e.y - py);
-      if (!e.dead && d < rad + e.r) areaHit(e, 11 * c.dmg, c, px, py, rad, d);
+    const baseRad = 74 * c.rad * (1 + c.sweep);
+    const rings = a.lvl >= 5 ? [1, 1.32, 1.64] : (a.lvl >= 3 ? [1, 1.35] : [1]);
+    for (let ri = 0; ri < rings.length; ri++) {
+      const rad = baseRad * rings[ri];
+      for (const e of enemies) {
+        const d = Math.hypot(e.x - px, e.y - py);
+        if (!e.dead && d < rad + e.r) areaHit(e, 11 * c.dmg * (ri ? 0.6 : 1), c, px, py, rad, d);
+      }
     }
   } else if (a.id === 'volcanic') {
     const tgt = nearestEnemy(px, py, 520 * c.rad);   // 朝最近的怪物方向喷发
     const va = tgt ? Math.atan2(tgt.y - py, tgt.x - px) : player.faceA;
-    for (let k = 0; k < 3 + c.count; k++) {
-      erupts.push({
-        x: px + Math.cos(va) * (60 + k * 66),
-        y: py + Math.sin(va) * (60 + k * 66),
-        delay: k * 0.22, dmg: 26 * c.dmg, r: 52 * c.rad * (1 + c.sweep), c, done: false, t: 0
+    const dirs = a.lvl >= 3 ? [va - 0.36, va, va + 0.36] : [va];
+    const len = (a.lvl >= 5 ? 7 : 3) + c.count;
+    for (let di = 0; di < dirs.length; di++) {
+      const aa = dirs[di];
+      for (let k = 0; k < len; k++) {
+        erupts.push({
+          x: px + Math.cos(aa) * (60 + k * 66), y: py + Math.sin(aa) * (60 + k * 66),
+          delay: k * (a.lvl >= 5 ? 0.14 : 0.22) + di * 0.04,
+          dmg: 26 * c.dmg * (di === 1 || dirs.length === 1 ? 1 : 0.72),
+          r: 52 * c.rad * (1 + c.sweep), c, done: false, t: 0
+        });
+      }
+      if (a.lvl >= 5) erupts.push({
+        x: px + Math.cos(aa) * (60 + len * 66), y: py + Math.sin(aa) * (60 + len * 66),
+        delay: len * 0.14 + 0.12, dmg: 38 * c.dmg, r: 92 * c.rad * (1 + c.sweep), c, done: false, t: 0
       });
     }
   } else if (a.id === 'tornado') {
     const t0 = nearestEnemy(px, py, 430);
     if (!t0) return;
-    const base = Math.atan2(t0.y - py, t0.x - px), n = 1 + c.count;
+    const base = Math.atan2(t0.y - py, t0.x - px), n = 1 + c.count + (a.lvl >= 5 ? 2 : 0);
     for (let i = 0; i < n; i++) {
-      fireBullet(px, py - 10, base + (i - (n - 1) / 2) * 0.15, 380 * c.proj, 15 * c.dmg * (1 + c.bdmg), 'torn',
-        Object.assign(projOpts(c, 1.3), { hits: 1 + c.pierce, extra: c.chain }));
+      fireBullet(px, py - 10, base + (i - (n - 1) / 2) * 0.18, 380 * c.proj, 15 * c.dmg * (1 + c.bdmg) * (a.lvl >= 5 ? 1.2 : 1), 'torn',
+        Object.assign(projOpts(c, 1.3), { hits: 1 + c.pierce, extra: c.chain + (a.lvl >= 5 ? 2 : 0),
+          gen: a.lvl >= 5 ? 2 : (a.lvl >= 3 ? 1 : 0), big: a.lvl >= 5,
+          rad: c.rad * (1 + c.brad) * (a.lvl >= 5 ? 1.35 : 1) }));
     }
   } else if (a.id === 'chainclip') {
     const t0 = nearestEnemy(px, py, 430);
@@ -656,24 +739,28 @@ function fireSkill(a, c) {
         Object.assign(projOpts(c, 1.5), { hits: 1, chainLeft: 2 + c.chain }));
     }
   } else if (a.id === 'arc') {
-    let cur = nearestEnemy(px, py, 330 * c.rad);
-    if (!cur) return;
-    let sx = px, sy = py - 10, dmg = 22 * c.dmg;
-    const hitSet = [];
-    const jumps = 3 + c.chain;
-    for (let j = 0; j <= jumps && cur; j++) {
-      // 逐段飞行：电弧头沿路径飞过去，到达目标才结算伤害
-      lightnings.push({ x1: sx, y1: sy, x2: cur.x, y2: cur.y, t: 0.25, delay: 0.03 + j * 0.09, prog: 0, tgt: cur, dmg, c });
-      hitSet.push(cur);
-      sx = cur.x; sy = cur.y; dmg *= 0.85;
-      let nxt = null;
-      let bd = 150 * c.rad * (150 * c.rad);
-      for (const e of enemies) {
-        if (e.dead || hitSet.includes(e)) continue;
-        const d2 = (e.x - sx) ** 2 + (e.y - sy) ** 2;
-        if (d2 < bd) { bd = d2; nxt = e; }
+    const first = nearestEnemy(px, py, 330 * c.rad);
+    if (!first) return;
+    const shootArc = (start, startX, startY, jumps, baseDmg, delayBase) => {
+      let cur = start, sx = startX, sy = startY, dmg = baseDmg;
+      const hitSet = [];
+      for (let j = 0; j <= jumps && cur; j++) {
+        lightnings.push({ x1: sx, y1: sy, x2: cur.x, y2: cur.y, t: 0.25, delay: delayBase + j * 0.09, prog: 0, tgt: cur, dmg, c });
+        if (a.lvl >= 5) fields.push({ kind: 'thunder', x: cur.x, y: cur.y, r: 52 * c.rad, t: 2.2, tick: 0.18 + j * 0.04, dmg: 7 * c.dmg, c });
+        hitSet.push(cur); sx = cur.x; sy = cur.y; dmg *= 0.85;
+        let nxt = null, bd = 150 * c.rad * (150 * c.rad);
+        for (const e of enemies) {
+          if (e.dead || hitSet.includes(e)) continue;
+          const d2 = (e.x - sx) ** 2 + (e.y - sy) ** 2;
+          if (d2 < bd) { bd = d2; nxt = e; }
+        }
+        cur = nxt;
       }
-      cur = nxt;
+    };
+    shootArc(first, px, py - 10, 3 + c.chain, 22 * c.dmg, 0.03);
+    if (a.lvl >= 3) {
+      const fork = nearestEnemy(first.x, first.y, 190 * c.rad, first);
+      if (fork) shootArc(fork, first.x, first.y, 2 + c.chain, 15 * c.dmg, 0.18);
     }
     sparks.push({ x: px, y: py - 10, t: 0.18, color: c.col });  // 笔尖端口亮一下
   } else if (a.id === 'spark') {
@@ -684,12 +771,14 @@ function fireSkill(a, c) {
         Object.assign(projOpts(c, 2.6), { hits: 2 + c.pierce, bounce: 2 }));
     }
   } else if (a.id === 'srs') {
-    const cap = 4 + c.count + (player.taken.twin ? 1 : 0);
+    const cap = 4 + c.count + (player.taken.twin ? 1 : 0) + (a.lvl >= 5 ? 1 : 0);
     if (minions.length < cap) {
+      const king = a.lvl >= 5 && !minions.some(m => m.king);
       minions.push({
         x: px + (Math.random() - 0.5) * 40, y: py + (Math.random() - 0.5) * 40,
-        t: 8 * c.areaT, atkCd: 0, dmg: 7 * c.dmg, dot: c.dot, walk: Math.random() * 6,
-        rad: c.rad, vuln: c.vuln, c
+        t: (king ? 12 : 8) * c.areaT, atkCd: 0, dmg: 7 * c.dmg * (king ? 2.2 : 1), dot: c.dot, walk: Math.random() * 6,
+        rad: c.rad * (king ? 1.5 : 1), vuln: c.vuln, c, king,
+        ranged: a.lvl >= 3 && !king && minions.length % 2 === 1
       });
     }
   } else if (a.id === 'ballista') {
@@ -785,11 +874,18 @@ function fireSkill(a, c) {
   } else if (a.id === 'cola') {        // 冰可乐新星：冻慢身边一圈
     const rad = 110 * c.rad;
     novas.push({ x: px, y: py, t: 0.35, max: rad, col: c.col });
+    if (a.lvl >= 3) fields.push({ kind: 'ice', x: px, y: py, r: rad * 0.9, t: 2.8, tick: 0.2, dmg: 4 * c.dmg, c });
+    let shatters = 0;
     for (const e of enemies) {
       const d = Math.hypot(e.x - px, e.y - py);
       if (!e.dead && d < rad + e.r) {
-        e.slowT = Math.max(e.slowT || 0, 1.5);
+        e.slowT = Math.max(e.slowT || 0, a.lvl >= 5 ? 2.5 : 1.5);
+        if (a.lvl >= 5 && !e.boss) e.stunT = Math.max(e.stunT || 0, 0.75);
         areaHit(e, 20 * c.dmg, c, px, py, rad, d);
+        if (a.lvl >= 5 && !e.dead && shatters++ < 18) erupts.push({
+          x: e.x, y: e.y, delay: 0.55 + shatters * 0.025, dmg: 16 * c.dmg, r: 48 * c.rad,
+          c: Object.assign({}, c, { reburst: 0 }), done: false, t: 0
+        });
       }
     }
     if (c.reburst) {   // 二次晕染：新星后再爆发一次
@@ -822,6 +918,7 @@ function updateSkills(dt) {
       pinburst: 1.3, absolve: 2.0, brand: 2.5, cola: 1.8, dash: 3
     }[a.id];
     a.t = baseCd * c.cd;
+    if (a.id === 'cyclone' && a.lvl >= 5) a.t *= 0.72;
     if (a.id === 'candle') a.t /= 1 + (c.retick || 0);   // 反复涂抹：灼烧更频繁
     a.uc = (a.uc || 0) + 1;
     const reps = (c.unleash > 0 && a.uc % 3 === 0) ? 1 + c.unleash : 1;
@@ -852,8 +949,8 @@ function buildOptions() {
   for (const a of player.actives) {
     // 主动技能升级（数值）
     if (a.lvl < MAX_LVL) pool.push({
-      kind: 'active+', skill: a.id, tag: '[强化]', tagColor: INK,
-      name: SKILL_DEFS[a.id].name + ' Lv' + (a.lvl + 1), desc: '伤害 +15%，冷却 -4%（当前 Lv' + a.lvl + '）'
+      kind: 'active+', skill: a.id, tag: (a.lvl + 1 === 3 || a.lvl + 1 === 5) && SKILL_EVOLUTIONS[a.id] ? '[形态进化]' : '[强化]', tagColor: INK,
+      name: SKILL_DEFS[a.id].name + ' Lv' + (a.lvl + 1), desc: activeUpgradeDesc(a.id, a.lvl + 1)
     });
     // 已有辅助升级（效果档位）
     for (const sp of a.supports) {
@@ -980,8 +1077,13 @@ function update(dt) {
   const bossAlive = enemies.some(e => e.boss && !e.dead);
   if (!bossAlive) {   // Boss 在场：停刷小怪、冻结波数，Boss 死后才翻页继续
     const interval = Math.max(0.18, 1.1 - gameTime * 0.0015);
-    spawnAcc += dt;
+    const density = gameTime < 30 ? 2 : (gameTime < 90 ? 3 : 4);
+    spawnAcc += dt * density;
     while (spawnAcc > interval) { spawnAcc -= interval; spawnEnemy(); }
+    if (gameTime >= nextHordeT) {
+      spawnHorde();
+      nextHordeT = gameTime + (gameTime < 90 ? 15 : 20);
+    }
     if (player.xp >= player.xpNext) {
       player.xp -= player.xpNext; player.level++;
       // 升级需求随等级加速增长：前期快、后期明显变慢
@@ -1063,6 +1165,7 @@ function update(dt) {
       if (b.y < WORLD_T + 6 || b.y > WORLD_B - 6) { b.vy = -b.vy; b.bounce--; b.y = clampH(b.y, 6); }
     }
     if (b.life <= 0) continue;
+    if (b.arm > 0) { b.arm -= dt; continue; }   // 分裂后先飞离原目标，避免同帧连续引爆
     for (const e of enemies) {
       if (e.dead) continue;
       if (b.kind === 'boom' && e.boomCd > 0) continue;   // 往返多次命中：0.4s 免疫
@@ -1070,11 +1173,12 @@ function update(dt) {
         if (b.kind === 'torn' && !b.split) {
           b.split = true; b.life = 0;
           hurtEnemy(e, b.dmg, b.dmg * b.dot, b.x, b.y, b.vuln, b.critAdd, 0, b.col);
-          const n = 4 + b.extra;
+          const nextGen = b.gen || 0, n = (nextGen > 0 ? 3 : 4) + b.extra;
           for (let i = 0; i < n; i++) {
             const ang = (i / n) * Math.PI * 2 + Math.random() * 0.4;
-            fireBullet(b.x, b.y, ang, 300 * b.proj, b.dmg * 0.6, 'nib',
-              { hits: 1, dot: b.dot, rad: b.rad, vuln: b.vuln, life: 0.7, critAdd: b.critAdd, col: b.col });
+            fireBullet(b.x, b.y, ang, 300 * b.proj, b.dmg * 0.6, nextGen > 0 ? 'torn' : 'nib',
+              { hits: 1, dot: b.dot, rad: b.rad, vuln: b.vuln, life: 0.8, critAdd: b.critAdd, col: b.col,
+                gen: nextGen - 1, extra: Math.max(0, (b.extra || 0) - 1), arm: nextGen > 0 ? 0.12 : 0 });
           }
           break;
         }
@@ -1195,14 +1299,24 @@ function update(dt) {
   ebullets = ebullets.filter(b => b.life > 0);
 
   for (const m of minions) {
-    m.t -= dt; m.atkCd = Math.max(0, m.atkCd - dt); m.walk += dt * 10;
+    m.t -= dt; m.atkCd = Math.max(0, m.atkCd - dt); m.walk += dt * (m.king ? 15 : 10);
     const t0 = nearestEnemy(m.x, m.y, 9999);
     if (t0) {
-      const a = Math.atan2(t0.y - m.y, t0.x - m.x);
-      m.x += Math.cos(a) * 230 * dt; m.y += Math.sin(a) * 230 * dt;
-      if (Math.hypot(t0.x - m.x, t0.y - m.y) < t0.r + 16 * (m.rad || 1) * (1 + (m.c.sweep || 0)) && m.atkCd <= 0) {
-        m.atkCd = 0.6 / (1 + (m.c.rapid || 0));
-        areaHit(t0, m.dmg, m.c, m.x, m.y);
+      const a = Math.atan2(t0.y - m.y, t0.x - m.x), dist = Math.hypot(t0.x - m.x, t0.y - m.y);
+      if (m.ranged && dist < 285) {
+        if (m.atkCd <= 0) {
+          m.atkCd = 0.9 / (1 + (m.c.rapid || 0));
+          fireBullet(m.x, m.y - 8, a, 340, m.dmg, 'nib', { hits: 1, dot: m.dot, rad: m.rad, vuln: m.vuln, col: m.c.col });
+        }
+      } else {
+        if (!m.ranged || dist > 175) {
+          const sp = m.king ? 310 : 230;
+          m.x += Math.cos(a) * sp * dt; m.y += Math.sin(a) * sp * dt;
+        }
+        if (dist < t0.r + 16 * (m.rad || 1) * (1 + (m.c.sweep || 0)) && m.atkCd <= 0) {
+          m.atkCd = (m.king ? 0.42 : 0.6) / (1 + (m.c.rapid || 0));
+          areaHit(t0, m.dmg, m.c, m.x, m.y);
+        }
       }
     }
   }
@@ -1264,6 +1378,23 @@ function update(dt) {
     }
   }
   clouds = clouds.filter(c => c.t > 0);
+
+  // 觉醒区域：电弧雷网 / 可乐冰面
+  for (const f of fields) {
+    f.t -= dt; f.tick -= dt;
+    if (f.tick <= 0) {
+      f.tick = f.kind === 'ice' ? 0.4 : 0.32;
+      for (const e of enemies) {
+        const d = Math.hypot(e.x - f.x, e.y - f.y);
+        if (!e.dead && d < f.r + e.r) {
+          if (f.kind === 'ice') e.slowT = Math.max(e.slowT || 0, 0.7);
+          areaHit(e, f.dmg, f.c, f.x, f.y, f.r, d);
+        }
+      }
+    }
+  }
+  fields = fields.filter(f => f.t > 0);
+  if (fields.length > 60) fields.splice(0, fields.length - 60);
 
   // 橡皮筋烙印：周期电击并连锁，目标死亡则跳向附近敌人
   for (const br of brands) {
@@ -1352,8 +1483,13 @@ function update(dt) {
   gems = gems.filter(g => !g.got);
   enemies = enemies.filter(e => !e.dead);
 
+  for (const er of erases) er.t -= dt;
+  erases = erases.filter(er => er.t > 0);
+  killChainT -= dt;
+  if (killChainT <= 0) killChain = 0;
   for (const f of floats) { f.t -= dt; f.y -= 30 * dt; }
   floats = floats.filter(f => f.t > 0);
+  if (floats.length > 100) floats.splice(0, floats.length - 100);
   for (const ts of toasts) ts.t -= dt;
   toasts = toasts.filter(ts => ts.t > 0);
 
@@ -1683,6 +1819,7 @@ function drawEnemy(e) {
     ctx.translate(-e.x, -e.y);
   }
   if (e.type === 'stick') drawStick(e.x, e.y, 26, e.walk, c);
+  else if (e.type === 'doodle') drawStick(e.x, e.y, 19, e.walk, c);
   else if (e.type === 'spider') {
     jcircle(e.x, e.y, e.r, c, 2);
     for (let i = 0; i < 8; i++) {
@@ -1690,6 +1827,29 @@ function drawEnemy(e) {
       jline(e.x + Math.cos(a) * e.r * 0.6, e.y + Math.sin(a) * e.r * 0.6,
             e.x + Math.cos(a) * e.r * 2.1, e.y + Math.sin(a) * e.r * 2.1, c, 1.5);
     }
+  } else if (e.type === 'crumple') {   // 皱纸团：不规则折边 + 内部折痕
+    for (let i = 0; i < 9; i++) {
+      const a0 = i / 9 * Math.PI * 2, a1 = (i + 1) / 9 * Math.PI * 2;
+      const r0 = e.r * (0.82 + srand() * 0.3), r1 = e.r * (0.82 + srand() * 0.3);
+      jline(e.x + Math.cos(a0) * r0, e.y + Math.sin(a0) * r0,
+            e.x + Math.cos(a1) * r1, e.y + Math.sin(a1) * r1, c, 2);
+    }
+    jline(e.x - e.r * 0.7, e.y - 3, e.x + e.r * 0.55, e.y + 5, c, 1.2);
+    jline(e.x - 3, e.y - e.r * 0.75, e.x + 4, e.y + e.r * 0.65, c, 1.2);
+    jline(e.x - e.r * 0.45, e.y + e.r * 0.5, e.x + e.r * 0.5, e.y - e.r * 0.45, c, 1.2);
+  } else if (e.type === 'scissors') {   // 剪刀怪：双圆柄 + 交叉刀刃
+    jcircle(e.x - 8, e.y + 7, 4.5, c, 2);
+    jcircle(e.x + 1, e.y + 9, 4.5, c, 2);
+    jline(e.x - 5, e.y + 3, e.x + 13, e.y - 13, c, 2.2);
+    jline(e.x, e.y + 5, e.x + 14, e.y + 1, c, 2.2);
+    jline(e.x + 13, e.y - 13, e.x + 4, e.y - 3, c, 1.4);
+    jline(e.x + 14, e.y + 1, e.x + 5, e.y - 1, c, 1.4);
+  } else if (e.type === 'ink') {   // 浓墨团：厚墨身体 + 滴落小墨珠
+    jcircle(e.x, e.y, e.r, c, 3);
+    ctx.save(); ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 0.82, 0, 7); ctx.clip();
+    scribbleFill(e.x - e.r, e.y - e.r, e.r * 2, e.r * 2, c); ctx.restore();
+    jcircle(e.x - e.r * 0.75, e.y + e.r * 0.7, 3, c, 1.5);
+    jcircle(e.x + e.r * 0.65, e.y + e.r * 0.9, 2.5, c, 1.5);
   } else if (e.type === 'rage') {
     jcircle(e.x, e.y, e.r, c, 2.5);
     jline(e.x - e.r * 0.55, e.y - e.r * 0.45, e.x - e.r * 0.12, e.y - e.r * 0.12, c, 2);
@@ -1701,7 +1861,45 @@ function drawEnemy(e) {
     const lx = e.x - c1 * 8 - s1 * 10, ly = e.y - s1 * 8 + c1 * 10;
     const rx = e.x - c1 * 8 + s1 * 10, ry = e.y - s1 * 8 - c1 * 10;
     jline(tx, ty, lx, ly, c, 2); jline(tx, ty, rx, ry, c, 2); jline(lx, ly, rx, ry, c, 2);
+  } else if (e.type === 'elitePencil') {   // 精英：高瘦铅笔统领
+    const r = e.r;
+    jline(e.x - r * 0.45, e.y - r * 0.7, e.x + r * 0.45, e.y - r * 0.7, c, 3);
+    jline(e.x - r * 0.45, e.y - r * 0.7, e.x - r * 0.45, e.y + r * 0.65, c, 3);
+    jline(e.x + r * 0.45, e.y - r * 0.7, e.x + r * 0.45, e.y + r * 0.65, c, 3);
+    jline(e.x - r * 0.45, e.y + r * 0.65, e.x, e.y + r * 1.15, c, 3);
+    jline(e.x + r * 0.45, e.y + r * 0.65, e.x, e.y + r * 1.15, c, 3);
+    jline(e.x - r * 0.45, e.y - r * 0.25, e.x + r * 0.45, e.y - r * 0.25, c, 2);
+    jline(e.x - r * 0.45, e.y - r * 0.7, e.x - r * 0.25, e.y - r * 1.15, RED, 2.5);
+    jline(e.x, e.y - r * 0.7, e.x, e.y - r * 1.25, RED, 2.5);
+    jline(e.x + r * 0.45, e.y - r * 0.7, e.x + r * 0.25, e.y - r * 1.15, RED, 2.5);
+  } else if (e.type === 'eliteEraser') {   // 精英：宽厚橡皮霸主
+    const r = e.r;
+    jrect(e.x - r * 0.85, e.y - r * 0.65, r * 1.7, r * 1.3, c, 3.5);
+    jline(e.x - r * 0.85, e.y - r * 0.1, e.x + r * 0.85, e.y - r * 0.1, c, 2);
+    jline(e.x - r * 0.35, e.y - r * 0.65, e.x - r * 0.05, e.y + r * 0.65, c, 2);
+    jcircle(e.x - r * 0.38, e.y + r * 0.25, 2.5, c, 1.5);
+    jcircle(e.x + r * 0.38, e.y + r * 0.25, 2.5, c, 1.5);
+    jline(e.x - r * 0.2, e.y + r * 0.48, e.x + r * 0.2, e.y + r * 0.48, c, 2);
+  } else if (e.type === 'eliteEye') {   // 精英：红笔魔眼
+    const r = e.r;
+    jline(e.x - r, e.y, e.x - r * 0.45, e.y - r * 0.62, c, 3);
+    jline(e.x - r * 0.45, e.y - r * 0.62, e.x + r * 0.45, e.y - r * 0.62, c, 3);
+    jline(e.x + r * 0.45, e.y - r * 0.62, e.x + r, e.y, c, 3);
+    jline(e.x - r, e.y, e.x - r * 0.45, e.y + r * 0.62, c, 3);
+    jline(e.x - r * 0.45, e.y + r * 0.62, e.x + r * 0.45, e.y + r * 0.62, c, 3);
+    jline(e.x + r * 0.45, e.y + r * 0.62, e.x + r, e.y, c, 3);
+    jcircle(e.x, e.y, r * 0.38, RED, 3);
+    jcircle(e.x, e.y, r * 0.12, c, 2);
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2;
+      jline(e.x + Math.cos(a) * r * 1.05, e.y + Math.sin(a) * r * 0.75,
+            e.x + Math.cos(a) * r * 1.28, e.y + Math.sin(a) * r * 0.95, RED, 1.8);
+    }
   } else if (e.boss) drawBoss(e, c);
+  if (e.elite) {   // 精英统一外圈，和普通怪快速区分
+    setSeed(e.id + 90);
+    jcircle(e.x, e.y, e.r + 5, c, 1.4);
+  }
   if (e.dotT > 0) {
     setSeed(e.id + 31);
     const ey = e.y - e.r - 8;
@@ -1790,7 +1988,20 @@ function render() {
     jrect(dr.x - 8, bobY - 8, 16, 16, PICKUP, 2);
     jline(dr.x - 4, bobY, dr.x + 4, bobY, PICKUP, 2);
   }
-  for (const e of enemies) drawEnemy(e);
+  // 被擦掉的小怪：纸色粗笔擦除 + 少量纸屑，活怪随后绘制避免被遮住
+  for (const er of erases) {
+    setSeed(er.seed + 12000); ctx.globalAlpha = Math.min(1, er.t / 0.18);
+    const pc = STAGE_PAPER[(curStage || 1) - 1];
+    jline(er.x - er.r, er.y - er.r * 0.5, er.x + er.r, er.y + er.r * 0.35, pc, 7);
+    jline(er.x - er.r * 0.8, er.y + er.r * 0.55, er.x + er.r * 0.7, er.y - er.r * 0.45, pc, 5);
+    for (let i = 0; i < 3; i++) jline(er.x + (srand() - 0.5) * er.r * 2, er.y + (srand() - 0.5) * er.r * 2,
+      er.x + (srand() - 0.5) * er.r * 3, er.y + er.r + srand() * 6, GRAY, 1);
+    ctx.globalAlpha = 1;
+  }
+  for (const e of enemies) {
+    if (e.x < camX - 70 || e.x > camX + VIEW_W + 70 || e.y < camY - 70 || e.y > camY + VIEW_H + 70) continue;
+    drawEnemy(e);
+  }
   for (const m of minions) {
     setSeed(m.walk * 1000 | 0);
     if (m.ghost) {   // 赦免粉笔拉起来的幽灵小鬼：半透明描边
@@ -1800,7 +2011,15 @@ function render() {
       jline(m.x - 2, m.y + 5, m.x + 1, m.y + 9, INK, 1.2);
       jline(m.x + 1, m.y + 9, m.x + 4, m.y + 5, INK, 1.2);
       ctx.globalAlpha = 1;
-    } else drawStick(m.x, m.y, 18, m.walk, ALLY);
+    } else {
+      drawStick(m.x, m.y, m.king ? 32 : 18, m.walk, ALLY);
+      if (m.king) {
+        jline(m.x - 9, m.y - 25, m.x - 6, m.y - 34, ALLY, 2.5);
+        jline(m.x - 6, m.y - 34, m.x, m.y - 27, ALLY, 2.5);
+        jline(m.x, m.y - 27, m.x + 6, m.y - 34, ALLY, 2.5);
+        jline(m.x + 6, m.y - 34, m.x + 9, m.y - 25, ALLY, 2.5);
+      } else if (m.ranged) jcircle(m.x + 9, m.y - 3, 4, ALLY, 1.5);
+    }
   }
   for (const tt of totems) {
     setSeed(7000 + Math.floor(tt.x));
@@ -1820,6 +2039,19 @@ function render() {
     for (let i = 0; i < 4; i++) {
       const rx = cl.x - cl.r * 0.5 + i * cl.r * 0.33 + (srand() - 0.5) * 6;
       jline(rx, cl.y - cl.r * 0.3, rx - 3, cl.y + cl.r * 0.35 + srand() * 8, cc, 1.3);
+    }
+    ctx.globalAlpha = 1;
+  }
+  // 雷网与冰面：持续存在的觉醒领域
+  for (const f of fields) {
+    setSeed(7350 + Math.floor(f.x)); const fc = f.kind === 'ice' ? '#7ec8e3' : (f.c.col || ARC);
+    ctx.globalAlpha = Math.min(0.65, f.t * 0.5);
+    jcircle(f.x, f.y, f.r, fc, f.kind === 'ice' ? 2 : 2.5);
+    jcircle(f.x, f.y, f.r * 0.72, fc, 1.2);
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2;
+      jline(f.x + Math.cos(a) * f.r * 0.25, f.y + Math.sin(a) * f.r * 0.25,
+        f.x + Math.cos(a + 0.35) * f.r * 0.9, f.y + Math.sin(a + 0.35) * f.r * 0.9, fc, 1.2);
     }
     ctx.globalAlpha = 1;
   }
@@ -1851,14 +2083,17 @@ function render() {
     ctx.globalAlpha = 1;
   }
   if (getActive('cyclone')) {
-    const cc = skillCalc(getActive('cyclone'));
-    const rad = 74 * cc.rad * (1 + cc.sweep);
-    for (let i = 0; i < 3; i++) {
-      const a = cycAng + i * Math.PI * 2 / 3;
-      const x1 = player.x + Math.cos(a) * rad, y1 = player.y + Math.sin(a) * rad;
-      const x2 = player.x + Math.cos(a + 0.9) * rad, y2 = player.y + Math.sin(a + 0.9) * rad;
-      setSeed(8800 + i);
-      jline(x1, y1, x2, y2, cc.col, 4);
+    const ca = getActive('cyclone'), cc = skillCalc(ca), baseRad = 74 * cc.rad * (1 + cc.sweep);
+    const rings = ca.lvl >= 5 ? [1, 1.32, 1.64] : (ca.lvl >= 3 ? [1, 1.35] : [1]);
+    for (let ri = 0; ri < rings.length; ri++) {
+      const rad = baseRad * rings[ri], n = ca.lvl >= 5 ? 4 : 3;
+      for (let i = 0; i < n; i++) {
+        const a = cycAng * (ri % 2 ? -1 : 1) + ri * 0.4 + i * Math.PI * 2 / n;
+        const x1 = player.x + Math.cos(a) * rad, y1 = player.y + Math.sin(a) * rad;
+        const x2 = player.x + Math.cos(a + 0.9) * rad, y2 = player.y + Math.sin(a + 0.9) * rad;
+        setSeed(8800 + i + ri * 10);
+        jline(x1, y1, x2, y2, cc.col, ri === 2 ? 5 : 4);
+      }
     }
   }
   for (const b of bullets) {
@@ -1866,9 +2101,9 @@ function render() {
     const a = Math.atan2(b.vy, b.vx);
     const bc = b.col || INK;   // 属性色：物理灰/火橙/冰浅蓝/雷蓝紫
     if (b.kind === 'torn') {
-      const c1 = Math.cos(a), s1 = Math.sin(a);
-      jline(b.x + c1 * 8, b.y + s1 * 8, b.x - c1 * 5 - s1 * 6, b.y - s1 * 5 + c1 * 6, bc, 1.8);
-      jline(b.x + c1 * 8, b.y + s1 * 8, b.x - c1 * 5 + s1 * 6, b.y - s1 * 5 - c1 * 6, bc, 1.8);
+      const c1 = Math.cos(a), s1 = Math.sin(a), sz = b.big ? 1.6 : 1;
+      jline(b.x + c1 * 8 * sz, b.y + s1 * 8 * sz, b.x - c1 * 5 * sz - s1 * 6 * sz, b.y - s1 * 5 * sz + c1 * 6 * sz, bc, b.big ? 2.8 : 1.8);
+      jline(b.x + c1 * 8 * sz, b.y + s1 * 8 * sz, b.x - c1 * 5 * sz + s1 * 6 * sz, b.y - s1 * 5 * sz - c1 * 6 * sz, bc, b.big ? 2.8 : 1.8);
     } else if (b.kind === 'chain') {
       jrect(b.x - 3, b.y - 5, 6, 10, bc, 1.8);
     } else if (b.kind === 'ink') {
@@ -1947,14 +2182,10 @@ function render() {
   ctx.textAlign = 'center';
   for (const f of floats) {
     ctx.globalAlpha = Math.min(1, f.t * 2);
-    ctx.fillStyle = f.color; ctx.font = 'bold 13px ' + FONT;
+    ctx.fillStyle = f.color;
+    // 暴击沿用本次属性伤害颜色，仅放大、加粗，并在数值后显示“!”
+    ctx.font = (f.crit ? '900 18px ' : 'bold 13px ') + FONT;
     ctx.fillText(f.txt, f.x, f.y);
-    if (f.crit) {
-      setSeed(6100);
-      const w = ctx.measureText(f.txt).width;
-      jline(f.x - w / 2, f.y + 3, f.x + w / 2, f.y + 3, RED, 1.5);
-      jline(f.x - w / 2, f.y + 6, f.x + w / 2, f.y + 6, RED, 1.5);
-    }
   }
   ctx.globalAlpha = 1;
   ctx.restore();
@@ -2006,6 +2237,10 @@ function drawHUD() {
   ctx.fillText('Lv.' + player.level, 16, top + 38);
   ctx.textAlign = 'right'; ctx.font = 'bold 13px ' + FONT;
   ctx.fillText('击杀 ' + kills, W - 16, top + 11);
+  if (killChain >= 5) {
+    ctx.fillStyle = killChain >= 25 ? RED : INK; ctx.font = '900 14px ' + FONT;
+    ctx.fillText(killChain + ' 连擦', W - 16, top + 30);
+  }
   // Boss 血条
   const boss = enemies.find(e => e.boss && !e.dead);
   if (boss) {
