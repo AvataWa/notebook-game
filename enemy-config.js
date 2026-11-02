@@ -9,6 +9,26 @@
    after = 开局多少秒后加入刷怪池
    elite = 是否为精英怪（精英有独立刷出概率和更高装备掉落率）
    ============================================================ */
+
+/* 怪物成长配置
+   hpBase        = 所有普通怪/精英怪的基础生命倍率
+   hpPerMinute   = 每分钟增加的生命比例，0.38 = +38%
+   hpPerStage    = 每个关卡增加的生命比例，0.24 = +24%
+   hpPerWave     = 每一波增加的生命比例，0.01 = +1%（默认 0，不影响原难度）
+   dmgPerMinute  = 每分钟增加的攻击比例，0.15 = +15%
+   dmgPerStage   = 每个关卡增加的攻击比例，0.12 = +12%
+   dmgPerWave    = 每一波增加的攻击比例，0.01 = +1%（默认 0，不影响原难度）
+   时间、关卡、波数三种成长分别计算后相乘；第 1 波不会获得波数加成。 */
+const ENEMY_GROWTH = {
+  hpBase: 1.2,
+  hpPerMinute: 0.38,
+  hpPerStage: 0.24,
+  hpPerWave: 0,
+  dmgPerMinute: 0.15,
+  dmgPerStage: 0.12,
+  dmgPerWave: 0
+};
+
 const ENEMY_DEFS = {
   // 普通小怪
   stick:    { name: '火柴人',     hp: 20,  dmg: 14, sp: 55,  r: 12, xp: 1, after: 0 },

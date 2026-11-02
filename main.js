@@ -390,6 +390,19 @@ const BOSS_DEFS = [
   { name: '笔记本之主',     arch: 'caster',  hp: 22000, r: 70, dmg: 60, sp: 46 }
 ];
 function curSt() { return Math.min(10, Math.ceil(player.level / 10)); }
+function scaledEnemyStats(d0) {
+  const g = ENEMY_GROWTH, minutes = gameTime / 60, stage = curSt(), wave = Math.max(1, player.level);
+  return {
+    hp: d0.hp * g.hpBase
+      * (1 + minutes * g.hpPerMinute)
+      * (1 + (stage - 1) * g.hpPerStage)
+      * (1 + (wave - 1) * g.hpPerWave),
+    dmg: Math.round(d0.dmg
+      * (1 + minutes * g.dmgPerMinute)
+      * (1 + (stage - 1) * g.dmgPerStage)
+      * (1 + (wave - 1) * g.dmgPerWave))
+  };
+}
 function spawnEnemy() {
   if (enemies.length > 260) return;
   const t = gameTime;
@@ -399,13 +412,12 @@ function spawnEnemy() {
   // 精英约 4.5% 概率替换本次普通刷怪，不解锁时仍刷普通怪
   if (elitePool.length && Math.random() < 0.045) type = elitePool[Math.floor(Math.random() * elitePool.length)];
   const a = Math.random() * Math.PI * 2, d = 430 + Math.random() * 120;
-  const d0 = ENEMY_DEFS[type];
+  const d0 = ENEMY_DEFS[type], grown = scaledEnemyStats(d0);
   const st = curSt();
-  const scale = (1 + t / 60 * 0.38) * (1 + (st - 1) * 0.24);
   const e = {
     id: nextId++, type, name: d0.name, elite: !!d0.elite,
     x: clampW(player.x + Math.cos(a) * d, 20), y: clampH(player.y + Math.sin(a) * d, 20),
-    r: d0.r, hp: d0.hp * scale * 1.2, sp: d0.sp, dmg: Math.round(d0.dmg * (1 + t / 60 * 0.15) * (1 + (st - 1) * 0.12)), xp: d0.xp + st,
+    r: d0.r, hp: grown.hp, sp: d0.sp, dmg: grown.dmg, xp: d0.xp + st,
     walk: Math.random() * 6, hitCd: 0, flash: 0, squash: 0, dotT: 0, dotDps: 0,
     vx: 0, vy: 0, kbx: 0, kby: 0
   };
@@ -435,10 +447,10 @@ function spawnBoss(st) {
   toast('纸面被揉皱了…… ' + def.name + ' 爬了出来！');
 }
 function summonMob(type, x, y) {
-  const d0 = ENEMY_DEFS[type], s2 = (1 + gameTime / 60 * 0.38) * (1 + (curSt() - 1) * 0.24);
+  const d0 = ENEMY_DEFS[type], grown = scaledEnemyStats(d0);
   const e = {
-    id: nextId++, type, x, y,
-    r: d0.r, hp: d0.hp * s2 * 1.2, sp: d0.sp, dmg: Math.round(d0.dmg * (1 + gameTime / 60 * 0.15)), xp: d0.xp + curSt(),
+    id: nextId++, type, name: d0.name, elite: !!d0.elite, x, y,
+    r: d0.r, hp: grown.hp, sp: d0.sp, dmg: grown.dmg, xp: d0.xp + curSt(),
     walk: Math.random() * 6, hitCd: 0, flash: 0, squash: 0, dotT: 0, dotDps: 0, vx: 0, vy: 0, kbx: 0, kby: 0
   };
   e.maxhp = e.hp;
