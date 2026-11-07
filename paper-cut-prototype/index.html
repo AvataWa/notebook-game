@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="theme-color" content="#302b27">
+  <title>圈地剪纸 · 试验页</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #302b27; }
+    body { display: grid; place-items: center; font-family: "Segoe Print", "PingFang SC", "Microsoft YaHei", sans-serif; }
+    canvas { display: block; touch-action: none; user-select: none; -webkit-user-select: none; cursor: crosshair; }
+  </style>
+</head>
+<body>
+  <canvas id="game" aria-label="圈地剪纸游戏：移动留下墨线，闭合后剪下纸面"></canvas>
+  <script src="game.js"></script>
+</body>
+</html>

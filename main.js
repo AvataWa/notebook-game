@@ -30,7 +30,18 @@ if (typeof Image !== 'undefined') {
 }
 function imgReady(im) { return !!im && im.complete && im.naturalWidth > 0; }
 const MAX_ACTIVES = 4, MAX_SUPPORTS = 4, MAX_LVL = 5;
-const SQUASH_T = 0.22, KNOCK_V = 150;
+// 浏览器统一读取 battle-config.js；兜底仅用于未加载配置脚本的旧无头测试
+const BATTLE = typeof BATTLE_CONFIG !== 'undefined' ? BATTLE_CONFIG : {
+  player: { radius: 12, hp: 100, speed: 168, maxInk: 100 },
+  feedback: { squash: 0.22, knockback: 150, levelupDelay: 0.5 },
+  melee: { period: 1.5, total: 0.55, active: 0.2, triggerExtra: 32 },
+  ink: { ownSpeed: 1.12, hostileSpeed: 0.58, enemyOwnSpeed: 1.12, enemyFriendlySpeed: 0.82, regenBase: 0.35, regenOwnBonus: 2.5, hostileTick: 0.55, hostileDamage: 2 },
+  dive: { ownCost: 12, otherCost: 36, speed: 1.55 },
+  absorb: { duration: 0.35, ownDuration: 0.4, cooldown: 1.2, radius: 65, ownRadius: 100, maxGain: 12, bulletInk: 3, meleeInk: 8, charge: 20, hitStop: 0.3, slowScale: 0.15, meleeRadius: 120, meleeDamage: 27.5 },
+  surge: { radius: 240, chargeTime: 1.2, minScale: 0.6, maxScale: 1.2, damage: 55, visual: 0.35 },
+  traits: { inkArmorReduction: 0.2, inkDamageMul: 1.2, parryChargeMul: 1.5, absorbInkMul: 1.5, surgeRetain: 20 }
+};
+const SQUASH_T = BATTLE.feedback.squash, KNOCK_V = BATTLE.feedback.knockback;
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -119,8 +130,7 @@ const SKILL_DEFS = {
   pinburst: { name: '蜂群大头钉', desc: '扇形射出一把大头钉，钉尖爆裂' },
   absolve:  { name: '赦免粉笔',   desc: '光柱劈最强的敌人，劈死则化为己方小鬼' },
   brand:    { name: '橡皮筋烙印', desc: '给敌人套上橡皮筋，持续电击并弹向周围' },
-  cola:     { name: '冰可乐新星', desc: '冰可乐炸开，冻慢身边一圈敌人' },
-  dash:     { name: '闪现粉笔',   desc: '向前方瞬移一段，路径留下伤敌墨痕' }
+  cola:     { name: '冰可乐新星', desc: '冰可乐炸开，冻慢身边一圈敌人' }
 };
 const SKILL_EVOLUTIONS = {
   cyclone:  { 3: '质变：增加反向旋转的外圈笔迹', 5: '觉醒：三重蜡笔风暴，范围和频率提升' },
@@ -139,19 +149,20 @@ const SKILL_TAGS = {
   arc: ['area'], spark: ['proj'], srs: ['strike'], ballista: ['proj'], boomerang: ['proj'],
   vortex: ['strike', 'area'], candle: ['area'], icespear: ['proj'], inkrain: ['area'],
   ruler: ['area', 'strike'], chalk: ['area'], pinburst: ['proj'], absolve: ['strike'],
-  brand: ['area'], cola: ['area'], dash: ['strike']
+  brand: ['area'], cola: ['area']
 };
-/* 技能属性：phys 物理灰 / fire 火橙 / ice 冰浅蓝 / thunder 雷蓝紫（每系 5 个） */
+/* 技能属性：phys 物理灰 / fire 火橙 / ice 冰浅蓝 / thunder 雷蓝紫 */
 const SKILL_ATTR = {
   cyclone: 'phys', srs: 'phys', ballista: 'phys', vortex: 'phys', ruler: 'phys',
   volcanic: 'fire', candle: 'fire', chalk: 'fire', inkrain: 'fire', pinburst: 'fire',
   tornado: 'ice', spark: 'ice', boomerang: 'ice', icespear: 'ice', cola: 'ice',
-  chainclip: 'thunder', arc: 'thunder', absolve: 'thunder', brand: 'thunder', dash: 'thunder'
+  chainclip: 'thunder', arc: 'thunder', absolve: 'thunder', brand: 'thunder'
 };
 const ATTR_COLOR = { phys: '#6b6b6b', fire: '#e67e22', ice: '#7ec8e3', thunder: '#5b5bd6' };
 const ATTR_NAME = { phys: '物理', fire: '火', ice: '冰', thunder: '雷' };
 const TAG_NAME = { proj: '子弹', area: '范围', strike: '打击' };
 function attrOf(aid) { return ATTR_COLOR[SKILL_ATTR[aid]] || INK; }
+function trailColorOf(aid) { return SKILL_ATTR[aid] === 'phys' ? INK : attrOf(aid); }
 
 const SUPPORTS = {
   // tag: all=全部 / proj=子弹 / area=范围 / strike=打击；skills=额外白名单（可选）
@@ -191,7 +202,7 @@ const SUPPORTS = {
   counter: { name: '反震纸背', tag: 'strike' },
   // 打击·表现
   rapid:   { name: '疾笔',     tag: 'strike' },
-  sweep:   { name: '大开大合', tag: 'strike', skills: ['cyclone', 'vortex', 'dash', 'srs', 'volcanic', 'ruler'] },
+  sweep:   { name: '大开大合', tag: 'strike', skills: ['cyclone', 'vortex', 'srs', 'volcanic', 'ruler'] },
   followup:{ name: '追加一笔', tag: 'strike' },
   leech:   { name: '回锋',     tag: 'strike' },
   shock:   { name: '震荡纸面', tag: 'strike' },
@@ -248,13 +259,19 @@ const PASSIVES = [
   { id: 'haste',  name: '速写', desc: '技能冷却 -6%',            fx: () => player.cdMul *= 0.94 },
   { id: 'spd',    name: '碎步', desc: '移动速度 +6%',            fx: () => player.speed *= 1.06 },
   { id: 'hpup',   name: '厚纸', desc: '最大生命 +20 并回复 20',   fx: () => { player.maxhp += 20; player.hp = Math.min(player.maxhp, player.hp + 20); } },
-  { id: 'magnet', name: '吸墨', desc: '拾取范围 +35%',           fx: () => player.pickup *= 1.35 },
+  { id: 'magnet', name: '灵感', desc: '普通怪物击杀经验 +15%',     fx: () => player.xpMul *= 1.15 },
   { id: 'crit',   name: '重墨', desc: '暴击率 +10%（双倍伤害）',  fx: () => player.crit += 0.1 }
 ];
 const NOTABLES = [
-  { id: 'twin',      name: '大节点·双生画笔', desc: '小鬼/炮台上限 +1',        fx: () => player.taken.twin = true },
-  { id: 'inkmaster', name: '大节点·泼墨',     desc: '全部技能范围 +20%',        fx: () => player.radMul *= 1.2 },
-  { id: 'fountain',  name: '大节点·笔芯连供', desc: '冷却 -12%，但伤害 -8%',    fx: () => { player.cdMul *= 0.88; player.dmgMul *= 0.92; } }
+  { id: 'twin',       name: '大节点·双生画笔', desc: '小鬼/炮台上限 +1',             fx: () => player.taken.twin = true },
+  { id: 'inkmaster',  name: '大节点·泼墨',     desc: '全部技能范围 +20%',             fx: () => player.radMul *= 1.2 },
+  { id: 'fountain',   name: '大节点·笔芯连供', desc: '冷却 -12%，但伤害 -8%',         fx: () => { player.cdMul *= 0.88; player.dmgMul *= 0.92; } },
+  { id: 'inkarmor',   name: '大节点·墨层护膜', desc: '站在己方墨迹上，受到伤害 -20%', fx: () => player.taken.inkarmor = true },
+  { id: 'inkpower',   name: '大节点·领地笔意', desc: '站在己方墨迹上，全部伤害 +20%', fx: () => player.taken.inkpower = true },
+  { id: 'parrycharge',name: '大节点·回墨共振', desc: '弹反成功的墨潮充能 +50%',       fx: () => player.taken.parrycharge = true },
+  { id: 'parrywell',  name: '大节点·深吸',     desc: '弹反成功的回墨量 +50%',         fx: () => player.taken.parrywell = true },
+  { id: 'divepaint',  name: '大节点·潜行笔迹', desc: '潜墨移动也会留下己方墨迹',       fx: () => player.taken.divepaint = true },
+  { id: 'surgeecho',  name: '大节点·余潮',     desc: '释放墨潮后保留 20% 充能',       fx: () => player.taken.surgeecho = true }
 ];
 
 /* ---------- 装备定义 ---------- */
@@ -269,28 +286,351 @@ const ITEM_DEFS = {
   compass: { slot: 'hands', name: '圆规护腕', atk: 10, hp: 0,  fx: '技能范围 +15%' },
   shoes:   { slot: 'feet',  name: '弹簧拖鞋', atk: 0,  hp: 20, fx: '移速 +12%，受击后 2 秒移速再 +30%' },
   tape:    { slot: 'feet',  name: '修正带鞋', atk: 0,  hp: 25, fx: '每 30 秒抵挡一次致命伤害' },
-  pendant: { slot: 'acc',   name: '墨胆吊坠', atk: 8,  hp: 20, fx: '拾取墨水珠回复 1 点生命' },
-  bookmark:{ slot: 'acc',   name: '灵感书签', atk: 6,  hp: 15, fx: '击杀 8% 概率额外掉一颗墨水珠' }
+  pendant: { slot: 'acc',   name: '墨胆吊坠', atk: 8,  hp: 20, fx: '每击杀 10 只怪物回复 1 点生命' },
+  bookmark:{ slot: 'acc',   name: '灵感书签', atk: 6,  hp: 15, fx: '击杀 8% 概率额外获得 50% 经验' }
 };
 const ITEM_KEYS = Object.keys(ITEM_DEFS);
 
 /* ---------- 游戏状态 ---------- */
-let state, gameTime, kills, camX, camY, shakeT, cycAng, crumpleT;
-let player, enemies, bullets, ebullets, gems, drops, floats, lightnings, erupts, minions, totems, sparks, toasts, cards, cardRects, hazards, blades, clouds, brands, novas, followups, fields, erases;
-let spawnAcc, nextId, bossStageSpawned, curStage, nextHordeT, hordeIndex, killChain, killChainT;
+let state, gameTime, kills, camX, camY, shakeT, cycAng, crumpleT, hitStopT, levelupDelayT;
+let player, enemies, bullets, ebullets, drops, floats, lightnings, erupts, minions, totems, sparks, toasts, cards, cardRects, hazards, blades, clouds, brands, novas, followups, fields, erases;
+let spawnAcc, nextId, bossStageSpawned, curStage, nextHordeT, hordeIndex, killChain, killChainT, enemyTrailT;
+let gestureDraw, pendingGesture, redrawOutlines, gestureNoticeT, drawMode, drawModeT;
+let inkSurgePainting;
+const HOSTILE_INK = '#70645e';
+/* ---------- 固定墨迹场：网格既负责显示也负责判定，不保存历史墨团对象 ---------- */
+const INK_CELL = 2, INK_GW = Math.ceil(WORLD_W / INK_CELL), INK_GH = Math.ceil(WORLD_H / INK_CELL);
+const INK_COUNT = INK_GW * INK_GH;
+const inkOwner = new Uint8Array(INK_COUNT);       // 0 空白 / 1 己方 / 2 敌方
+const inkAmount = new Uint8Array(INK_COUNT);      // 仅表示是否存在：0 无 / 1 有，不再积累浓度
+const inkPulse = new Uint8Array(INK_COUNT);       // 仅技能墨团产生伤害，移动与弹道路径不脉冲
+const inkSource = new Uint32Array(INK_COUNT);     // 敌方墨迹来源怪物 id；己方或无来源为 0
+const enemyInkCells = new Map();                  // 每只怪物当前仍拥有的网格，击杀时只扫描自己的墨迹
+const inkCutDeadline = new Float32Array(INK_COUNT); // 失源转化的截止时间；0 表示仍与来源相连
+const inkCutChecks = new Set(), inkOrphanCells = new Set(), inkOrphanCounts = new Map();
+const inkVisit = new Uint32Array(INK_COUNT), inkSearchQueue = new Int32Array(INK_COUNT);
+let inkVisitStamp = 0;
+let inkPaintedCount = 0, inkFriendlyColor = INK, inkFriendlyRgb = [26, 43, 143];
+const inkHostileRgb = [112, 100, 94];
+function makeInkLayer() {
+  if (typeof document.createElement !== 'function') return { canvas: null, ctx: null, image: null };
+  const layer = document.createElement('canvas'); layer.width = INK_GW; layer.height = INK_GH;
+  const c = layer.getContext('2d');
+  return { canvas: layer, ctx: c, image: c ? c.createImageData(INK_GW, INK_GH) : null };
+}
+const friendlyInkLayer = makeInkLayer(), hostileInkLayer = makeInkLayer();
+function inkRgb(hex) {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex || '');
+  return m ? [parseInt(m[1].slice(0, 2), 16), parseInt(m[1].slice(2, 4), 16), parseInt(m[1].slice(4, 6), 16)] : [26, 43, 143];
+}
+function putInkRegion(layer, x0, y0, x1, y1) {
+  if (!layer.ctx || !layer.image) return;
+  layer.ctx.putImageData(layer.image, 0, 0, x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+}
+function syncInkPixel(i) {
+  const p = i * 4, owner = inkOwner[i];
+  if (friendlyInkLayer.image) {
+    const d = friendlyInkLayer.image.data;
+    if (owner === 1) { d[p] = inkFriendlyRgb[0]; d[p + 1] = inkFriendlyRgb[1]; d[p + 2] = inkFriendlyRgb[2]; d[p + 3] = 255; }
+    else d[p + 3] = 0;
+  }
+  if (hostileInkLayer.image) {
+    const d = hostileInkLayer.image.data;
+    if (owner === 2) {
+      const orphan = inkCutDeadline[i] > 0;
+      d[p] = orphan ? 154 : inkHostileRgb[0]; d[p + 1] = orphan ? 143 : inkHostileRgb[1]; d[p + 2] = orphan ? 133 : inkHostileRgb[2]; d[p + 3] = 255;
+    } else d[p + 3] = 0;
+  }
+}
+function clearInkOrphan(i) {
+  if (!inkCutDeadline[i]) return;
+  const sourceId = inkSource[i], count = (inkOrphanCounts.get(sourceId) || 1) - 1;
+  inkCutDeadline[i] = 0; inkOrphanCells.delete(i);
+  if (count > 0) inkOrphanCounts.set(sourceId, count); else inkOrphanCounts.delete(sourceId);
+  syncInkPixel(i);
+}
+function markInkOrphan(i, deadline) {
+  if (inkCutDeadline[i]) return;   // 不反复延长失源倒计时
+  const sourceId = inkSource[i];
+  inkCutDeadline[i] = deadline; inkOrphanCells.add(i);
+  inkOrphanCounts.set(sourceId, (inkOrphanCounts.get(sourceId) || 0) + 1);
+  syncInkPixel(i);
+}
+function setInkSource(i, sourceId) {
+  const previous = inkSource[i];
+  if (previous === sourceId) {
+    if (sourceId && inkCutDeadline[i]) inkCutChecks.add(sourceId);
+    return;
+  }
+  clearInkOrphan(i);
+  if (previous) {
+    const cells = enemyInkCells.get(previous);
+    if (cells) { cells.delete(i); if (!cells.size) enemyInkCells.delete(previous); }
+    if (!sourceId) inkCutChecks.add(previous);   // 彩墨覆盖或吸墨可能切断供墨线
+  }
+  inkSource[i] = sourceId;
+  if (sourceId) {
+    let cells = enemyInkCells.get(sourceId);
+    if (!cells) { cells = new Set(); enemyInkCells.set(sourceId, cells); }
+    cells.add(i);
+    if (inkOrphanCounts.get(sourceId)) inkCutChecks.add(sourceId);
+  }
+}
+function convertEnemyInk(sourceId) {
+  const cells = enemyInkCells.get(sourceId);
+  inkCutChecks.delete(sourceId);
+  if (!cells || !cells.size) return 0;
+  let converted = 0;
+  for (const i of cells) {
+    if (inkOwner[i] !== 2 || inkSource[i] !== sourceId) continue;
+    clearInkOrphan(i);
+    inkOwner[i] = 1; inkAmount[i] = 1; inkPulse[i] = 0; inkSource[i] = 0;
+    syncInkPixel(i); converted++;
+  }
+  enemyInkCells.delete(sourceId); inkOrphanCounts.delete(sourceId);
+  if (converted) {
+    if (friendlyInkLayer.ctx) friendlyInkLayer.ctx.putImageData(friendlyInkLayer.image, 0, 0);
+    if (hostileInkLayer.ctx) hostileInkLayer.ctx.putImageData(hostileInkLayer.image, 0, 0);
+  }
+  return converted;
+}
+function resetInkField() {
+  inkOwner.fill(0); inkAmount.fill(0); inkPulse.fill(0); inkSource.fill(0); inkCutDeadline.fill(0); inkVisit.fill(0);
+  enemyInkCells.clear(); inkCutChecks.clear(); inkOrphanCells.clear(); inkOrphanCounts.clear(); inkPaintedCount = 0; inkVisitStamp = 0;
+  updateInkStains.dotT = 0; updateInkStains.poolT = 0;
+  if (friendlyInkLayer.image) friendlyInkLayer.image.data.fill(0);
+  if (hostileInkLayer.image) hostileInkLayer.image.data.fill(0);
+  if (friendlyInkLayer.ctx) friendlyInkLayer.ctx.putImageData(friendlyInkLayer.image, 0, 0);
+  if (hostileInkLayer.ctx) hostileInkLayer.ctx.putImageData(hostileInkLayer.image, 0, 0);
+}
+// 从来源怪物及其存活墨弹出发做连通检查；断开的部分进入 1 秒失源倒计时
+function refreshInkConnectivity(sourceId) {
+  const cells = enemyInkCells.get(sourceId);
+  if (!cells || !cells.size) { inkOrphanCounts.delete(sourceId); return; }
+  const stamp = ++inkVisitStamp;
+  let head = 0, tail = 0;
+  function seed(x, y, r) {
+    const b = inkGridBounds(x, y, x, y, r), rr = r * r;
+    for (let gy = b.y0; gy <= b.y1; gy++) for (let gx = b.x0; gx <= b.x1; gx++) {
+      const wx = WORLD_L + (gx + 0.5) * INK_CELL - x, wy = WORLD_T + (gy + 0.5) * INK_CELL - y;
+      const i = gy * INK_GW + gx;
+      if (wx * wx + wy * wy > rr || inkSource[i] !== sourceId || inkVisit[i] === stamp) continue;
+      inkVisit[i] = stamp; inkSearchQueue[tail++] = i;
+    }
+  }
+  const source = enemies && enemies.find(e => e.id === sourceId && !e.dead);
+  if (source) seed(source.x, source.y, source.r + 14);
+  if (ebullets) for (const b of ebullets) {
+    if (b.sourceId === sourceId && !b.inkConverted && b.life > 0) seed(b.x, b.y, 18);
+  }
+  while (head < tail) {
+    const i = inkSearchQueue[head++], gx = i % INK_GW, gy = Math.floor(i / INK_GW);
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue;
+      const nx = gx + dx, ny = gy + dy;
+      if (nx < 0 || nx >= INK_GW || ny < 0 || ny >= INK_GH) continue;
+      const ni = ny * INK_GW + nx;
+      if (inkSource[ni] !== sourceId || inkVisit[ni] === stamp) continue;
+      inkVisit[ni] = stamp; inkSearchQueue[tail++] = ni;
+    }
+  }
+  for (const i of cells) {
+    if (inkVisit[i] === stamp) clearInkOrphan(i);
+    else markInkOrphan(i, gameTime + 1);
+  }
+}
+function refundInk(amount, x, y, label, crit) {
+  const gained = Math.min(Math.max(0, player.maxInk - player.ink), Math.max(0, amount));
+  if (gained <= 0) return 0;
+  player.ink += gained;
+  floats.push({ x, y, txt: label + ' +' + gained.toFixed(1) + '墨', t: 0.85, color: inkFriendlyColor, crit: !!crit });
+  return gained;
+}
+function updateInkTactics() {
+  if (inkCutChecks.size) {
+    const checks = Array.from(inkCutChecks); inkCutChecks.clear();
+    for (const sourceId of checks) refreshInkConnectivity(sourceId);
+  }
+  if (!inkOrphanCells.size) return;
+  let changed = false;
+  const captured = new Map();
+  for (const i of inkOrphanCells) {
+    if (!inkCutDeadline[i] || inkCutDeadline[i] > gameTime) continue;
+    const sourceId = inkSource[i];
+    clearInkOrphan(i);
+    if (inkOwner[i] !== 2 || !sourceId || inkSource[i] !== sourceId) continue;
+    inkOwner[i] = 1; inkAmount[i] = 1; inkPulse[i] = 0; inkSource[i] = 0;
+    const cells = enemyInkCells.get(sourceId);
+    if (cells) { cells.delete(i); if (!cells.size) enemyInkCells.delete(sourceId); }
+    syncInkPixel(i); changed = true;
+    const gx = i % INK_GW, gy = Math.floor(i / INK_GW);
+    const info = captured.get(sourceId) || { n: 0, x: 0, y: 0 };
+    info.n++; info.x += WORLD_L + (gx + 0.5) * INK_CELL; info.y += WORLD_T + (gy + 0.5) * INK_CELL;
+    captured.set(sourceId, info);
+  }
+  if (changed) {
+    if (friendlyInkLayer.ctx) friendlyInkLayer.ctx.putImageData(friendlyInkLayer.image, 0, 0);
+    if (hostileInkLayer.ctx) hostileInkLayer.ctx.putImageData(hostileInkLayer.image, 0, 0);
+    for (const info of captured.values()) {
+      const x = info.x / info.n, y = info.y / info.n;
+      const gained = refundInk(Math.min(12, info.n / 80), x, y, '截墨', true);
+      if (!gained) floats.push({ x, y, txt: '截墨！', t: 0.85, color: inkFriendlyColor, crit: true });
+    }
+  }
+}
+function inkGridBounds(x1, y1, x2, y2, r) {
+  return {
+    x0: Math.max(0, Math.floor((Math.min(x1, x2) - r - WORLD_L) / INK_CELL)),
+    y0: Math.max(0, Math.floor((Math.min(y1, y2) - r - WORLD_T) / INK_CELL)),
+    x1: Math.min(INK_GW - 1, Math.floor((Math.max(x1, x2) + r - WORLD_L) / INK_CELL)),
+    y1: Math.min(INK_GH - 1, Math.floor((Math.max(y1, y2) + r - WORLD_T) / INK_CELL))
+  };
+}
+function paintInkSegment(x1, y1, x2, y2, r, amount, col, hostile, trail, sourceId) {
+  if (amount <= 0 || r <= 0) return 0;
+  const b = inkGridBounds(x1, y1, x2, y2, r), dx = x2 - x1, dy = y2 - y1;
+  const len2 = dx * dx + dy * dy, r2 = r * r, nextOwner = hostile ? 2 : 1;
+  const nextSource = hostile ? (sourceId || 0) : 0;
+  let cells = 0, fresh = 0, covered = 0;
+  const minX = Math.min(x1, x2) - r - 30, maxX = Math.max(x1, x2) + r + 30;
+  const minY = Math.min(y1, y2) - r - 30, maxY = Math.max(y1, y2) + r + 30;
+  const contested = [];
+  if (!hostile) {
+    const wanted = player && player.actives.length ? trailColorOf(player.actives[0].id) : INK;
+    if (wanted !== inkFriendlyColor) recolorFriendlyInk(wanted);
+    // 先记录确实站在灰墨上的怪物，避免重复涂彩墨也触发夺地
+    if (enemies) for (const e of enemies) {
+      if (e.dead || e.x < minX || e.x > maxX || e.y < minY || e.y > maxY) continue;
+      if (inkCircleHas(e.x, e.y, e.r * 0.35, true)) contested.push(e);
+    }
+  }
+  for (let gy = b.y0; gy <= b.y1; gy++) {
+    const wy = WORLD_T + (gy + 0.5) * INK_CELL;
+    for (let gx = b.x0; gx <= b.x1; gx++) {
+      const wx = WORLD_L + (gx + 0.5) * INK_CELL;
+      let t = len2 > 1e-8 ? ((wx - x1) * dx + (wy - y1) * dy) / len2 : 0;
+      t = Math.max(0, Math.min(1, t));
+      const ddx = wx - (x1 + dx * t), ddy = wy - (y1 + dy * t);
+      if (ddx * ddx + ddy * ddy > r2) continue;
+      cells++;
+      const i = gy * INK_GW + gx, previous = inkOwner[i];
+      if (previous === 0) { inkPaintedCount++; fresh++; }
+      else if (previous !== nextOwner) covered++;
+      // 不累计浓度：后画的无条件覆盖先画的，并更新技能脉冲与怪物来源
+      inkOwner[i] = nextOwner; inkAmount[i] = 1; inkPulse[i] = trail ? 0 : 1;
+      setInkSource(i, nextSource);
+      syncInkPixel(i);
+    }
+  }
+  putInkRegion(friendlyInkLayer, b.x0, b.y0, b.x1, b.y1);
+  putInkRegion(hostileInkLayer, b.x0, b.y0, b.x1, b.y1);
+  if (!hostile && !trail && !inkSurgePainting && covered > 0) {
+    refundInk(Math.min(4, covered / 180), (x1 + x2) / 2, (y1 + y2) / 2 - 18, '夺地');
+  }
+  if (covered) for (const e of contested) {
+    if (e.dead || gameTime < (e.groundStealCd || 0) || !inkCircleHas(e.x, e.y, e.r * 0.35, false)) continue;
+    const stun = e.boss ? 0.12 : (e.elite ? 0.25 : 0.4);
+    e.stunT = Math.max(e.stunT || 0, stun);
+    e.groundStealCd = gameTime + (e.boss ? 2 : 1.2);
+    floats.push({ x: e.x, y: e.y - e.r - 12, txt: '夺地！', t: 0.65, color: inkFriendlyColor });
+  }
+  const coveredRatio = cells ? covered / cells : 0;
+  if (!hostile && cells) chargeTurf(amount * fresh / cells * 1.2 + coveredRatio * 2);
+  return coveredRatio;
+}
+function inkCircleHas(x, y, r, hostile) {
+  const wanted = hostile ? 2 : 1, b = inkGridBounds(x, y, x, y, r), rr = (r + INK_CELL * 0.5) ** 2;
+  for (let gy = b.y0; gy <= b.y1; gy++) for (let gx = b.x0; gx <= b.x1; gx++) {
+    const wx = WORLD_L + (gx + 0.5) * INK_CELL - x, wy = WORLD_T + (gy + 0.5) * INK_CELL - y;
+    const i = gy * INK_GW + gx;
+    if (wx * wx + wy * wy <= rr && inkOwner[i] === wanted && inkAmount[i] > 0) return true;
+  }
+  return false;
+}
+function inkPulseAt(x, y, r) {
+  const b = inkGridBounds(x, y, x, y, r), rr = (r + INK_CELL * 0.5) ** 2;
+  let strongest = 0;
+  for (let gy = b.y0; gy <= b.y1; gy++) for (let gx = b.x0; gx <= b.x1; gx++) {
+    const wx = WORLD_L + (gx + 0.5) * INK_CELL - x, wy = WORLD_T + (gy + 0.5) * INK_CELL - y;
+    const i = gy * INK_GW + gx;
+    if (wx * wx + wy * wy <= rr && inkOwner[i] === 1) strongest = Math.max(strongest, inkPulse[i]);
+  }
+  return strongest;
+}
+function inkCellAt(x, y) {
+  const gx = Math.max(0, Math.min(INK_GW - 1, Math.floor((x - WORLD_L) / INK_CELL)));
+  const gy = Math.max(0, Math.min(INK_GH - 1, Math.floor((y - WORLD_T) / INK_CELL)));
+  const i = gy * INK_GW + gx;
+  return { owner: inkOwner[i], amount: inkAmount[i], pulse: inkPulse[i], orphan: inkCutDeadline[i] > 0, cutIn: inkCutDeadline[i] > 0 ? Math.max(0, inkCutDeadline[i] - gameTime) : 0, gx, gy };
+}
+function consumeInkDisk(x, y, r) {
+  const b = inkGridBounds(x, y, x, y, r), r2 = r * r;
+  let cells = 0;
+  for (let gy = b.y0; gy <= b.y1; gy++) for (let gx = b.x0; gx <= b.x1; gx++) {
+    const wx = WORLD_L + (gx + 0.5) * INK_CELL - x, wy = WORLD_T + (gy + 0.5) * INK_CELL - y;
+    const i = gy * INK_GW + gx;
+    if (wx * wx + wy * wy > r2 || !inkOwner[i]) continue;
+    cells++; inkOwner[i] = 0; inkAmount[i] = 0; inkPulse[i] = 0; inkPaintedCount--;
+    setInkSource(i, 0); syncInkPixel(i);
+  }
+  putInkRegion(friendlyInkLayer, b.x0, b.y0, b.x1, b.y1);
+  putInkRegion(hostileInkLayer, b.x0, b.y0, b.x1, b.y1);
+  // 吸取收益只看实际覆盖面积，不看浓度
+  return Math.min(12, cells / 40);
+}
+function nearestInkCell(x, y, maxDist) {
+  if (!inkPaintedCount) return null;
+  const step = INK_CELL * 2;
+  for (let radius = 0; radius <= maxDist; radius += step) {
+    const b = inkGridBounds(x - radius, y - radius, x + radius, y + radius, 0);
+    for (let gy = b.y0; gy <= b.y1; gy += 2) for (let gx = b.x0; gx <= b.x1; gx += 2) {
+      const wx = WORLD_L + (gx + 0.5) * INK_CELL, wy = WORLD_T + (gy + 0.5) * INK_CELL;
+      const d = Math.hypot(wx - x, wy - y);
+      if (Math.abs(d - radius) > step * 1.5 || !inkOwner[gy * INK_GW + gx]) continue;
+      return { x: wx, y: wy, d };
+    }
+  }
+  return null;
+}
+function recolorFriendlyInk(col) {
+  if (col === inkFriendlyColor) return;
+  inkFriendlyColor = col; inkFriendlyRgb = inkRgb(col);
+  for (let i = 0; i < INK_COUNT; i++) if (inkOwner[i] === 1) syncInkPixel(i);
+  if (friendlyInkLayer.ctx) friendlyInkLayer.ctx.putImageData(friendlyInkLayer.image, 0, 0);
+}
+function inkStats() {
+  let friendly = 0, hostile = 0;
+  for (let i = 0; i < INK_COUNT; i++) { if (inkOwner[i] === 1) friendly++; else if (inkOwner[i] === 2) hostile++; }
+  return { friendly, hostile, capacity: INK_COUNT, cellSize: INK_CELL };
+}
+const gestureCooldowns = { cross: 0, redraw: 0, v: 0, zig: 0, circle: 0 };
+const ABSORB_RULE = BATTLE.absorb;
+// 左手固定摇杆，右手拇指操作三个技能；按钮扩大并错层排列，减少误触
+const JOY_HOME = { x: 72, y: H - 174, r: 52 };
+const absorbRect = { x: W - 88, y: H - 181, w: 74, h: 52 };
+const specialRect = { x: W - 172, y: H - 181, w: 74, h: 52 };
+const diveRect = { x: W - 88, y: H - 245, w: 74, h: 52 };
 const keys = {};
-const joy = { active: false, id: -1, bx: 0, by: 0, dx: 0, dy: 0 };
+const joy = { active: false, id: -1, bx: JOY_HOME.x, by: JOY_HOME.y, dx: 0, dy: 0 };
 
 function resetGame() {
-  state = 'start'; gameTime = 0; kills = 0; shakeT = 0; cycAng = 0; crumpleT = 0;
+  state = 'start'; gameTime = 0; kills = 0; shakeT = 0; cycAng = 0; crumpleT = 0; hitStopT = 0; levelupDelayT = -1;
+  joy.active = false; joy.id = -1; joy.dx = 0; joy.dy = 0;
   camX = 0; camY = 0; spawnAcc = 0; nextId = 1;
-  bossStageSpawned = 0; curStage = 0; nextHordeT = 12; hordeIndex = 0; killChain = 0; killChainT = 0;
-  enemies = []; bullets = []; ebullets = []; gems = []; drops = []; floats = []; lightnings = [];
+  bossStageSpawned = 0; curStage = 0; nextHordeT = 12; hordeIndex = 0; killChain = 0; killChainT = 0; enemyTrailT = 0.1;
+  gestureDraw = null; pendingGesture = null; redrawOutlines = []; gestureNoticeT = 0; drawMode = false; drawModeT = 0;
+  resetInkField(); inkSurgePainting = false;
+  for (const k in gestureCooldowns) gestureCooldowns[k] = 0;
+  enemies = []; bullets = []; ebullets = []; drops = []; floats = []; lightnings = [];
   erupts = []; minions = []; totems = []; sparks = []; toasts = []; cards = []; cardRects = []; hazards = [];
   blades = []; clouds = []; brands = []; novas = []; followups = []; fields = []; erases = [];
   player = {
-    x: 0, y: 0, r: 12, hp: 100, maxhp: 100, speed: 168, faceA: 0,
-    level: 1, xp: 0, xpNext: 8, pickup: 60,
+    x: 0, y: 0, r: BATTLE.player.radius, hp: BATTLE.player.hp, maxhp: BATTLE.player.hp, speed: BATTLE.player.speed, faceA: 0,
+    trailX: 0, trailY: 0, diving: false, special: 0, specialAnnounced: false,
+    surgeCharging: false, surgeChargeT: 0, surgePointerId: null,
+    lastSeenX: 0, lastSeenY: 0, grayTick: 0, noInkT: 0, turf: 0,
+    absorbT: 0, absorbDuration: ABSORB_RULE.duration, absorbRadius: ABSORB_RULE.radius, absorbCd: 0, absorbGain: 0,
+    level: 1, xp: 0, xpNext: xpForNextLevel(1), xpMul: 1, ink: BATTLE.player.maxInk, maxInk: BATTLE.player.maxInk,
     dmgMul: 1, cdMul: 1, radMul: 1, crit: 0, condDmg: 1,
     eqAtk: 0, eqCrit: 0, eqSpd: 1, eqDr: 0, eqRad: 1,
     hurtBoostT: 0, lastRevive: -999, leechT: 0, leechN: 0,
@@ -414,6 +754,80 @@ function scaledEnemyStats(d0) {
       * (1 + (wave - 1) * g.dmgPerWave))
   };
 }
+function isShooter(e) { return !!(ENEMY_DEFS[e.type] && ENEMY_DEFS[e.type].attack === 'shoot'); }
+function enemySwingRange(e) { return e.r + (e.elite ? 63 : 50); }
+function initEnemyCombat(e, d0) {
+  e.swingCd = 0.25 + Math.random() * 1.25; e.swingT = 0; e.swingHit = false; e.swingDamage = false; e.swingA = 0;
+  e.shotCd = 0.55 + Math.random() * 1.1; e.shotWindup = 0; e.burstLeft = 0; e.burstT = 0;
+  e.aimA = 0; e.faceA = 0;
+  if (d0.attack === 'shoot') e.swingCd = 999999;
+}
+function fireEnemyShot(e, aimA) {
+  const d0 = ENEMY_DEFS[e.type], count = d0.bulletCount || 1, spread = d0.spread || 0;
+  for (let i = 0; i < count; i++) {
+    const a = aimA + (i - (count - 1) / 2) * spread;
+    ebullets.push({ x: e.x + Math.cos(a) * (e.r + 5), y: e.y + Math.sin(a) * (e.r + 5),
+      vx: Math.cos(a) * d0.bulletSpeed, vy: Math.sin(a) * d0.bulletSpeed,
+      dmg: Math.max(1, Math.round(e.dmg * 0.65)), life: 3.2, sourceId: e.id, reflectable: true });
+  }
+  sparks.push({ x: e.x, y: e.y, t: 0.16, color: RED });
+}
+function updateShooter(e, dt) {
+  const d0 = ENEMY_DEFS[e.type];
+  const hidden = player.diving && Math.hypot(player.x - e.x, player.y - e.y) > 85;
+  const tx = hidden ? player.lastSeenX : player.x, ty = hidden ? player.lastSeenY : player.y;
+  const dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy) || 1;
+  e.faceA = Math.atan2(dy, dx);
+  let move = 0;
+  if (d < d0.keepDist - 35) move = -1;
+  else if (d > d0.keepDist + 55) move = 1;
+  const moveScale = e.shotWindup > 0 ? 0.3 : 1;
+  e.x += dx / d * e.sp * move * moveScale * dt;
+  e.y += dy / d * e.sp * move * moveScale * dt;
+  e.walk += dt * (move ? 8 : 3);
+  if (e.burstLeft > 0) {
+    e.burstT -= dt;
+    if (e.burstT <= 0) {
+      fireEnemyShot(e, Math.atan2(ty - e.y, tx - e.x));
+      e.burstLeft--; e.burstT = d0.burstGap || 0.18;
+    }
+  } else if (e.shotWindup > 0) {
+    e.shotWindup -= dt;
+    if (e.shotWindup <= 0) {
+      e.shotCd = d0.shotCd;
+      if (d0.burst) { e.burstLeft = d0.burst; e.burstT = 0; }
+      else fireEnemyShot(e, e.aimA);
+    }
+  } else {
+    e.shotCd -= dt;
+    if (e.shotCd <= 0 && d < 540) {
+      e.aimA = Math.atan2(dy, dx); e.shotWindup = d0.shotWindup;
+    }
+  }
+}
+function updateMeleeSwing(e, dt) {
+  const range = enemySwingRange(e);
+  const d = Math.hypot(player.x - e.x, player.y - e.y);
+  e.swingCd -= dt;
+  if (e.swingT > 0) {
+    e.swingT = Math.max(0, e.swingT - dt);
+    if (e.swingT <= BATTLE.melee.active) {
+      if (!e.swingHit) {
+        e.swingHit = true;
+        addHostileInk(e.x, e.y, 3, Math.max(18, e.r * 0.8), e.id);
+      }
+      // 命中圈持续期间逐帧检测，后按吸墨也能弹反；每次挥击仍只伤害一次
+      const parried = reflectMeleeSwing(e);
+      if (!parried && !e.swingDamage && d < range + player.r) {
+        e.swingDamage = true;
+        hurtPlayer(e.dmg);
+      }
+    }
+  } else if (e.swingCd <= 0 && d < range + player.r + BATTLE.melee.triggerExtra) {
+    e.swingCd = BATTLE.melee.period; e.swingT = BATTLE.melee.total; e.swingHit = false; e.swingDamage = false;
+    e.swingA = Math.atan2(player.y - e.y, player.x - e.x);
+  }
+}
 function spawnEnemy(typeOverride, x, y) {
   if (enemies.length > 260) return;
   const t = gameTime;
@@ -433,7 +847,10 @@ function spawnEnemy(typeOverride, x, y) {
     walk: Math.random() * 6, hitCd: 0, flash: 0, squash: 0, dotT: 0, dotDps: 0,
     vx: 0, vy: 0, kbx: 0, kby: 0
   };
-  e.maxhp = e.hp;
+  e.maxhp = e.hp; e.baseMaxHp = e.maxhp; e.baseR = e.r; e.baseDmg = e.dmg; e.ink = 0;
+  initEnemyCombat(e, d0);
+  e.inkCd = 1 + Math.random() * 1.5;
+  e.trailX = e.x; e.trailY = e.y;
   if (type === 'plane') {
     const aa = Math.atan2(player.y - e.y, player.x - e.x);
     e.vx = Math.cos(aa); e.vy = Math.sin(aa);
@@ -482,7 +899,7 @@ function spawnBoss(st) {
     mode: 'chase', modeT: 2.5, chargeDx: 0, chargeDy: 0, summonT: 5,
     breathCd: 3.5, meteorCd: 2, ringCd: 2, sumCd: 4, phase: 1
   };
-  e.maxhp = e.hp;
+  e.maxhp = e.hp; e.baseMaxHp = e.maxhp; e.baseR = e.r; e.baseDmg = e.dmg; e.ink = 0;
   enemies.push(e);
   crumpleT = 0.7; shakeT = 0.5;
   toast('纸面被揉皱了…… ' + def.name + ' 爬了出来！');
@@ -494,8 +911,36 @@ function summonMob(type, x, y) {
     r: d0.r, hp: grown.hp, sp: d0.sp, dmg: grown.dmg, xp: d0.xp + curSt(),
     walk: Math.random() * 6, hitCd: 0, flash: 0, squash: 0, dotT: 0, dotDps: 0, vx: 0, vy: 0, kbx: 0, kby: 0
   };
-  e.maxhp = e.hp;
+  e.maxhp = e.hp; e.baseMaxHp = e.maxhp; e.baseR = e.r; e.baseDmg = e.dmg; e.ink = 0;
+  initEnemyCombat(e, d0);
   enemies.push(e);
+}
+function spawnInkShade(skillId) {
+  const a = Math.random() * Math.PI * 2;
+  summonMob('rage', clampW(player.x + Math.cos(a) * 170, 20), clampH(player.y + Math.sin(a) * 170, 20));
+  const e = enemies[enemies.length - 1];
+  e.shade = true; e.shadeSkill = skillId; e.name = '墨债·' + SKILL_DEFS[skillId].name;
+  e.sp = 92; e.shadeCd = 1.1; e.xp = 5;
+  e.hp = e.maxhp = e.maxhp * 1.35; e.baseMaxHp = e.maxhp;
+  toast('墨债成形：' + SKILL_DEFS[skillId].name + ' 被复制了！');
+}
+function updateInkShade(e, dt) {
+  const pa = Math.atan2(player.y - e.y, player.x - e.x);
+  e.x += Math.cos(pa) * e.sp * dt; e.y += Math.sin(pa) * e.sp * dt; e.walk += dt * 10;
+  e.shadeCd -= dt;
+  if (e.shadeCd > 0) return;
+  e.shadeCd = 2.6;
+  const tags = SKILL_TAGS[e.shadeSkill] || ['strike'];
+  if (tags.includes('proj')) {
+    for (let i = -1; i <= 1; i++) ebullets.push({ x: e.x, y: e.y, vx: Math.cos(pa + i * 0.22) * 185,
+      vy: Math.sin(pa + i * 0.22) * 185, dmg: Math.round(e.dmg * 0.65), life: 3.2, sourceId: e.id });
+  } else if (tags.includes('area')) {
+    hazards.push({ kind: 'meteor', x: player.x, y: player.y, r: 52, delay: 0.75,
+      dmg: Math.round(e.dmg * 0.8), t: 0.35, done: false });
+  } else {
+    hazards.push({ kind: 'meteor', x: e.x, y: e.y, r: 68, delay: 0.5,
+      dmg: Math.round(e.dmg * 0.9), t: 0.35, done: false });
+  }
 }
 function updateBoss(e, dt) {
   const pa = Math.atan2(player.y - e.y, player.x - e.x);
@@ -533,7 +978,7 @@ function updateBoss(e, dt) {
     e.breathCd -= dt; e.meteorCd -= dt;
     if (e.breathCd <= 0) {
       e.breathCd = 6.5 * rate;
-      hazards.push({ kind: 'cone', x: e.x, y: e.y, ang: pa, arc: 0.75, range: 300, delay: 0.9, dmg: Math.round(e.dmg * 0.9), t: 0.6, done: false });
+      hazards.push({ kind: 'cone', x: e.x, y: e.y, ang: pa, arc: 0.75, range: 300, delay: 0.9, dmg: Math.round(e.dmg * 0.9), t: 0.6, done: false, sourceId: e.id });
     }
     if (e.meteorCd <= 0) {
       e.meteorCd = (e.phase === 2 ? 2.2 : 3.2);
@@ -541,7 +986,7 @@ function updateBoss(e, dt) {
       for (let i = 0; i < n; i++) {
         hazards.push({
           kind: 'meteor', x: player.x + (Math.random() - 0.5) * 340, y: player.y + (Math.random() - 0.5) * 340,
-          r: 46, delay: 0.85 + Math.random() * 0.4, dmg: Math.round(e.dmg * 0.7), t: 0.35, done: false
+          r: 46, delay: 0.85 + Math.random() * 0.4, dmg: Math.round(e.dmg * 0.7), t: 0.35, done: false, sourceId: e.id
         });
       }
     }
@@ -553,7 +998,11 @@ function updateBoss(e, dt) {
       const n = 8 + e.stage;
       for (let i = 0; i < n; i++) {
         const a = i / n * Math.PI * 2 + e.walk;
-        ebullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * 135, vy: Math.sin(a) * 135, dmg: Math.round(e.dmg * 0.55), life: 3.2 });
+        ebullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * 135, vy: Math.sin(a) * 135, dmg: Math.round(e.dmg * 0.55), life: 3.2, sourceId: e.id });
+      }
+      for (let i = 0; i < 3; i++) {
+        const a = i / 3 * Math.PI * 2 + e.walk;
+        addHostileInk(e.x + Math.cos(a) * (e.r + 42), e.y + Math.sin(a) * (e.r + 42), 12 + e.stage, 32, e.id);
       }
     }
     if (e.sumCd <= 0 && enemies.length < 250) {
@@ -562,17 +1011,9 @@ function updateBoss(e, dt) {
     }
   }
 }
-function dropGem(x, y, v) {
-  // 怪潮时把附近经验合并成大墨珠，避免经验粒子随击杀数无限增长
-  if (gems.length >= 70) {
-    let best = null, bd = 90 * 90;
-    for (const g of gems) {
-      const d2 = (g.x - x) ** 2 + (g.y - y) ** 2;
-      if (d2 < bd) { bd = d2; best = g; }
-    }
-    if (best) { best.v += v; return; }
-  }
-  gems.push({ x, y, v });
+function xpForNextLevel(level) {
+  // 首级需求从 8 提高到 26，后续需求加速增长，明显减少升级打断
+  return 18 + Math.round(level * 8 + level * level * 0.35);
 }
 function killEnemy(e) {
   if (e.dead) return;
@@ -580,18 +1021,39 @@ function killEnemy(e) {
   killChain++; killChainT = 1.25;
   if (killChain === 10 || killChain === 25 || killChain === 50 || killChain === 100) toast(killChain + ' 连擦！');
   if (killChain % 10 === 0) shakeT = Math.max(shakeT, 0.09);
-  dropGem(e.x, e.y, e.xp);
+  if (e.boss) {
+    // Boss 只补足当前一级，不再额外散落经验珠，也不把超额经验滚到下一级
+    player.xp = player.xpNext;
+  } else {
+    let xpGain = e.xp * player.xpMul;
+    if (hasItem('bookmark') && Math.random() < 0.08) xpGain += e.xp * player.xpMul * 0.5;
+    player.xp += xpGain;
+  }
+  if (hasItem('pendant') && kills % 10 === 0) player.hp = Math.min(player.maxhp, player.hp + 1);
+  // 击杀爆开己方墨迹：输出会转化为下一片可潜行、补墨的领地
+  const deathCol = player.actives.length ? trailColorOf(player.actives[0].id) : INK;
+  addInkStain(e.x, e.y, e.boss ? 12 : 3, e.boss ? 55 : 23, deathCol, false, true);
+  if (e.type === 'inksac') addHostileInk(e.x, e.y, 35, 55, e.id);
+  // 这只怪物仍留在纸上的移动与攻击墨迹全部归玩家；被其他来源覆盖的不追回
+  convertEnemyInk(e.id);
+  // 来源怪物已死亡但墨弹仍存活时，后续路径也直接画成己方；子弹本身的伤害不变
+  for (const eb of ebullets) if (eb.sourceId === e.id) eb.inkConverted = true;
+  if (e.ink > 0) {   // 养肥后击杀：返还大部分墨量，并产生一次墨爆
+    const amount = e.ink; e.ink = 0;
+    player.ink = Math.min(player.maxInk, player.ink + amount * 0.7);
+    floats.push({ x: e.x, y: e.y - e.r - 16, txt: '夺墨+' + Math.round(amount * 0.7), t: 1, color: PURPLE });
+    erupts.push({ x: e.x, y: e.y, delay: 0.05, dmg: 12 + amount * 2.2, r: 45 + amount * 0.8,
+      c: { col: PURPLE }, done: false, t: 0 });
+  }
   if (e.boss) {
     shakeT = 0.5;
     drops.push({ x: e.x, y: e.y, item: ITEM_KEYS[Math.floor(Math.random() * ITEM_KEYS.length)], bob: 0 });
-    for (let i = 0; i < 12; i++) gems.push({ x: e.x + (Math.random() - 0.5) * 80, y: e.y + (Math.random() - 0.5) * 80, v: 3 + e.stage });
     if (e.stage >= 10) { crumpleT = 0.8; state = 'win'; }
     else toast(e.name + ' 被涂掉了！第 ' + e.stage + ' 页通过！');
     return;
   }
   erases.push({ x: e.x, y: e.y, r: e.r, t: 0.28, seed: e.id });
   if (erases.length > 140) erases.shift();
-  if (hasItem('bookmark') && Math.random() < 0.08) dropGem(e.x + 8, e.y + 8, 1);
   const rate = e.elite ? 0.35 : (e.type === 'rage' ? 0.15 : 0.025);
   if (Math.random() < rate && drops.length < 12) {
     drops.push({ x: e.x, y: e.y, item: ITEM_KEYS[Math.floor(Math.random() * ITEM_KEYS.length)], bob: Math.random() * 6 });
@@ -599,6 +1061,7 @@ function killEnemy(e) {
 }
 function hurtEnemy(e, dmg, dotDps, sx, sy, vuln, critAdd, bossMul, hitCol) {
   if (e.dead) return;
+  if (player.taken.inkpower && playerOnOwnInk()) dmg *= BATTLE.traits.inkDamageMul;
   if (e.vulnT > 0) dmg *= 1 + e.vuln;   // 破绽标记：受伤加深
   if (e.areaVulnT > 0) dmg *= 1 + e.areaVuln;   // 纸面浸透：区域易伤
   if (e.boss && bossMul) dmg *= 1 + bossMul;    // 压纸重涂：对 Boss 加伤
@@ -612,7 +1075,9 @@ function hurtEnemy(e, dmg, dotDps, sx, sy, vuln, critAdd, bossMul, hitCol) {
   const ky = e.y - (sy === undefined ? player.y : sy);
   const kd = Math.hypot(kx, ky) || 1;
   const kbMul = e.boss ? 0.1 : (e.elite ? 0.35 : 1);
-  e.kbx = kx / kd * KNOCK_V * kbMul; e.kby = ky / kd * KNOCK_V * kbMul;
+  if (!(e.parryKbT > 0)) {
+    e.kbx = kx / kd * KNOCK_V * kbMul; e.kby = ky / kd * KNOCK_V * kbMul;
+  }
   if (dotDps) { e.dotDps = Math.max(e.dotDps, dotDps); e.dotT = 3; }
   sparks.push({ x: e.x + (Math.random() - 0.5) * e.r, y: e.y + (Math.random() - 0.5) * e.r, t: 0.18, color: hitCol || INK });
   floats.push({ x: e.x + (Math.random() - 0.5) * 40, y: e.y - e.r - 8 - Math.random() * 18, txt: Math.round(dmg) + (crit ? '!' : ''), t: 0.7, color: hitCol || INK, crit });
@@ -651,8 +1116,248 @@ function areaHit(e, dmg, c, sx, sy, zoneR, dist) {
     floats.push({ x: player.x, y: player.y - 28, txt: '+' + (heal < 10 ? heal.toFixed(1) : Math.round(heal)), t: 0.6, color: '#2f9e68' });
   }
 }
+function isInkEater(e) { return e.type === 'leech' || e.type === 'inkthief'; }
+function updateInkEater(e, dt) {
+  if (e.ink >= 60 || !inkPaintedCount) return false;
+  let target = e.inkTarget;
+  if (target && inkCellAt(target.x, target.y).owner) target.d = Math.hypot(target.x - e.x, target.y - e.y);
+  else { target = nearestInkCell(e.x, e.y, 500); e.inkTarget = target; }
+  if (!target) return false;
+  const d = target.d || 1;
+  e.x += (target.x - e.x) / d * e.sp * (e.slowT > 0 ? 0.5 : 1) * dt;
+  e.y += (target.y - e.y) / d * e.sp * (e.slowT > 0 ? 0.5 : 1) * dt;
+  e.walk += dt * 8;
+  if (d < e.r + 12) {
+    const amount = Math.min(consumeInkDisk(target.x, target.y, Math.max(12, e.r)), 60 - e.ink);
+    e.inkTarget = null;
+    e.ink += amount;
+    e.maxhp += amount * 4; e.hp += amount * 4; e.dmg += amount * 0.12;
+    e.r = Math.min(e.baseR + 10, e.baseR + e.ink * 0.12);
+    floats.push({ x: e.x, y: e.y - e.r - 8, txt: '吸墨+' + Math.round(amount), t: 0.8, color: PURPLE });
+    sparks.push({ x: e.x, y: e.y, t: 0.18, color: PURPLE });
+  }
+  return true;
+}
+function drainEnemyInk(e, amount) {
+  const drained = Math.min(e.ink || 0, amount);
+  if (drained <= 0) return 0;
+  e.ink -= drained;
+  e.maxhp = Math.max(e.baseMaxHp, e.maxhp - drained * 4); e.hp = Math.min(e.hp, e.maxhp);
+  e.dmg = Math.max(e.baseDmg, e.dmg - drained * 0.12);
+  e.r = Math.max(e.baseR, e.baseR + e.ink * 0.12);
+  floats.push({ x: e.x, y: e.y - e.r - 8, txt: '抽墨-' + Math.round(drained), t: 0.8, color: INK });
+  return drained;
+}
+function enemyInkFactor(e) {
+  if (inkCircleHas(e.x, e.y, e.r * 0.35, true)) return BATTLE.ink.enemyOwnSpeed;
+  if (inkCircleHas(e.x, e.y, e.r * 0.35, false)) return BATTLE.ink.enemyFriendlySpeed;
+  return 1;
+}
+function diveInkCost() { return playerOnOwnInk() ? BATTLE.dive.ownCost : BATTLE.dive.otherCost; }
+function toggleDive() {
+  if (state !== 'play') return false;
+  if (player.diving) { player.diving = false; return true; }
+  if (player.ink <= 0) { toast('墨水不足，无法潜墨'); return false; }
+  player.diving = true;
+  player.lastSeenX = player.x; player.lastSeenY = player.y;
+  toast('潜墨：无敌位移 · 彩墨 ' + BATTLE.dive.ownCost + '/秒，其他区域 ' + BATTLE.dive.otherCost + '/秒');
+  return true;
+}
+function chargeTurf(amount) {
+  if (inkSurgePainting || amount <= 0 || player.special >= 100) return;
+  player.special = Math.min(100, player.special + amount);
+  player.turf += amount;
+  if (player.special >= 100 && !player.specialAnnounced) {
+    player.specialAnnounced = true;
+    toast('墨潮已满！长按「墨潮」或 Q 蓄力，松开释放');
+  }
+}
+function inkSurgeChargeRatio() {
+  return Math.min(1, Math.max(0, player.surgeChargeT / BATTLE.surge.chargeTime));
+}
+function inkSurgeChargeRadius() {
+  const s = BATTLE.surge;
+  return s.radius * (s.minScale + (s.maxScale - s.minScale) * inkSurgeChargeRatio());
+}
+function startInkSurgeCharge(pointerId = null) {
+  if (state !== 'play') return false;
+  if (player.special < 100) { toast('墨潮还未充满，涂新区域或覆盖灰墨'); return false; }
+  if (player.surgeCharging) return player.surgePointerId === pointerId;
+  player.surgeCharging = true; player.surgeChargeT = 0; player.surgePointerId = pointerId;
+  return true;
+}
+function updateInkSurgeCharge(dt) {
+  if (player.surgeCharging) player.surgeChargeT = Math.min(BATTLE.surge.chargeTime, player.surgeChargeT + dt);
+}
+function cancelInkSurgeCharge(pointerId = null) {
+  if (!player.surgeCharging || player.surgePointerId !== pointerId) return false;
+  player.surgeCharging = false; player.surgeChargeT = 0; player.surgePointerId = null;
+  return true;
+}
+function releaseInkSurgeCharge(pointerId = null) {
+  if (!player.surgeCharging || player.surgePointerId !== pointerId) return false;
+  const radius = inkSurgeChargeRadius();
+  player.surgeCharging = false; player.surgeChargeT = 0; player.surgePointerId = null;
+  return castInkSurge(radius);
+}
+function castInkSurge(radius = BATTLE.surge.radius) {
+  if (state !== 'play') return false;
+  if (player.special < 100) { toast('墨潮还未充满，涂新区域或覆盖灰墨'); return false; }
+  player.special = 0; player.specialAnnounced = false;
+  player.surgeCharging = false; player.surgeChargeT = 0; player.surgePointerId = null;
+  const col = player.actives.length ? trailColorOf(player.actives[0].id) : INK;
+  novas.push({ x: player.x, y: player.y, t: BATTLE.surge.visual, max: radius, col });
+  shakeT = Math.max(shakeT, 0.42);
+  for (const e of enemies) {
+    if (e.dead || Math.hypot(e.x - player.x, e.y - player.y) >= radius + e.r) continue;
+    hurtEnemy(e, BATTLE.surge.damage * player.dmgMul * (1 + player.eqAtk / 100), 0, player.x, player.y, 0, 0, 0, col);
+    if (!e.dead) { e.kbx *= 2.2; e.kby *= 2.2; }
+  }
+  inkSurgePainting = true;
+  // 伤害与铺墨共用同一圆心、同一半径，一次填满，不再用多个墨团拼圆
+  addInkStain(player.x, player.y, 28, radius, col, false, false);
+  inkSurgePainting = false;
+  floats.push({ x: player.x, y: player.y - 42, txt: '墨潮！', t: 1.1, color: col, crit: true });
+  if (player.taken.surgeecho) chargeTurf(BATTLE.traits.surgeRetain);
+  return true;
+}
+function castMeleeInkSurge() {
+  const col = player.actives.length ? trailColorOf(player.actives[0].id) : INK, radius = ABSORB_RULE.meleeRadius;
+  novas.push({ x: player.x, y: player.y, t: BATTLE.surge.visual, max: radius, col });
+  for (const e of enemies) {
+    if (e.dead || Math.hypot(e.x - player.x, e.y - player.y) >= radius + e.r) continue;
+    hurtEnemy(e, ABSORB_RULE.meleeDamage * player.dmgMul * (1 + player.eqAtk / 100), 0, player.x, player.y, 0, 0, 0, col);
+    // 普通怪约击退 45 像素；短暂锁定，避免后续弱攻击覆盖弹反击退
+    if (!e.dead) { e.kbx *= 3.6; e.kby *= 3.6; e.parryKbT = 0.25; }
+  }
+  inkSurgePainting = true;
+  addInkStain(player.x, player.y, 14, radius, col, false, false);
+  inkSurgePainting = false;
+  floats.push({ x: player.x, y: player.y - 58, txt: '小墨潮！', t: 0.85, color: col, crit: true });
+}
+function castAbsorb() {
+  if (state !== 'play' || player.absorbCd > 0) return false;
+  const onOwnInk = playerOnOwnInk();
+  player.absorbDuration = onOwnInk ? ABSORB_RULE.ownDuration : ABSORB_RULE.duration;
+  player.absorbRadius = onOwnInk ? ABSORB_RULE.ownRadius : ABSORB_RULE.radius;
+  player.absorbT = player.absorbDuration; player.absorbCd = ABSORB_RULE.cooldown; player.absorbGain = 0;
+  player.diving = false;
+  sparks.push({ x: player.x, y: player.y, t: 0.2, color: inkFriendlyColor });
+  return true;
+}
+function rewardAbsorb(amount) {
+  amount *= player.taken.parrywell ? BATTLE.traits.absorbInkMul : 1;
+  const allowed = Math.min(amount, Math.max(0, ABSORB_RULE.maxGain - player.absorbGain));
+  if (allowed <= 0) return 0;
+  const gained = refundInk(allowed, player.x, player.y - 32, '吸墨');
+  player.absorbGain += gained;
+  return gained;
+}
+function chargeParry() {
+  chargeTurf(ABSORB_RULE.charge * (player.taken.parrycharge ? BATTLE.traits.parryChargeMul : 1));
+}
+function reflectEnemyBullet(eb) {
+  if (player.absorbT <= 0 || eb.reflectable === false || eb.life <= 0) return false;
+  hitStopT = Math.max(hitStopT, ABSORB_RULE.hitStop);
+  eb.life = 0;
+  if (eb.sourceId && !eb.inkConverted) inkCutChecks.add(eb.sourceId);
+  const source = enemies.find(e => e.id === eb.sourceId && !e.dead);
+  const target = source || nearestEnemy(eb.x, eb.y, 480);
+  const a = target ? Math.atan2(target.y - eb.y, target.x - eb.x) : Math.atan2(-eb.vy, -eb.vx);
+  const speed = Math.max(160, Math.hypot(eb.vx, eb.vy) * 1.25);
+  fireBullet(eb.x, eb.y, a, speed, eb.dmg * 1.5, 'reflect',
+    { hits: 1, life: 2, col: inkFriendlyColor, reflected: true });
+  addInkStain(eb.x, eb.y, 4, 28, inkFriendlyColor, false, true);
+  rewardAbsorb(ABSORB_RULE.bulletInk);
+  chargeParry();
+  floats.push({ x: player.x, y: player.y - 45, txt: '返还！', t: 0.65, color: inkFriendlyColor, crit: true });
+  sparks.push({ x: eb.x, y: eb.y, t: 0.22, color: inkFriendlyColor });
+  return true;
+}
+function reflectMeleeSwing(e) {
+  // 已实际命中的挥击不能补报弹反；未造成伤害、仅双圈相交时仍可后按弹反
+  if (player.absorbT <= 0 || e.dead || e.swingDamage) return false;
+  const d = Math.hypot(player.x - e.x, player.y - e.y);
+  if (d >= enemySwingRange(e) + player.absorbRadius) return false;
+  hitStopT = Math.max(hitStopT, ABSORB_RULE.hitStop);
+  hurtEnemy(e, e.dmg * 1.5, 0, player.x, player.y, 0, 0, 0, inkFriendlyColor);
+  if (!e.dead) {
+    e.stunT = Math.max(e.stunT || 0, e.elite ? 0.2 : 0.5);
+    e.swingT = 0;
+  }
+  rewardAbsorb(ABSORB_RULE.meleeInk);
+  chargeParry();
+  floats.push({ x: player.x, y: player.y - 45, txt: '反弹！', t: 0.7, color: inkFriendlyColor, crit: true });
+  sparks.push({ x: e.x, y: e.y, t: 0.24, color: inkFriendlyColor });
+  castMeleeInkSurge();
+  shakeT = Math.max(shakeT, 0.1);
+  return true;
+}
+function hazardTouchesCircle(hz, x, y, radius) {
+  const d = Math.hypot(x - hz.x, y - hz.y);
+  if (hz.kind === 'meteor') return d < hz.r + radius;
+  let da = Math.atan2(y - hz.y, x - hz.x) - hz.ang;
+  while (da > Math.PI) da -= Math.PI * 2;
+  while (da < -Math.PI) da += Math.PI * 2;
+  const angularPad = d > 0 ? Math.asin(Math.min(1, radius / d)) : Math.PI;
+  return d < hz.range + radius && Math.abs(da) < hz.arc / 2 + angularPad;
+}
+function reflectHazard(hz) {
+  if (player.absorbT <= 0 || hz.done) return false;
+  const source = enemies.find(e => e.id === hz.sourceId && !e.dead);
+  if (!source || !source.boss) return false;
+  hz.done = true; hz.t = 0;
+  hitStopT = Math.max(hitStopT, ABSORB_RULE.hitStop);
+  hurtEnemy(source, hz.dmg * 1.5, 0, player.x, player.y, 0, 0, 0, inkFriendlyColor);
+  rewardAbsorb(ABSORB_RULE.meleeInk);
+  chargeParry();
+  floats.push({ x: player.x, y: player.y - 45, txt: '反弹！', t: 0.7, color: inkFriendlyColor, crit: true });
+  castMeleeInkSurge();
+  return true;
+}
+function updatePlayerInk(dt) {
+  const own = playerOnOwnInk(), hostile = playerOnHostileInk();
+  if (player.diving) {
+    player.ink = Math.max(0, player.ink - diveInkCost() * dt);
+    if (player.ink <= 0) { player.diving = false; toast('墨水耗尽，退出潜墨'); }
+  } else {
+    player.lastSeenX = player.x; player.lastSeenY = player.y;
+    let regen = BATTLE.ink.regenBase;
+    if (own) regen += BATTLE.ink.regenOwnBonus;
+    if (hostile) regen = 0;
+    player.ink = Math.min(player.maxInk, player.ink + regen * dt);
+  }
+  if (hostile) {
+    player.grayTick += dt;
+    if (player.grayTick >= BATTLE.ink.hostileTick) {
+      player.grayTick -= BATTLE.ink.hostileTick;
+      hurtPlayer(BATTLE.ink.hostileDamage);
+    }
+  } else player.grayTick = 0;
+  return { own, hostile };
+}
+function updateInkStains(dt) {
+  const dotT = (updateInkStains.dotT || 0) - dt, poolT = (updateInkStains.poolT || 0) - dt;
+  const dot = dotT <= 0, pool = poolT <= 0;
+  updateInkStains.dotT = dot ? 0.55 : dotT;
+  updateInkStains.poolT = pool ? 1.35 : poolT;
+  if (!dot && !pool) return;
+  for (const e of enemies) {
+    if (e.dead || !inkPulseAt(e.x, e.y, e.r + (pool ? 24 : 0))) continue;
+    // 技能墨迹只有“有 / 无”，不再按浓度分档；移动与弹道路径仍不伤人
+    if (dot) hurtEnemy(e, 2, 0, e.x, e.y, 0, 0, 0, inkFriendlyColor);
+    if (pool) {
+      hurtEnemy(e, 3, 0, e.x, e.y, 0, 0, 0, inkFriendlyColor);
+      sparks.push({ x: e.x, y: e.y, t: 0.18, color: inkFriendlyColor });
+    }
+  }
+}
 function hurtPlayer(dmg) {
-  dmg = Math.round(dmg * (1 - player.eqDr));
+  // 弹反慢放覆盖同一帧后续结算，避免“反弹成功”与扣血同时出现
+  if (player.diving || hitStopT > 0) return;   // 潜墨是无敌位移：受击不掉血，也不会被碰撞打断
+  const inkDr = player.taken.inkarmor && playerOnOwnInk() ? BATTLE.traits.inkArmorReduction : 0;
+  dmg = Math.round(dmg * (1 - player.eqDr) * (1 - inkDr));
+  player.diving = false;
   if (player.hp - dmg <= 0 && hasItem('tape') && gameTime - player.lastRevive > 30) {
     player.lastRevive = gameTime;
     player.hp = 1; player.hurtT = 0.6; shakeT = 0.3;
@@ -677,7 +1382,8 @@ function nearestEnemy(x, y, maxD, exclude) {
 function fireBullet(x, y, ang, spd, dmg, kind, extra) {
   bullets.push(Object.assign({
     x, y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
-    dmg, dot: 0, kind: kind || 'nib', hits: 1, chainLeft: 0, life: 1.4, split: false, extra: 0, proj: 1
+    dmg, dot: 0, kind: kind || 'nib', hits: 1, chainLeft: 0, life: 1.4, split: false, extra: 0, proj: 1,
+    inkX: x, inkY: y
   }, extra || {}));
 }
 // 子弹类技能的统一辅助参数包（伤害倍率在施放处另乘 1+c.bdmg）
@@ -892,37 +1598,91 @@ function fireSkill(a, c) {
       erupts.push({ x: px, y: py, delay: 0.5, dmg: 20 * c.dmg * (0.5 + c.reburst), r: rad,
         c: Object.assign({}, c, { reburst: 0 }), done: false, t: 0 });
     }
-  } else if (a.id === 'dash') {        // 闪现粉笔：瞬移一段，路径留下伤敌墨痕
-    const dx = Math.cos(player.faceA), dy = Math.sin(player.faceA), dist = 90;
-    const nx = clampW(px + dx * dist, 14), ny = clampH(py + dy * dist, 14);
-    for (const e of enemies) {
-      if (e.dead) continue;
-      const t = Math.max(0, Math.min(1, ((e.x - px) * dx + (e.y - py) * dy) / (dist * dist)));
-      if (Math.hypot(e.x - (px + dx * dist * t), e.y - (py + dy * dist * t)) < e.r + 20 * c.rad * (1 + c.sweep))
-        areaHit(e, 15 * c.dmg, c, px, py);
-    }
-    lightnings.push({ x1: px, y1: py, x2: nx, y2: ny, t: 0.25, delay: 0, prog: 1, dash: true, c });
-    sparks.push({ x: px, y: py, t: 0.18, color: c.col }); sparks.push({ x: nx, y: ny, t: 0.18, color: c.col });
-    player.x = nx; player.y = ny;
   }
+}
+const INK_COST = {
+  cyclone: 1, volcanic: 4, tornado: 2, chainclip: 2, arc: 4, spark: 3, srs: 5, ballista: 5,
+  boomerang: 3, vortex: 2, candle: 1, icespear: 2, inkrain: 5, ruler: 4, chalk: 4,
+  pinburst: 3, absolve: 4, brand: 4, cola: 4
+};
+function addInkStain(x, y, amount, r, col, hostile, trail, prevTrail, sourceId) {
+  const px = prevTrail && Number.isFinite(prevTrail.x) ? prevTrail.x : x;
+  const py = prevTrail && Number.isFinite(prevTrail.y) ? prevTrail.y : y;
+  return paintInkSegment(px, py, x, y, r * (trail ? 0.78 : 1), amount, col, !!hostile, !!trail, sourceId || 0);
+}
+function addHostileInk(x, y, amount, r, sourceId) {
+  return addInkStain(x, y, amount, r, HOSTILE_INK, true, false, null, sourceId || 0);
+}
+// 攻击路径提供领地与潜墨空间，不直接返还墨水
+function addAttackPath(x, y, col, hostile, prevTrail, sourceId) {
+  return addInkStain(x, y, hostile ? 0.8 : 0.55, hostile ? 11 : 9,
+    col || (hostile ? HOSTILE_INK : INK), hostile, true, prevTrail || null, sourceId || 0);
+}
+function addInkStroke(x1, y1, x2, y2, col, hostile, sourceId) {
+  return paintInkSegment(x1, y1, x2, y2, (hostile ? 11 : 9) * 0.78,
+    hostile ? 0.8 : 0.55, col || (hostile ? HOSTILE_INK : INK), !!hostile, true, sourceId || 0);
+}
+function addPlayerTrail(x, y, col, prevTrail) {
+  return addInkStain(x, y, 1.2, 14, col, false, true, prevTrail || null);
+}
+// 每帧直接铺设“上一帧→当前帧”的完整线段；只保留实体当前位置，不保存历史墨团
+function addLinkedTrail(owner, x, y, col, hostile, r, amount, spacing, xKey, yKey, refKey) {
+  let px = owner[xKey], py = owner[yKey];
+  if (!Number.isFinite(px) || !Number.isFinite(py)) { px = x; py = y; }
+  const covered = paintInkSegment(px, py, x, y, r * 0.78, amount, col, !!hostile, true,
+    hostile ? (owner.sourceId || owner.id || 0) : 0);
+  owner[xKey] = x; owner[yKey] = y;
+  if (!owner[refKey]) owner[refKey] = { x, y };
+  else { owner[refKey].x = x; owner[refKey].y = y; }
+  return covered;
+}
+function playerOnOwnInk() {
+  return inkCircleHas(player.x, player.y, player.r * 0.35, false);
+}
+function playerOnHostileInk() {
+  return inkCircleHas(player.x, player.y, player.r * 0.35, true);
+}
+function updateEnemyTrails() {
+  for (const e of enemies) {
+    if (!e || e.dead || Math.hypot(e.x - player.x, e.y - player.y) > 600) continue;
+    addLinkedTrail(e, e.x, e.y, HOSTILE_INK, true, e.boss ? 18 : 12, e.boss ? 3 : 1.5,
+      e.boss ? 14 : 12, 'trailX', 'trailY', 'trailS');
+  }
+}
+function spendSkillInk(a, cost) {
+  if (player.ink < cost) return false;
+  player.ink -= cost;
+  return true;
+}
+function addSkillStain(a, c, amount) {
+  const anchored = ['cyclone', 'vortex', 'candle', 'srs', 'ballista', 'cola'].includes(a.id);
+  const t = anchored ? null : nearestEnemy(player.x, player.y, 380);
+  addInkStain(t ? t.x : player.x, t ? t.y : player.y, amount, 18 + amount * 2.2, c.col);
 }
 function updateSkills(dt) {
   cycAng += dt * 6;
+  if (player.diving) return;
   for (const a of player.actives) {
     a.t -= dt;
     if (a.t > 0) continue;
+    const cost = INK_COST[a.id] || 2;
+    if (!spendSkillInk(a, cost)) {
+      a.t = 0.2;
+      if (player.noInkT <= 0) { toast('墨水不足，潜入己方墨迹补墨'); player.noInkT = 2.2; }
+      continue;
+    }
     const c = skillCalc(a);
     let baseCd = {
       cyclone: 0.45, volcanic: 2.2, tornado: 0.8, chainclip: 0.9, arc: 1.6, spark: 1.8, srs: 3.5, ballista: 5,
       boomerang: 2.2, vortex: 1.5, candle: 0.25, icespear: 1.1, inkrain: 2.8, ruler: 2.0, chalk: 2.4,
-      pinburst: 1.3, absolve: 2.0, brand: 2.5, cola: 1.8, dash: 3
+      pinburst: 1.3, absolve: 2.0, brand: 2.5, cola: 1.8
     }[a.id];
     a.t = baseCd * c.cd;
     if (a.id === 'cyclone' && a.lvl >= 5) a.t *= 0.72;
     if (a.id === 'candle') a.t /= 1 + (c.retick || 0);   // 反复涂抹：灼烧更频繁
     a.uc = (a.uc || 0) + 1;
     const reps = (c.unleash > 0 && a.uc % 3 === 0) ? 1 + c.unleash : 1;
-    for (let r = 0; r < reps; r++) fireSkill(a, c);
+    for (let r = 0; r < reps; r++) { fireSkill(a, c); addSkillStain(a, c, cost / reps); }
   }
 }
 
@@ -987,6 +1747,7 @@ function buildOptions() {
 }
 function applyOption(i) {
   const c = cards[i]; if (!c) return;
+  const starting = c.kind === 'start';
   if (c.kind === 'active' || c.kind === 'start') player.actives.push({ id: c.id, lvl: 1, supports: [], t: 0.3, uc: 0 });
   else if (c.kind === 'active+') { const a = getActive(c.skill); if (a && a.lvl < MAX_LVL) a.lvl++; }
   else if (c.kind === 'support') { const a = getActive(c.skill); if (a) a.supports.push({ id: c.sup, lvl: 1 }); }
@@ -998,6 +1759,193 @@ function applyOption(i) {
   else if (c.kind === 'passive') PASSIVES.find(p => p.id === c.id).fx();
   else if (c.kind === 'notable') NOTABLES.find(n => n.id === c.id).fx();
   cards = []; state = 'play';
+  if (starting) toast('潜墨可无敌位移但持续耗墨；涂新区域攒满墨潮');
+}
+
+/* ---------- 纸面手势：不接管自动战斗，只让玩家亲手改写战局 ---------- */
+function screenToWorld(p) { return { x: camX + p.x / ZOOM, y: camY + p.y / ZOOM }; }
+function pointSegDist(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+  const t = l2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0;
+  return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t);
+}
+function strokeLen(ps) { let n = 0; for (let i = 1; i < ps.length; i++) n += Math.hypot(ps[i].x - ps[i - 1].x, ps[i].y - ps[i - 1].y); return n; }
+function simplifyStroke(ps, tol) {
+  if (ps.length <= 2) return ps.slice();
+  let maxD = 0, idx = 0;
+  for (let i = 1; i < ps.length - 1; i++) {
+    const d = pointSegDist(ps[i], ps[0], ps[ps.length - 1]);
+    if (d > maxD) { maxD = d; idx = i; }
+  }
+  if (maxD <= tol) return [ps[0], ps[ps.length - 1]];
+  const left = simplifyStroke(ps.slice(0, idx + 1), tol), right = simplifyStroke(ps.slice(idx), tol);
+  return left.slice(0, -1).concat(right);
+}
+function recognizeStroke(ps) {
+  if (!ps || ps.length < 2) return { kind: 'none' };
+  const len = strokeLen(ps); if (len < 20) return { kind: 'none' };
+  const sp = simplifyStroke(ps, 7), first = ps[0], last = ps[ps.length - 1];
+  let cx = 0, cy = 0;
+  for (const p of ps) { cx += p.x; cy += p.y; }
+  cx /= ps.length; cy /= ps.length;
+  const close = Math.hypot(last.x - first.x, last.y - first.y);
+  if (ps.length >= 8 && len > 70 && close < Math.max(30, len * 0.18)) {
+    let turn = 0, mean = 0;
+    const rs = [];
+    for (const p of ps) { const r = Math.hypot(p.x - cx, p.y - cy); rs.push(r); mean += r; }
+    mean /= rs.length;
+    let variance = 0;
+    for (const r of rs) variance += (r - mean) ** 2;
+    for (let i = 2; i < ps.length; i++) {
+      const a1 = Math.atan2(ps[i - 1].y - ps[i - 2].y, ps[i - 1].x - ps[i - 2].x);
+      const a2 = Math.atan2(ps[i].y - ps[i - 1].y, ps[i].x - ps[i - 1].x);
+      let da = a2 - a1;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      turn += da;
+    }
+    if (mean > 16 && Math.abs(turn) > 4.2 && Math.sqrt(variance / rs.length) / mean < 0.38)
+      return { kind: 'circle', x: cx, y: cy, r: mean };
+  }
+  if (sp.length === 3) {
+    const a = sp[0], b = sp[1], c = sp[2];
+    const ab = Math.hypot(a.x - b.x, a.y - b.y), bc = Math.hypot(b.x - c.x, b.y - c.y);
+    const chord = Math.hypot(c.x - a.x, c.y - a.y), height = pointSegDist(b, a, c);
+    const u = Math.atan2(a.y - b.y, a.x - b.x), v = Math.atan2(c.y - b.y, c.x - b.x);
+    let da = Math.abs(u - v); if (da > Math.PI) da = Math.PI * 2 - da;
+    if (ab > 22 && bc > 22 && chord > 30 && height > 20 && da > 0.35 && da < 2.35 && len < (ab + bc) * 1.35)
+      return { kind: 'v', a, b, c };
+  }
+  if (sp.length >= 4 && sp.length <= 8 && len > 55) {
+    let turns = 0, prevSign = 0;
+    for (let i = 2; i < sp.length; i++) {
+      const a1 = Math.atan2(sp[i - 1].y - sp[i - 2].y, sp[i - 1].x - sp[i - 2].x);
+      const a2 = Math.atan2(sp[i].y - sp[i - 1].y, sp[i].x - sp[i - 1].x);
+      let da = a2 - a1;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      const sign = Math.abs(da) > 0.55 ? Math.sign(da) : 0;
+      if (sign && prevSign && sign !== prevSign) turns++;
+      if (sign) prevSign = sign;
+    }
+    if (turns >= 1) return { kind: 'zig', points: sp };   // Z 形三段折线即可触发，更多折返同样有效
+  }
+  if (sp.length === 2 && len >= 20) return { kind: 'line', a: sp[0], b: sp[1] };
+  return { kind: 'none' };
+}
+function segmentCross(a, b, c, d) {
+  const den = (a.x - b.x) * (c.y - d.y) - (a.y - b.y) * (c.x - d.x);
+  if (Math.abs(den) < 0.001) return null;
+  const t = ((a.x - c.x) * (c.y - d.y) - (a.y - c.y) * (c.x - d.x)) / den;
+  const u = -((a.x - b.x) * (a.y - c.y) - (a.y - b.y) * (a.x - c.x)) / den;
+  if (t < 0.08 || t > 0.92 || u < 0.08 || u > 0.92) return null;
+  const ang = Math.abs(Math.sin(Math.atan2(b.y - a.y, b.x - a.x) - Math.atan2(d.y - c.y, d.x - c.x)));
+  if (ang < 0.55) return null;
+  return { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
+}
+function gestureMessage(txt) { if (gestureNoticeT <= 0) { toast(txt); gestureNoticeT = 1.25; } }
+function spendInk(kind, cost, cd) {
+  if (gestureCooldowns[kind] > 0) return false;
+  if (player.ink < cost) { gestureMessage('墨水不够，潜入己方墨迹补墨'); return false; }
+  player.ink -= cost; gestureCooldowns[kind] = cd; return true;
+}
+function gestureCalc(id) {
+  const a = getActive(id) || { id, lvl: 1, supports: [] };
+  return { a, c: skillCalc(a) };
+}
+function castCross(g1, g2, hitScreen) {
+  const a = screenToWorld(g1.a), b = screenToWorld(g1.b), c = screenToWorld(g2.a), d = screenToWorld(g2.b);
+  const center = screenToWorld(hitScreen);
+  const shot = ebullets.filter(eb => eb.life > 0 && Math.min(pointSegDist(eb, a, b), pointSegDist(eb, c, d)) < 26);
+  const targets = enemies.filter(e => !e.dead && !e.boss &&
+    Math.min(pointSegDist(e, a, b), pointSegDist(e, c, d)) < e.r + 17 &&
+    e.hp / e.maxhp <= (e.elite ? 0.25 : 0.55))
+    .sort((e1, e2) => Math.hypot(e1.x - center.x, e1.y - center.y) - Math.hypot(e2.x - center.x, e2.y - center.y)).slice(0, 5);
+  if (!shot.length && !targets.length) { gestureMessage('画叉可擦弹，或擦除残血小怪'); return; }
+  const elite = targets.some(e => e.elite), cost = elite ? 60 : (targets.length ? 40 : 25);
+  if (!spendInk('cross', cost, 2.2)) return;
+  for (const eb of shot) { eb.life = 0; sparks.push({ x: eb.x, y: eb.y, t: 0.18, color: INK }); }
+  for (const e of targets) {
+    if (!e.elite) {
+      redrawOutlines.push({ x: e.x, y: e.y, r: e.r, type: e.type, t: 8, seed: e.id, dead: false });
+      if (redrawOutlines.length > 12) redrawOutlines.shift();
+    }
+    killEnemy(e); sparks.push({ x: e.x, y: e.y, t: 0.18, color: INK });
+  }
+  shakeT = Math.max(shakeT, 0.16);
+  toast(targets.length ? '画叉擦除！在淡影上画圈可重画' : '敌方弹幕被擦掉了！');
+}
+function castCircle(g) {
+  const center = screenToWorld(g), wr = g.r / ZOOM;
+  const ghost = redrawOutlines.filter(o => !o.dead && Math.hypot(o.x - center.x, o.y - center.y) < wr + o.r)
+    .sort((a, b) => Math.hypot(a.x - center.x, a.y - center.y) - Math.hypot(b.x - center.x, b.y - center.y))[0];
+  if (ghost) {
+    if (minions.filter(m => m.redrawn).length >= 3) { gestureMessage('重画友军最多同时存在 3 个'); return; }
+    if (!spendInk('redraw', 45, 2.5)) return;
+    ghost.dead = true;
+    const c = { col: INK, rapid: 0, sweep: 0 };
+    minions.push({ x: ghost.x, y: ghost.y, t: 20, atkCd: 0, dmg: 24 * player.dmgMul * (1 + player.eqAtk / 100),
+      dot: 0, walk: 0, rad: 1.3, vuln: 0, c, redrawn: true });
+    sparks.push({ x: ghost.x, y: ghost.y, t: 0.18, color: INK });
+    floats.push({ x: ghost.x, y: ghost.y - 24, txt: '重画！', t: 0.9, color: INK });
+    toast('敌人被重画成了友军！');
+    return;
+  }
+  if (!spendInk('circle', 55, 4)) return;
+  const gc = gestureCalc(getActive('candle') ? 'candle' : (getActive('cola') ? 'cola' : 'candle')), c = gc.c;
+  const radius = Math.max(50, Math.min(115, wr)) * c.rad;
+  fields.push({ kind: 'scribble', x: center.x, y: center.y, r: radius, t: 4.5 * (1 + c.lingerT), tick: 0, dmg: 18 * c.dmg, c });
+  novas.push({ x: center.x, y: center.y, t: 0.35, max: radius, col: c.col });
+}
+function castV(g) {
+  if (!spendInk('v', 45, 3)) return;
+  const origin = screenToWorld(g.b), end1 = screenToWorld(g.a), end2 = screenToWorld(g.c);
+  const base = Math.atan2(origin.y - (end1.y + end2.y) / 2, origin.x - (end1.x + end2.x) / 2);
+  const gc = gestureCalc('tornado'), a = gc.a, c = gc.c, n = 2 + c.count + (a.lvl >= 5 ? 2 : 0);
+  for (let i = 0; i < n; i++) {
+    fireBullet(origin.x, origin.y, base + (i - (n - 1) / 2) * 0.18, 420 * c.proj,
+      34 * c.dmg * (1 + c.bdmg) * (a.lvl >= 5 ? 1.2 : 1), 'torn',
+      Object.assign(projOpts(c, 1.5), { hits: 1 + c.pierce, extra: 1 + c.chain + (a.lvl >= 5 ? 2 : 0),
+        gen: a.lvl >= 5 ? 3 : (a.lvl >= 3 ? 2 : 1), big: true }));
+  }
+}
+function castZig(g) {
+  const ps = g.points.map(screenToWorld), last = ps[ps.length - 1];
+  const first = nearestEnemy(last.x, last.y, 260);
+  if (!first) { gestureMessage('折线末端要靠近怪物，才能接上电弧'); return; }
+  if (!spendInk('zig', 50, 3.5)) return;
+  const gc = gestureCalc('arc'), a = gc.a, c = gc.c;
+  let cur = first, sx = ps[0].x, sy = ps[0].y, dmg = 44 * c.dmg;
+  const hitSet = [];
+  for (let j = 0; j <= 5 + c.chain + (a.lvl >= 3 ? 1 : 0) && cur; j++) {
+    lightnings.push({ x1: sx, y1: sy, x2: cur.x, y2: cur.y, t: 0.32, delay: j * 0.08, prog: 0, tgt: cur, dmg, c });
+    if (a.lvl >= 5) fields.push({ kind: 'thunder', x: cur.x, y: cur.y, r: 52 * c.rad, t: 2.2, tick: 0.18 + j * 0.04, dmg: 7 * c.dmg, c });
+    hitSet.push(cur); sx = cur.x; sy = cur.y; dmg *= 0.85;
+    let nxt = null, bd = (180 * c.rad) ** 2;
+    for (const e of enemies) {
+      if (e.dead || hitSet.includes(e)) continue;
+      const d2 = (e.x - sx) ** 2 + (e.y - sy) ** 2;
+      if (d2 < bd) { bd = d2; nxt = e; }
+    }
+    cur = nxt;
+  }
+}
+function finishGesture(ps) {
+  if (state !== 'play' || !ps || ps.length < 2) return;
+  const g = recognizeStroke(ps);
+  if (g.kind === 'line') {
+    if (pendingGesture && gameTime - pendingGesture.t <= 0.48) {
+      const previous = pendingGesture.g;
+      const hit = segmentCross(previous.a, previous.b, g.a, g.b);
+      if (hit) { pendingGesture = null; castCross(previous, g, hit); setDrawMode(false); return; }
+    }
+    pendingGesture = { g, t: gameTime }; drawModeT = 0.75; return;   // 给第二笔叉留一个短窗口
+  }
+  pendingGesture = null;
+  if (g.kind === 'circle') castCircle(g);
+  else if (g.kind === 'v') castV(g);
+  else if (g.kind === 'zig') castZig(g);
+  setDrawMode(false);   // 每次只画一个手势，随后立即回到单手移动
 }
 
 /* ---------- 输入 ---------- */
@@ -1005,44 +1953,69 @@ window.addEventListener('keydown', e => {
   keys[e.key.toLowerCase()] = true;
   if ((state === 'levelup' || state === 'start') && ['1', '2', '3', '4'].includes(e.key)) applyOption(+e.key - 1);
   if ((state === 'over' || state === 'win') && (e.key === ' ' || e.key === 'Enter')) resetGame();
+  if (!e.repeat && state === 'play' && e.key === ' ') { e.preventDefault(); toggleDive(); }
+  if (!e.repeat && state === 'play' && e.key.toLowerCase() === 'q') { e.preventDefault(); startInkSurgeCharge(); }
+  if (!e.repeat && state === 'play' && e.key.toLowerCase() === 'e') castAbsorb();
 });
-window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+window.addEventListener('keyup', e => {
+  const key = e.key.toLowerCase(); keys[key] = false;
+  if (key === 'q') releaseInkSurgeCharge();
+});
+window.addEventListener('blur', () => {
+  if (player.surgeCharging) cancelInkSurgeCharge(player.surgePointerId);
+});
 
 function toLogical(e) {
   const r = canvas.getBoundingClientRect();
   return { x: (e.clientX - r.left) / (r.width / W), y: (e.clientY - r.top) / (r.height / H) };
 }
+function pointInRect(p, r) { return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h; }
 canvas.addEventListener('pointerdown', e => {
   e.preventDefault();
   const p = toLogical(e);
   if (state === 'levelup' || state === 'start') {
     for (let i = 0; i < cardRects.length; i++) {
       const r = cardRects[i];
-      if (p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h) { applyOption(i); return; }
+      if (pointInRect(p, r)) { applyOption(i); return; }
     }
     return;
   }
   if (state === 'over' || state === 'win') { resetGame(); return; }
-  if (p.y > H * 0.4 && !joy.active) {
-    joy.active = true; joy.id = e.pointerId; joy.bx = p.x; joy.by = p.y; joy.dx = 0; joy.dy = 0;
+  if (state !== 'play') return;
+  // 技能按钮优先且使用独立触点：摇杆保持移动时，另一根手指仍可释放技能
+  if (pointInRect(p, absorbRect)) { castAbsorb(); return; }
+  if (pointInRect(p, specialRect)) {
+    if (startInkSurgeCharge(e.pointerId) && canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
+    return;
+  }
+  if (pointInRect(p, diveRect)) { toggleDive(); return; }
+  if (joy.active) return;
+  if (Math.hypot(p.x - JOY_HOME.x, p.y - JOY_HOME.y) <= JOY_HOME.r + 26) {
+    // 只有左下固定摇杆区域接管移动，右侧空白区域不会抢技能手指
+    joy.active = true; joy.id = e.pointerId; joy.bx = JOY_HOME.x; joy.by = JOY_HOME.y; joy.dx = 0; joy.dy = 0;
   }
 });
 canvas.addEventListener('pointermove', e => {
   if (!joy.active || e.pointerId !== joy.id) return;
   const p = toLogical(e);
   let dx = p.x - joy.bx, dy = p.y - joy.by;
-  const len = Math.hypot(dx, dy), max = 55;
+  const len = Math.hypot(dx, dy), max = JOY_HOME.r;
   if (len > max) { dx = dx / len * max; dy = dy / len * max; }
   joy.dx = dx / max; joy.dy = dy / max;
 });
-function endJoy(e) { if (joy.active && e.pointerId === joy.id) { joy.active = false; joy.dx = 0; joy.dy = 0; } }
-canvas.addEventListener('pointerup', endJoy);
-canvas.addEventListener('pointercancel', endJoy);
+function endPointer(e) {
+  if (e.type === 'pointercancel') cancelInkSurgeCharge(e.pointerId);
+  else releaseInkSurgeCharge(e.pointerId);
+  if (joy.active && e.pointerId === joy.id) { joy.active = false; joy.dx = 0; joy.dy = 0; }
+}
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
 
 /* ---------- 主更新 ---------- */
 function update(dt) {
   gameTime += dt;
   crumpleT = Math.max(0, crumpleT - dt);
+  player.noInkT = Math.max(0, player.noInkT - dt);
   const st = curSt();
   if (st !== curStage) {   // 翻页：换关卡底纹
     curStage = st; crumpleT = Math.max(crumpleT, 0.45);
@@ -1053,6 +2026,11 @@ function update(dt) {
   player.condDmg = 1;
   if (hasItem('cloak') && player.hp < player.maxhp * 0.3) player.condDmg *= 1.4;
   if (hasItem('cap4')) player.condDmg *= 1 + 0.08 * player.actives.length;
+  player.absorbT = Math.max(0, player.absorbT - dt);
+  player.absorbCd = Math.max(0, player.absorbCd - dt);
+  updateInkSurgeCharge(dt);
+  const ground = updatePlayerInk(dt);
+  if (state === 'over') return;
 
   let mx = 0, my = 0;
   if (keys['w'] || keys['arrowup']) my -= 1;
@@ -1061,16 +2039,24 @@ function update(dt) {
   if (keys['d'] || keys['arrowright']) mx += 1;
   if (joy.active) { mx = joy.dx; my = joy.dy; }
   const ml = Math.hypot(mx, my);
-  // 摇杆只提供方向：只要产生拖动，就按当前最大移动速度前进
+  // 摇杆只决定方向；只要拖动就保持最大移动速度
   if (ml > 0) { mx /= ml; my /= ml; }
   player.hurtBoostT = Math.max(0, player.hurtBoostT - dt);
   player.leechT += dt;
   if (player.leechT >= 1) { player.leechT %= 1; player.leechN = 0; }
-  const spdNow = player.speed * player.eqSpd * (hasItem('shoes') && player.hurtBoostT > 0 ? 1.3 : 1);
+  const routeBoost = player.diving ? BATTLE.dive.speed : (ground.own ? BATTLE.ink.ownSpeed : 1);
+  const hostileSlow = ground.hostile ? BATTLE.ink.hostileSpeed : 1;
+  const spdNow = player.speed * player.eqSpd * routeBoost * hostileSlow * (hasItem('shoes') && player.hurtBoostT > 0 ? 1.3 : 1);
   player.x += mx * spdNow * dt;
   player.y += my * spdNow * dt;
   player.x = clampW(player.x, 14); player.y = clampH(player.y, 14);
-  if (ml > 0.1) { player.walk += dt * 10; player.faceA = Math.atan2(my, mx); }
+  if (ml > 0.1) {
+    player.walk += dt * 10; player.faceA = Math.atan2(my, mx);
+    if ((!player.diving || player.taken.divepaint) && player.actives.length) {
+      addLinkedTrail(player, player.x, player.y, trailColorOf(player.actives[0].id), false,
+        14, 1.2, 12, 'trailX', 'trailY', 'trailS');
+    }
+  }
   player.hurtT = Math.max(0, player.hurtT - dt);
   shakeT = Math.max(0, shakeT - dt);
 
@@ -1084,11 +2070,17 @@ function update(dt) {
       spawnHorde();
       nextHordeT = gameTime + (gameTime < 90 ? 15 : 20);
     }
-    if (player.xp >= player.xpNext) {
+    if (levelupDelayT < 0 && player.xp >= player.xpNext) levelupDelayT = BATTLE.feedback.levelupDelay;
+  }
+  // 经验满后先留出 0.5 秒看清战斗结果，再升级并弹出三选一
+  if (levelupDelayT >= 0) {
+    levelupDelayT -= dt;
+    if (levelupDelayT <= 0) {
+      levelupDelayT = -1;
       player.xp -= player.xpNext; player.level++;
-      // 升级需求随等级加速增长：前期快、后期明显变慢
-      player.xpNext = 6 + Math.round(player.level * 1.8 + player.level * player.level * 0.06);
+      player.xpNext = xpForNextLevel(player.level);
       buildOptions(); state = 'levelup';
+      return;
     }
   }
 
@@ -1106,22 +2098,33 @@ function update(dt) {
     e.vorCd = Math.max(0, (e.vorCd || 0) - dt);
     e.areaVulnT = Math.max(0, (e.areaVulnT || 0) - dt);
     e.stunT = Math.max(0, (e.stunT || 0) - dt);
+    e.parryKbT = Math.max(0, (e.parryKbT || 0) - dt);
     e.comboT = Math.max(0, (e.comboT || 0) - dt);
     if (e.comboT <= 0) e.comboN = 0;
     if (e.stainT > 0) {   // 墨渍残留：离开范围后仍受余伤
       e.stainT -= dt; e.hp -= e.stainDps * dt;
       if (e.hp <= 0) { killEnemy(e); continue; }
     }
-    const sf = e.slowT > 0 ? 0.5 : 1;   // 冰冻减速
+    if (e.type === 'sprayer') {
+      e.inkCd -= dt;
+      if (e.inkCd <= 0) { e.inkCd = 2.8; addHostileInk(e.x, e.y, 8, 27, e.id); }
+    }
+    const inkFactor = enemyInkFactor(e);
+    const sf = (e.slowT > 0 ? 0.5 : 1) * inkFactor;   // 彩墨阻碍怪物，灰墨帮助怪物
     if (e.dotT > 0) {
       e.dotT -= dt; e.hp -= e.dotDps * dt;
       if (e.hp <= 0) { killEnemy(e); continue; }
     }
-    if (e.stunT <= 0) {   // 震荡僵直：停止移动和 Boss AI，但保留击退位移
-      if (e.boss) updateBoss(e, dt * (e.slowT > 0 ? 0.55 : 1));
+    if (e.stunT <= 0) {   // 震荡僵直：停止移动和 AI，但保留击退位移
+      if (e.shade) updateInkShade(e, dt * sf);
+      else if (e.boss) updateBoss(e, dt * (e.slowT > 0 ? 0.55 : 1) * inkFactor);
+      else if (isShooter(e)) updateShooter(e, dt * sf);
+      else if (isInkEater(e) && updateInkEater(e, dt * inkFactor)) { /* 吸墨怪优先抢墨 */ }
       else if (e.type === 'plane') { e.x += e.vx * e.sp * sf * dt; e.y += e.vy * e.sp * sf * dt; }
       else {
-        const a = Math.atan2(player.y - e.y, player.x - e.x);
+        const hidden = player.diving && Math.hypot(player.x - e.x, player.y - e.y) > 85;
+        const tx = hidden ? player.lastSeenX : player.x, ty = hidden ? player.lastSeenY : player.y;
+        const a = Math.atan2(ty - e.y, tx - e.x);
         e.x += Math.cos(a) * e.sp * sf * dt; e.y += Math.sin(a) * e.sp * sf * dt;
         e.walk += dt * (e.type === 'spider' ? 14 : 8);
       }
@@ -1130,12 +2133,19 @@ function update(dt) {
     e.x = clampW(e.x, e.r); e.y = clampH(e.y, e.r);
     e.kbx *= kbDecay; e.kby *= kbDecay;
     const d = Math.hypot(player.x - e.x, player.y - e.y);
-    if (e.stunT <= 0 && d < e.r + 10 && e.hitCd <= 0) {
+    if (e.stunT <= 0 && !e.boss && !e.shade && !isShooter(e)) {
+      updateMeleeSwing(e, dt);
+      if (state === 'over') return;
+    } else if (e.stunT <= 0 && (e.boss || e.shade) && d < e.r + 10 && e.hitCd <= 0) {
+      if (player.absorbT > 0 && reflectMeleeSwing(e)) continue;
       e.hitCd = 0.9;
+      addHostileInk(e.x, e.y, 3, 18, e.id);
       hurtPlayer(e.dmg);
       if (state === 'over') return;
     }
   }
+  updateEnemyTrails(dt);
+  updateInkStains(dt);
 
   for (const b of bullets) {
     if (b.homing) {   // 追踪笔迹：限速度转向最近敌人
@@ -1163,6 +2173,9 @@ function update(dt) {
     if (b.kind === 'ink' && b.bounce > 0) {   // 墨滴撞纸边反弹
       if (b.x < WORLD_L + 6 || b.x > WORLD_R - 6) { b.vx = -b.vx; b.bounce--; b.x = clampW(b.x, 6); }
       if (b.y < WORLD_T + 6 || b.y > WORLD_B - 6) { b.vy = -b.vy; b.bounce--; b.y = clampH(b.y, 6); }
+    }
+    if (b.col) {
+      addLinkedTrail(b, b.x, b.y, b.col, false, 9, 0.55, 16, 'inkX', 'inkY', 'inkS');
     }
     if (b.life <= 0) continue;
     if (b.arm > 0) { b.arm -= dt; continue; }   // 分裂后先飞离原目标，避免同帧连续引爆
@@ -1248,6 +2261,7 @@ function update(dt) {
       er.delay -= dt;
       if (er.delay <= 0) {
         er.done = true; er.t = 0.3;
+        addAttackPath(er.x, er.y, er.c && er.c.col, false);
         for (const e of enemies) {
           const d = Math.hypot(e.x - er.x, e.y - er.y);
           if (!e.dead && d < er.r + e.r) areaHit(e, er.dmg, er.c, er.x, er.y, er.r, d);
@@ -1269,6 +2283,7 @@ function update(dt) {
     if (!hz.done) {
       hz.delay -= dt;
       if (hz.delay <= 0) {
+        if (player.absorbT > 0 && hazardTouchesCircle(hz, player.x, player.y, player.absorbRadius) && reflectHazard(hz)) continue;
         hz.done = true; shakeT = Math.max(shakeT, 0.12);
         let hit = false;
         if (hz.kind === 'meteor') {
@@ -1289,8 +2304,14 @@ function update(dt) {
 
   // 敌方墨弹（blob 系 Boss）
   for (const eb of ebullets) {
+    if (eb.inkX === undefined) { eb.inkX = eb.x; eb.inkY = eb.y; }
     eb.x += eb.vx * dt; eb.y += eb.vy * dt; eb.life -= dt;
-    if (eb.life > 0 && Math.hypot(player.x - eb.x, player.y - eb.y) < 16) {
+    const trailCol = eb.inkConverted ? (player.actives.length ? trailColorOf(player.actives[0].id) : INK) : HOSTILE_INK;
+    addLinkedTrail(eb, eb.x, eb.y, trailCol, !eb.inkConverted, 11, 0.8, 16, 'inkX', 'inkY', 'inkS');
+    if (eb.life <= 0 && eb.sourceId && !eb.inkConverted) inkCutChecks.add(eb.sourceId);
+    const playerDist = Math.hypot(player.x - eb.x, player.y - eb.y);
+    if (eb.life > 0 && player.absorbT > 0 && playerDist < player.absorbRadius && reflectEnemyBullet(eb)) continue;
+    if (eb.life > 0 && playerDist < 16) {
       eb.life = 0;
       hurtPlayer(eb.dmg);
       if (state === 'over') return;
@@ -1338,9 +2359,11 @@ function update(dt) {
   // 涂改带刀阵：环绕碎片接触伤害
   for (let i = 0; i < blades.length; i++) {
     const bl = blades[i];
+    if (bl.trailX === undefined) { bl.trailX = bl.x; bl.trailY = bl.y; bl.trailS = null; }
     bl.t -= dt; bl.ang += dt * 3.2;
     bl.x = player.x + Math.cos(bl.ang + i * 2.1) * 64 * bl.rad;
     bl.y = player.y + Math.sin(bl.ang + i * 2.1) * 64 * bl.rad;
+    addLinkedTrail(bl, bl.x, bl.y, bl.c.col, false, 9, 0.55, 10, 'trailX', 'trailY', 'trailS');
     for (const e of enemies) {
       if (e.dead || e.vorCd > 0) continue;
       if (Math.hypot(e.x - bl.x, e.y - bl.y) < e.r + 10 * (1 + (bl.c.sweep || 0))) {
@@ -1441,11 +2464,17 @@ function update(dt) {
     if (l.delay > 0) { l.delay -= dt; continue; }
     if (l.prog !== undefined && l.prog < 1) {
       l.prog = Math.min(1, l.prog + dt / 0.07);   // 电弧头飞行
-      if (l.prog >= 1 && l.tgt && !l.tgt.dead) {
-        if (l.c) areaHit(l.tgt, l.dmg, l.c, l.x1, l.y1);
-        else hurtEnemy(l.tgt, l.dmg, l.dmg * (l.dot || 0), l.x1, l.y1, l.vuln, 0, 0, l.col);
+      if (l.prog >= 1) {
+        if (!l.inked) { l.inked = true; addInkStroke(l.x1, l.y1, l.x2, l.y2, l.col || (l.c && l.c.col), false); }
+        if (l.tgt && !l.tgt.dead) {
+          if (l.c) areaHit(l.tgt, l.dmg, l.c, l.x1, l.y1);
+          else hurtEnemy(l.tgt, l.dmg, l.dmg * (l.dot || 0), l.x1, l.y1, l.vuln, 0, 0, l.col);
+        }
       }
-    } else l.t -= dt;
+    } else {
+      if (!l.inked) { l.inked = true; addInkStroke(l.x1, l.y1, l.x2, l.y2, l.col || (l.c && l.c.col), false); }
+      l.t -= dt;
+    }
   }
   lightnings = lightnings.filter(l => l.t > 0);
   for (const s of sparks) s.t -= dt;
@@ -1459,7 +2488,7 @@ function update(dt) {
       const cur = player.equip[it.slot];
       if (cur && cur.key === dr.item) {   // 重复获得 → 强化，最高 Lv10
         if (cur.lvl < 10) { cur.lvl++; toast('【' + it.name + '】强化到 Lv' + cur.lvl + '！属性 +' + 20 * (cur.lvl - 1) + '%'); }
-        else { toast('【' + it.name + '】已是 Lv10，化作墨水珠'); gems.push({ x: dr.x, y: dr.y, v: 10 }); }
+        else { toast('【' + it.name + '】已是 Lv10，转化为 10 点经验'); player.xp += 10; }
       } else {
         player.equip[it.slot] = { key: dr.item, lvl: 1 };
         toast('获得【' + it.name + '】' + it.fx);
@@ -1469,18 +2498,6 @@ function update(dt) {
   }
   drops = drops.filter(dr => !dr.got);
 
-  for (const g of gems) {
-    const d = Math.hypot(player.x - g.x, player.y - g.y);
-    if (d < player.pickup) {
-      const a = Math.atan2(player.y - g.y, player.x - g.x), v = 260 + (player.pickup - d) * 6;
-      g.x += Math.cos(a) * v * dt; g.y += Math.sin(a) * v * dt;
-    }
-    if (d < 14) {
-      g.got = true; player.xp += g.v;
-      if (hasItem('pendant')) player.hp = Math.min(player.maxhp, player.hp + 1);
-    }
-  }
-  gems = gems.filter(g => !g.got);
   enemies = enemies.filter(e => !e.dead);
 
   for (const er of erases) er.t -= dt;
@@ -1493,6 +2510,7 @@ function update(dt) {
   for (const ts of toasts) ts.t -= dt;
   toasts = toasts.filter(ts => ts.t > 0);
 
+  updateInkTactics();   // 统一处理本帧产生的截断、续墨和失源转化
   camX = Math.max(WORLD_L - 70, Math.min(WORLD_R + 70 - VIEW_W, player.x - VIEW_W / 2));
   camY = Math.max(WORLD_T - 70, Math.min(WORLD_B + 70 - VIEW_H, player.y - VIEW_H / 2));
 }
@@ -1850,6 +2868,27 @@ function drawEnemy(e) {
     scribbleFill(e.x - e.r, e.y - e.r, e.r * 2, e.r * 2, c); ctx.restore();
     jcircle(e.x - e.r * 0.75, e.y + e.r * 0.7, 3, c, 1.5);
     jcircle(e.x + e.r * 0.65, e.y + e.r * 0.9, 2.5, c, 1.5);
+  } else if (e.type === 'sprayer') {   // 喷墨涂鸦：背负脏墨囊与滴墨喷嘴
+    drawStick(e.x, e.y, 24, e.walk, c);
+    jcircle(e.x + e.r * 0.75, e.y - 2, 6, HOSTILE_INK, 2.2);
+    jline(e.x + e.r * 0.75, e.y + 4, e.x + e.r * 1.15, e.y + 11, HOSTILE_INK, 2);
+    jcircle(e.x + e.r * 1.15, e.y + 13, 2.2, HOSTILE_INK, 1.5);
+  } else if (e.type === 'inksac') {   // 墨囊怪：鼓胀墨袋，死亡留下大片脏墨
+    jcircle(e.x, e.y, e.r, c, 3);
+    jline(e.x - 5, e.y - e.r * 0.8, e.x, e.y - e.r * 1.2, c, 2);
+    jline(e.x, e.y - e.r * 1.2, e.x + 5, e.y - e.r * 0.8, c, 2);
+    ctx.save(); ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 0.82, 0, 7); ctx.clip();
+    ctx.globalAlpha = 0.65; scribbleFill(e.x - e.r, e.y - e.r, e.r * 2, e.r * 2, HOSTILE_INK); ctx.restore();
+    jcircle(e.x - 5, e.y - 2, 2, c, 1.5); jcircle(e.x + 5, e.y - 2, 2, c, 1.5);
+  } else if (e.type === 'leech' || e.type === 'inkthief') {   // 吸墨怪：空肚软泥，吃墨后身体逐渐变厚
+    jcircle(e.x, e.y, e.r, c, e.type === 'inkthief' ? 3.5 : 2.5);
+    jcircle(e.x - e.r * 0.35, e.y - e.r * 0.15, 2.2, c, 1.5);
+    jcircle(e.x + e.r * 0.35, e.y - e.r * 0.15, 2.2, c, 1.5);
+    jline(e.x - e.r * 0.45, e.y + e.r * 0.35, e.x + e.r * 0.45, e.y + e.r * 0.35, PURPLE, 2.5);
+    if (e.ink > 0) {
+      ctx.save(); ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 0.78, 0, 7); ctx.clip();
+      ctx.globalAlpha = Math.min(0.75, 0.2 + e.ink / 80); scribbleFill(e.x - e.r, e.y - e.r, e.r * 2, e.r * 2, PURPLE); ctx.restore();
+    }
   } else if (e.type === 'rage') {
     jcircle(e.x, e.y, e.r, c, 2.5);
     jline(e.x - e.r * 0.55, e.y - e.r * 0.45, e.x - e.r * 0.12, e.y - e.r * 0.12, c, 2);
@@ -1861,6 +2900,21 @@ function drawEnemy(e) {
     const lx = e.x - c1 * 8 - s1 * 10, ly = e.y - s1 * 8 + c1 * 10;
     const rx = e.x - c1 * 8 + s1 * 10, ry = e.y - s1 * 8 - c1 * 10;
     jline(tx, ty, lx, ly, c, 2); jline(tx, ty, rx, ry, c, 2); jline(lx, ly, rx, ry, c, 2);
+  } else if (e.type === 'pencilthrower' || e.type === 'forkpen' || e.type === 'eliteCrossbow') {
+    drawStick(e.x, e.y, e.elite ? 31 : 25, e.walk, c);
+    const a = e.faceA || 0, ca = Math.cos(a), sa = Math.sin(a);
+    const wx = e.x + ca * (e.r + 7), wy = e.y + sa * (e.r + 7);
+    if (e.type === 'forkpen') {
+      jline(wx - ca * 8 - sa * 5, wy - sa * 8 + ca * 5, wx + ca * 10 + sa * 5, wy + sa * 10 - ca * 5, c, 2.2);
+      jline(wx - ca * 8 + sa * 5, wy - sa * 8 - ca * 5, wx + ca * 10 - sa * 5, wy + sa * 10 + ca * 5, c, 2.2);
+    } else if (e.type === 'eliteCrossbow') {
+      jline(wx - sa * 11, wy + ca * 11, wx + ca * 9, wy + sa * 9, c, 2.8);
+      jline(wx + ca * 9, wy + sa * 9, wx + sa * 11, wy - ca * 11, c, 2.8);
+      jline(wx - sa * 11, wy + ca * 11, wx + sa * 11, wy - ca * 11, RED, 1.5);
+    } else {
+      jline(wx - ca * 11, wy - sa * 11, wx + ca * 13, wy + sa * 13, c, 3);
+      jline(wx + ca * 13, wy + sa * 13, wx + ca * 9 - sa * 3, wy + sa * 9 + ca * 3, RED, 1.8);
+    }
   } else if (e.type === 'elitePencil') {   // 精英：高瘦铅笔统领
     const r = e.r;
     jline(e.x - r * 0.45, e.y - r * 0.7, e.x + r * 0.45, e.y - r * 0.7, c, 3);
@@ -1896,9 +2950,26 @@ function drawEnemy(e) {
             e.x + Math.cos(a) * r * 1.28, e.y + Math.sin(a) * r * 0.95, RED, 1.8);
     }
   } else if (e.boss) drawBoss(e, c);
+  if (isShooter(e) && e.shotWindup > 0) {
+    const d0 = ENEMY_DEFS[e.type], charge = 1 - e.shotWindup / d0.shotWindup;
+    ctx.globalAlpha = 0.2 + charge * 0.65;
+    setSeed(e.id + 120);
+    jline(e.x, e.y, e.x + Math.cos(e.aimA) * 210, e.y + Math.sin(e.aimA) * 210, RED, 1.2 + charge);
+    jcircle(e.x + Math.cos(e.aimA) * (e.r + 9), e.y + Math.sin(e.aimA) * (e.r + 9), 3 + charge * 3, RED, 1.8);
+    ctx.globalAlpha = 1;
+  }
   if (e.elite) {   // 精英统一外圈，和普通怪快速区分
     setSeed(e.id + 90);
     jcircle(e.x, e.y, e.r + 5, c, 1.4);
+  }
+  if (e.shade) {
+    setSeed(e.id + 29000); jcircle(e.x, e.y, e.r + 6, PURPLE, 2.2);
+    ctx.fillStyle = PURPLE; ctx.textAlign = 'center'; ctx.font = 'bold 11px ' + FONT;
+    ctx.fillText('债', e.x, e.y - e.r - 11);
+  }
+  if (e.ink > 0) {
+    ctx.fillStyle = PURPLE; ctx.textAlign = 'center'; ctx.font = 'bold 10px ' + FONT;
+    ctx.fillText(Math.round(e.ink) + '墨', e.x, e.y + e.r + 15);
   }
   if (e.dotT > 0) {
     setSeed(e.id + 31);
@@ -1908,8 +2979,51 @@ function drawEnemy(e) {
     jline(e.x + 2, ey, e.x + 6, ey - 3, RED, 1.5);
   }
   ctx.restore();
+  // 攻击圈不参与怪物受击压扁，始终与固定圆形判定一致
+  drawMeleeTelegraph(e);
 }
 
+function drawMeleeTelegraph(e) {
+  if (e.boss || e.shade || isShooter(e) || e.swingT <= 0) return;
+  const active = e.swingT <= BATTLE.melee.active, range = enemySwingRange(e);
+  setSeed(e.id + 160);
+  if (!active) {
+    // 外圈始终是真实判定范围；内圈从怪物脚下扩张，两圈重合时结算
+    const charge = Math.max(0, Math.min(1, (BATTLE.melee.total - e.swingT) / (BATTLE.melee.total - BATTLE.melee.active)));
+    const chargeR = e.r + (range - e.r) * charge;
+    ctx.globalAlpha = 0.035 + charge * 0.055; ctx.fillStyle = RED;
+    ctx.beginPath(); ctx.arc(e.x, e.y, range, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.55 + charge * 0.25;
+    jcircle(e.x, e.y, range, RED, 2.1);
+    ctx.globalAlpha = 0.25 + charge * 0.65;
+    jcircle(e.x, e.y, chargeR, RED, 1.5 + charge * 1.3);
+    if (charge > 0.45) {
+      const warningY = e.y - e.r - 22;
+      ctx.globalAlpha = Math.min(1, 0.65 + charge * 0.35);
+      ctx.fillStyle = PAPER; ctx.beginPath(); ctx.arc(e.x, warningY, 8, 0, Math.PI * 2); ctx.fill();
+      jcircle(e.x, warningY, 8, RED, 1.8);
+      jline(e.x, warningY - 4, e.x, warningY + 1.5, RED, 2.2);
+      ctx.fillStyle = RED; ctx.beginPath(); ctx.arc(e.x, warningY + 4.5, 1.2, 0, Math.PI * 2); ctx.fill();
+    }
+  } else {
+    // 两圈已经重合：固定命中圈保留配置的持续时间，随后淡出
+    const swingP = Math.max(0, Math.min(1, 1 - e.swingT / BATTLE.melee.active));
+    ctx.globalAlpha = 0.16 * (1 - swingP * 0.55); ctx.fillStyle = RED;
+    ctx.beginPath(); ctx.arc(e.x, e.y, range, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1 - swingP * 0.4;
+    jcircle(e.x, e.y, range, RED, 3.4 - swingP * 0.8);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function renderInkTerritory() {
+  const friendlyCol = player.actives.length ? trailColorOf(player.actives[0].id) : INK;
+  recolorFriendlyInk(friendlyCol);
+  ctx.save(); ctx.imageSmoothingEnabled = true;
+  if (hostileInkLayer.canvas) { ctx.globalAlpha = 0.27; ctx.drawImage(hostileInkLayer.canvas, WORLD_L, WORLD_T, WORLD_W, WORLD_H); }
+  if (friendlyInkLayer.canvas) { ctx.globalAlpha = 0.23; ctx.drawImage(friendlyInkLayer.canvas, WORLD_L, WORLD_T, WORLD_W, WORLD_H); }
+  ctx.restore();
+}
 function render() {
   ctx.setTransform(viewScale, 0, 0, viewScale, 0, 0);
   ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
@@ -1920,6 +3034,7 @@ function render() {
   ctx.translate(-camX, -camY);
 
   drawPaper(curStage || 1);
+  renderInkTerritory();
 
   for (const er of erupts) {
     setSeed(3000 + Math.floor(er.x));
@@ -1976,11 +3091,6 @@ function render() {
       }
       ctx.globalAlpha = 1;
     }
-  }
-  for (const g of gems) {
-    ctx.fillStyle = PICKUP;
-    ctx.beginPath(); ctx.arc(g.x, g.y, 4, 0, 7); ctx.fill();
-    setSeed(5000 + Math.floor(g.x * 7 + g.y)); jcircle(g.x, g.y, 4.5, PICKUP, 1.2);
   }
   for (const dr of drops) {
     const bobY = dr.y + Math.sin(dr.bob) * 3;
@@ -2082,7 +3192,7 @@ function render() {
     jcircle(nv.x, nv.y, nv.max * (0.2 + 0.6 * k), nv.col || INK, 1.5);
     ctx.globalAlpha = 1;
   }
-  if (getActive('cyclone')) {
+  if (getActive('cyclone') && !player.diving) {
     const ca = getActive('cyclone'), cc = skillCalc(ca), baseRad = 74 * cc.rad * (1 + cc.sweep);
     const rings = ca.lvl >= 5 ? [1, 1.32, 1.64] : (ca.lvl >= 3 ? [1, 1.35] : [1]);
     for (let ri = 0; ri < rings.length; ri++) {
@@ -2149,7 +3259,7 @@ function render() {
   }
   setSeed(1);
   const candle = getActive('candle');
-  if (candle) {   // 蜡烛头：灼烧光环 + 头顶火苗
+  if (candle && !player.diving) {   // 蜡烛头：灼烧光环 + 头顶火苗
     const cc = skillCalc(candle), rad = 90 * cc.rad;
     setSeed(8900);
     ctx.globalAlpha = 0.25;
@@ -2164,8 +3274,40 @@ function render() {
     jline(fx - 3, fy + 1, fx + fl, fy - 7, cc.col, 2);  // 火苗
     jline(fx + 3, fy + 1, fx + fl, fy - 7, cc.col, 2);
   }
-  if (player.hurtT <= 0 || Math.floor(player.hurtT * 20) % 2 === 0)
-    drawStick(player.x, player.y, 30, player.walk, player.hurtT > 0 ? RED : INK);
+  if (player.absorbT > 0) {
+    const ak = 1 - player.absorbT / player.absorbDuration;
+    setSeed(8915); ctx.globalAlpha = 0.45 + player.absorbT;
+    jcircle(player.x, player.y, player.absorbRadius * (1 - ak * 0.35), inkFriendlyColor, 2.5);
+    jcircle(player.x, player.y, player.absorbRadius * (0.72 - ak * 0.2), inkFriendlyColor, 1.2);
+    for (let i = 0; i < 8; i++) {
+      const a = i / 8 * Math.PI * 2 + ak * 2;
+      jline(player.x + Math.cos(a) * 43, player.y + Math.sin(a) * 43,
+        player.x + Math.cos(a) * 27, player.y + Math.sin(a) * 27, inkFriendlyColor, 1.4);
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (player.surgeCharging) {
+    const cr = inkSurgeChargeRatio(), radius = inkSurgeChargeRadius();
+    const col = player.actives.length ? trailColorOf(player.actives[0].id) : INK;
+    setSeed(8918); ctx.globalAlpha = 0.35 + cr * 0.35;
+    jcircle(player.x, player.y, radius, col, 2 + cr * 1.5);
+    jcircle(player.x, player.y, 20 + cr * 9, col, 1.5);
+    ctx.globalAlpha = 0.9; ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.font = 'bold 12px ' + FONT;
+    ctx.fillText(cr >= 1 ? '蓄力 100% · 松开' : '蓄力 ' + Math.round(cr * 100) + '%', player.x, player.y - radius - 10);
+    ctx.globalAlpha = 1;
+  }
+  if (player.hurtT <= 0 || Math.floor(player.hurtT * 20) % 2 === 0) {
+    if (player.diving) {
+      const col = player.actives.length ? trailColorOf(player.actives[0].id) : INK;
+      ctx.save(); ctx.translate(player.x, player.y + 9); ctx.scale(1.28, 0.36); ctx.globalAlpha = 0.58;
+      drawStick(0, 0, 30, player.walk, col); ctx.restore();
+      ctx.globalAlpha = 0.8; setSeed(8920);
+      jcircle(player.x, player.y + 8, 19 + Math.sin(player.walk) * 2, col, 1.8);
+      jline(player.x - 25, player.y + 14, player.x - 10, player.y + 14, col, 1.4);
+      jline(player.x + 10, player.y + 14, player.x + 25, player.y + 14, col, 1.4);
+      ctx.globalAlpha = 1;
+    } else drawStick(player.x, player.y, 30, player.walk, player.hurtT > 0 ? RED : INK);
+  }
   for (const s of sparks) {
     const k = 1 - s.t / 0.18, sc = s.color || DARK;
     ctx.globalAlpha = 1 - k;
@@ -2216,6 +3358,7 @@ function drawHUD() {
   ctx.fillRect(7, 4, W - 14, 45);
   ctx.fillRect(10, 66, W - 20, 12 + player.actives.length * 15);
   ctx.fillRect(10, H - 104, 156, 84);
+  ctx.fillRect(W - 194, H - 104, 184, 84);
   // 顶部中央：关卡-波数 + 计时
   const t = Math.floor(gameTime);
   const mm = String(Math.floor(t / 60)).padStart(2, '0'), ss = String(t % 60).padStart(2, '0');
@@ -2272,23 +3415,65 @@ function drawHUD() {
     ctx.fillStyle = eq ? INK : '#686868';
     ctx.fillText('[' + SLOT_NAME[s] + ']' + (eq ? ITEM_DEFS[eq.key].name + (eq.lvl > 1 ? ' Lv' + eq.lvl : '') : '—'), 16, H - 96 + i * 14);
   });
+  // 右下：领地资源与三个独立操作
+  ctx.textAlign = 'left'; ctx.fillStyle = INK; ctx.font = 'bold 10px ' + FONT;
+  ctx.fillText('墨水 ' + Math.floor(player.ink) + '/' + player.maxInk, W - 184, H - 92);
+  setSeed(16700); jrect(W - 184, H - 85, 160, 7, INK, 1.2);
+  const ir = Math.max(0, player.ink / player.maxInk);
+  if (ir > 0) { ctx.save(); ctx.beginPath(); ctx.rect(W - 183, H - 84, 158 * ir, 5); ctx.clip(); scribbleFill(W - 183, H - 84, 158 * ir, 5, INK); ctx.restore(); }
+  ctx.fillStyle = player.special >= 100 ? INK : DARK; ctx.font = 'bold 10px ' + FONT;
+  ctx.fillText('墨潮 ' + Math.floor(player.special) + '%' + (player.special >= 100 ? ' · 可蓄力' : ''), W - 184, H - 64);
+  setSeed(16710); jrect(W - 184, H - 57, 160, 6, player.special >= 100 ? INK : GRAY, 1.1);
+  const sr = player.special / 100;
+  if (sr > 0) { ctx.save(); ctx.beginPath(); ctx.rect(W - 183, H - 56, 158 * sr, 4); ctx.clip(); scribbleFill(W - 183, H - 56, 158 * sr, 4, INK); ctx.restore(); }
+  ctx.fillStyle = DARK; ctx.font = '9px ' + FONT;
+  ctx.fillText('E 吸墨弹反 · 空格潜墨', W - 184, H - 38);
+  ctx.fillText('灰墨：减速受伤 · 彩墨阻怪', W - 184, H - 22);
   ctx.textAlign = 'center';
   toasts.forEach((ts, i) => {
     ctx.globalAlpha = Math.min(1, ts.t);
     ctx.fillStyle = DARK; ctx.font = 'bold 13px ' + FONT;
-    ctx.fillText(ts.txt, W / 2, H - 130 - i * 20);
+    ctx.fillText(ts.txt, W / 2, H - 236 - i * 20);
     ctx.globalAlpha = 1;
   });
-  if (joy.active) {
-    ctx.globalAlpha = 0.3;
-    setSeed(99); jcircle(joy.bx, joy.by, 55, DARK, 2);
-    jcircle(joy.bx + joy.dx * 55, joy.by + joy.dy * 55, 20, INK, 3);
-    ctx.globalAlpha = 1;
+  setSeed(16800);
+  const absorbReady = player.absorbCd <= 0;
+  ctx.fillStyle = player.absorbT > 0 ? 'rgba(210,225,255,0.96)' : 'rgba(255,250,238,0.94)';
+  ctx.fillRect(absorbRect.x, absorbRect.y, absorbRect.w, absorbRect.h);
+  jrect(absorbRect.x, absorbRect.y, absorbRect.w, absorbRect.h, absorbReady ? INK : GRAY, player.absorbT > 0 ? 3 : 2.2);
+  ctx.fillStyle = absorbReady ? INK : GRAY; ctx.font = 'bold 13px ' + FONT;
+  ctx.fillText(player.absorbT > 0 ? '吸墨中' : '吸墨', absorbRect.x + absorbRect.w / 2, absorbRect.y + 18);
+  ctx.font = '8px ' + FONT;
+  ctx.fillText(absorbReady ? '弹反 · E' : player.absorbCd.toFixed(1) + ' 秒', absorbRect.x + absorbRect.w / 2, absorbRect.y + 33);
+  ctx.fillStyle = player.surgeCharging ? 'rgba(190,215,250,0.96)' : (player.special >= 100 ? 'rgba(210,225,255,0.96)' : 'rgba(255,250,238,0.94)');
+  ctx.fillRect(specialRect.x, specialRect.y, specialRect.w, specialRect.h);
+  jrect(specialRect.x, specialRect.y, specialRect.w, specialRect.h, player.special >= 100 ? INK : GRAY, player.surgeCharging ? 3 : 2.2);
+  ctx.fillStyle = player.special >= 100 ? INK : GRAY; ctx.font = 'bold 14px ' + FONT;
+  ctx.fillText(player.surgeCharging ? '蓄力中' : '墨潮', specialRect.x + specialRect.w / 2, specialRect.y + 18);
+  ctx.font = '9px ' + FONT;
+  ctx.fillText(player.surgeCharging ? Math.round(inkSurgeChargeRatio() * 100) + '% · 松开' : (player.special >= 100 ? '长按 · Q' : Math.floor(player.special) + '%'), specialRect.x + specialRect.w / 2, specialRect.y + 33);
+  const canDive = player.ink > 0;
+  ctx.fillStyle = player.diving ? 'rgba(210,225,255,0.96)' : 'rgba(255,250,238,0.94)';
+  ctx.fillRect(diveRect.x, diveRect.y, diveRect.w, diveRect.h);
+  jrect(diveRect.x, diveRect.y, diveRect.w, diveRect.h, player.diving ? INK : (canDive ? INK : GRAY), 2.2);
+  ctx.fillStyle = player.diving || canDive ? INK : GRAY; ctx.font = 'bold 13px ' + FONT;
+  ctx.fillText(player.diving ? '潜墨中' : '潜墨', diveRect.x + diveRect.w / 2, diveRect.y + 18);
+  ctx.font = '8px ' + FONT;
+  ctx.fillText(player.diving ? '无敌 · ' + diveInkCost() + '/秒' : '位移 · 空格', diveRect.x + diveRect.w / 2, diveRect.y + 33);
+  // 固定左下摇杆始终可见，让玩家明确左手移动、右手技能的分区
+  const jx = joy.active ? joy.bx : JOY_HOME.x, jy = joy.active ? joy.by : JOY_HOME.y;
+  ctx.globalAlpha = joy.active ? 0.48 : 0.24;
+  setSeed(99); jcircle(jx, jy, JOY_HOME.r, DARK, 2);
+  jcircle(jx + joy.dx * JOY_HOME.r, jy + joy.dy * JOY_HOME.r, 20, INK, 3);
+  if (!joy.active) {
+    ctx.fillStyle = DARK; ctx.font = 'bold 11px ' + FONT;
+    ctx.fillText('移动', jx, jy + 4);
   }
+  ctx.globalAlpha = 1;
 }
 
 function drawCards(title) {
-  ctx.fillStyle = 'rgba(245,241,230,0.94)';
+  ctx.fillStyle = 'rgba(245,241,230,0.2)';
   ctx.fillRect(0, 0, W, H);
   setSeed(777);
   ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.font = 'bold 22px ' + FONT;
@@ -2296,6 +3481,8 @@ function drawCards(title) {
   cards.forEach((cd, i) => {
     const r = cardRects[i];
     setSeed(1000 + i);
+    ctx.fillStyle = 'rgba(255,250,238,0.7)';
+    ctx.fillRect(r.x, r.y, r.w, r.h);
     jrect(r.x, r.y, r.w, r.h, cd.tagColor, 2.5);
     ctx.textAlign = 'left';
     ctx.fillStyle = cd.tagColor; ctx.font = 'bold 12px ' + FONT;
@@ -2332,7 +3519,12 @@ function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000 || 0.016);
   last = now;
   boilT = Math.floor(now / 120);
-  if (state === 'play') update(dt);
+  if (state === 'play') {
+    if (hitStopT > 0) {
+      hitStopT = Math.max(0, hitStopT - dt);
+      update(dt * ABSORB_RULE.slowScale);
+    } else update(dt);
+  }
   render();
 }
 resetGame();

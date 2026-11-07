@@ -38,10 +38,10 @@ try {
   while (G.state !== 'win' && G.state !== 'over' && steps < 60 * 2400) {
     if (G.state === 'levelup') G.applyOption(Math.floor(Math.random() * G.cards.length));
     else if (G.state === 'play') {
-      // 锁血 + 加攻 + 大磁铁 + 随机瞬移捡经验：只验证流程不验证平衡
+      // 锁血 + 加攻 + 随机瞬移：只验证流程不验证平衡
       G.player.hp = G.player.maxhp = 99999;
+      G.player.ink = G.player.maxInk = 999;
       G.player.dmgMul = 200;
-      G.player.pickup = 2000;
       if (steps % 150 === 0) { G.player.x += (Math.random() - 0.5) * 500; G.player.y += (Math.random() - 0.5) * 500; }
       G.update(dt);
       if (steps % 10 === 0) G.render();   // 渲染每 10 帧抽验一次即可

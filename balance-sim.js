@@ -48,7 +48,7 @@ function run(v, seed) {
     get state() { return state; }, set state(v) { state = v; },
     get gameTime() { return gameTime; }, get kills() { return kills; },
     get player() { return player; }, get enemies() { return enemies; },
-    get gems() { return gems; }, get cards() { return cards; },
+    get cards() { return cards; },
     get curStage() { return curStage; }, get joy() { return joy; }
   };`);
   G.resetGame();
@@ -74,13 +74,7 @@ function run(v, seed) {
         mx = (p.x - nearest.x) / (nd || 1) + -(p.y - nearest.y) / (nd || 1) * 0.55;
         my = (p.y - nearest.y) / (nd || 1) + (p.x - nearest.x) / (nd || 1) * 0.55;
       } else {
-        let gem = null, gd = 320;
-        for (const g of G.gems) {
-          const d = Math.hypot(g.x - p.x, g.y - p.y);
-          if (d < gd) { gd = d; gem = g; }
-        }
-        if (gem) { mx = (gem.x - p.x) / (gd || 1); my = (gem.y - p.y) / (gd || 1); }
-        else { const a = G.gameTime * 0.45; mx = Math.cos(a); my = Math.sin(a); }
+        const a = G.gameTime * 0.45; mx = Math.cos(a); my = Math.sin(a);
       }
       const ml = Math.hypot(mx, my) || 1;
       G.joy.active = true; G.joy.dx = mx / ml; G.joy.dy = my / ml;

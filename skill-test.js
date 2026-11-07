@@ -56,5 +56,5 @@ for (const id of Object.keys(G.SKILL_DEFS)) {
     console.log('ERR ' + id + ': ' + ex.stack.split('\n').slice(0, 3).join(' | '));
   }
 }
-console.log(fail === 0 ? 'ALL_SKILLS_OK (20/20)' : 'FAILURES: ' + fail);
+console.log(fail === 0 ? 'ALL_SKILLS_OK (19/19)' : 'FAILURES: ' + fail);
 process.exit(fail ? 1 : 0);

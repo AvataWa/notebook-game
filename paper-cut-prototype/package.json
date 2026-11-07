@@ -1,0 +1,9 @@
+{
+  "name": "paper-cut-prototype",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "node server.js",
+    "test": "node paper-cut-test.js"
+  }
+}

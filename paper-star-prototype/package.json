@@ -1,0 +1,6 @@
+{
+  "name": "paper-star-prototype",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": { "dev": "node server.js", "test": "node paper-star-test.js" }
+}
