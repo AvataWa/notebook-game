@@ -1,5 +1,6 @@
 // 无头冒烟测试：模拟一整局 10 关 100 波，验证关卡制 + Boss 链 + 胜利条件
-const src = require('fs').readFileSync(__dirname + '/enemy-config.js', 'utf8') + '\n' + require('fs').readFileSync(__dirname + '/main.js', 'utf8').replace("'use strict';", '');
+const src = ['enemy-config.js', 'content-config.js', 'main.js', 'build-runtime.js']
+  .map(f => require('fs').readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
 
 const fakeCtx = new Proxy({}, {
   get(t, k) {
@@ -37,6 +38,7 @@ let maxStage = 0, sawPhase2 = false, sawHazard = false, sawEbullet = false;
 try {
   while (G.state !== 'win' && G.state !== 'over' && steps < 60 * 2400) {
     if (G.state === 'levelup') G.applyOption(Math.floor(Math.random() * G.cards.length));
+    else if (G.state === 'equipment') window.__buildRuntime.resolveEquipment(steps % 2 === 0);
     else if (G.state === 'play') {
       // 锁血 + 加攻 + 随机瞬移：只验证流程不验证平衡
       G.player.hp = G.player.maxhp = 99999;

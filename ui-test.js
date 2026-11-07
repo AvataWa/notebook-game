@@ -15,7 +15,9 @@ eval(src + `
   get state() { return state; }, get player() { return player; }, get cards() { return cards; },
   get joy() { return joy; }, get levelupDelay() { return levelupDelayT; },
   get joyHome() { return JOY_HOME; }, get absorbRect() { return absorbRect; },
-  get diveRect() { return diveRect; }, get specialRect() { return specialRect; }
+  get diveRect() { return diveRect; }, get specialRect() { return specialRect; },
+  get cam() { return { x: camX, y: camY }; }, get view() { return { w: VIEW_W, h: VIEW_H }; },
+  get bounds() { return { l: WORLD_L, r: WORLD_R, t: WORLD_T, b: WORLD_B }; }
 };`);
 let failed = 0;
 function test(name, fn) { try { fn(); console.log('OK  ' + name); } catch (e) { failed++; console.log('ERR ' + name + ': ' + e.message); } }
@@ -67,5 +69,13 @@ test('右手墨潮按钮可独立长按蓄力、松开释放，三个按钮均�
   assert(G.joyHome.x + G.joyHome.r < 187.5, '摇杆越过了左半屏');
   G.render();
 });
-console.log(failed ? 'UI_TEST_FAILURES: ' + failed : 'UI_TEST_OK (5/5)');
+test('角色位于四个场景角落时仍保持屏幕正中央', () => {
+  fresh(); const b = G.bounds;
+  for (const [x, y] of [[b.l + 14, b.t + 14], [b.r - 14, b.t + 14], [b.l + 14, b.b - 14], [b.r - 14, b.b - 14]]) {
+    G.player.x = x; G.player.y = y; G.update(0);
+    assert(Math.abs(G.player.x - G.cam.x - G.view.w / 2) < 1e-8, '水平方向没有居中：' + x + ',' + y);
+    assert(Math.abs(G.player.y - G.cam.y - G.view.h / 2) < 1e-8, '垂直方向没有居中：' + x + ',' + y);
+  }
+});
+console.log(failed ? 'UI_TEST_FAILURES: ' + failed : 'UI_TEST_OK (6/6)');
 process.exit(failed ? 1 : 0);

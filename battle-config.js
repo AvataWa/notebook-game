@@ -7,7 +7,8 @@ const BATTLE_CONFIG = {
     radius: 12,             // 角色碰撞半径
     hp: 100,                // 初始生命
     speed: 168,             // 基础移动速度
-    maxInk: 100             // 墨水上限
+    maxInk: 100,            // 墨水上限
+    hitInvuln: 0.65         // 每次实际受击后的无敌时间，防止被围时同帧连续扣血
   },
 
   feedback: {
@@ -37,7 +38,8 @@ const BATTLE_CONFIG = {
   dive: {
     ownCost: 24,            // 己方墨迹潜墨耗墨/秒（原 6）
     otherCost: 36,          // 非己方墨迹潜墨耗墨/秒（原 18）
-    speed: 1.55             // 潜墨移速倍率
+    speed: 1.55,            // 潜墨移速倍率
+    cooldown: 1             // 退出潜墨后的基础冷却/秒
   },
 
   absorb: {

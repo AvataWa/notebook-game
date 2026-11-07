@@ -1,6 +1,7 @@
 // 墨迹 / 弹反 / 墨潮 / 潜墨大节点与战斗配置回归
 const src = require('fs').readFileSync(__dirname + '/battle-config.js', 'utf8') + '\n' +
   require('fs').readFileSync(__dirname + '/enemy-config.js', 'utf8') + '\n' +
+  require('fs').readFileSync(__dirname + '/content-config.js', 'utf8') + '\n' +
   require('fs').readFileSync(__dirname + '/main.js', 'utf8').replace("'use strict';", '');
 const fakeCtx = new Proxy({}, { get(t, k) { if (k === 'measureText') return () => ({ width: 10 }); return () => {}; }, set() { return true; } });
 const fakeCanvas = { getContext: () => fakeCtx, width: 0, height: 0, style: {}, addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 375, height: 667 }) };
@@ -11,7 +12,8 @@ eval(src + `
   resetGame, addInkStain, hurtPlayer, hurtEnemy, spawnEnemy, castAbsorb, reflectEnemyBullet,
   updateMeleeSwing, castInkSurge, toggleDive, diveInkCost, update, inkStats, render,
   get player() { return player; }, get enemies() { return enemies; }, get keys() { return keys; },
-  get NOTABLES() { return NOTABLES; }, get BATTLE() { return BATTLE; }, set state(v) { state = v; }
+  get PASSIVES() { return PASSIVES; }, get OPERATION_AFFIXES() { return OPERATION_AFFIXES; },
+  get BATTLE() { return BATTLE; }, set state(v) { state = v; }
 };`);
 let failed = 0;
 function test(name, fn) { try { fn(); console.log('OK  ' + name); } catch (e) { failed++; console.log('ERR ' + name + ': ' + e.message); } }
@@ -27,9 +29,11 @@ test('战斗配置提供潜墨消耗与强化弹反回墨', () => {
   assert(G.BATTLE.absorb.bulletInk === 3 && G.BATTLE.absorb.meleeInk === 8, '弹反回墨参数未生效');
   assert(G.BATTLE.surge.chargeTime === 1.2 && G.BATTLE.surge.minScale === 0.6 && G.BATTLE.surge.maxScale === 1.2, '墨潮蓄力时间或范围倍率未生效');
 });
-test('六条墨迹操作大节点全部进入升级词条池', () => {
-  const ids = ['inkarmor', 'inkpower', 'parrycharge', 'parrywell', 'divepaint', 'surgeecho'];
-  assert(ids.every(id => G.NOTABLES.some(n => n.id === id)), '有大节点未加入词条池');
+test('大节点合并为 11 条通用被动，并有 62 条操作辅助', () => {
+  assert(G.PASSIVES.length === 11, '通用被动数量不是 11');
+  assert(G.OPERATION_AFFIXES.length === 62, '操作辅助数量不是 62');
+  assert(['inkarmor', 'inkpower'].every(id => G.PASSIVES.some(n => n.id === id)), '原墨迹大节点未合并');
+  assert(['parrycharge', 'parrywell', 'divepaint', 'surgeecho'].every(id => G.OPERATION_AFFIXES.some(n => n.id === id)), '原操作大节点未合并');
 });
 test('墨层护膜只在己方墨迹上减伤 20%', () => {
   fresh(); G.player.taken.inkarmor = true; G.hurtPlayer(100);

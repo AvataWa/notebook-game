@@ -192,5 +192,19 @@ test('弹反慢放按 0.15 倍速推进，结束后恢复正常速度', () => {
   G.hitStop = 0; G.loop(1032);
   assert(near(G.time, 0.016 * 1.15), '慢放结束后游戏没有恢复正常速度');
 });
-console.log(failed ? 'PARRY_TEST_FAILURES: ' + failed : 'PARRY_TEST_OK (20/20)');
+test('实际受击后 0.65 秒内不会被围攻连续扣血', () => {
+  fresh(); const hp = G.player.hp;
+  G.hurtPlayer(12); G.hurtPlayer(20); G.hurtPlayer(30);
+  assert(G.player.hp === hp - 12, '同帧多次伤害仍被重复结算');
+  assert(near(G.player.hurtT, 0.65), '受击无敌时间不是 0.65 秒');
+  G.render();
+});
+test('受击保护结束后才允许再次扣血', () => {
+  fresh(); const hp = G.player.hp; G.hurtPlayer(12);
+  G.update(0.6); G.hurtPlayer(20);
+  assert(G.player.hp === hp - 12 && G.player.hurtT > 0, '保护尚未结束就再次扣血');
+  G.update(0.06); G.hurtPlayer(20);
+  assert(G.player.hp === hp - 32, '保护结束后没有恢复伤害结算');
+});
+console.log(failed ? 'PARRY_TEST_FAILURES: ' + failed : 'PARRY_TEST_OK (22/22)');
 process.exit(failed ? 1 : 0);

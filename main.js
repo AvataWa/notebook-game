@@ -32,7 +32,7 @@ function imgReady(im) { return !!im && im.complete && im.naturalWidth > 0; }
 const MAX_ACTIVES = 4, MAX_SUPPORTS = 4, MAX_LVL = 5;
 // 浏览器统一读取 battle-config.js；兜底仅用于未加载配置脚本的旧无头测试
 const BATTLE = typeof BATTLE_CONFIG !== 'undefined' ? BATTLE_CONFIG : {
-  player: { radius: 12, hp: 100, speed: 168, maxInk: 100 },
+  player: { radius: 12, hp: 100, speed: 168, maxInk: 100, hitInvuln: 0.65 },
   feedback: { squash: 0.22, knockback: 150, levelupDelay: 0.5 },
   melee: { period: 1.5, total: 0.55, active: 0.2, triggerExtra: 32 },
   ink: { ownSpeed: 1.12, hostileSpeed: 0.58, enemyOwnSpeed: 1.12, enemyFriendlySpeed: 0.82, regenBase: 0.35, regenOwnBonus: 2.5, hostileTick: 0.55, hostileDamage: 2 },
@@ -255,41 +255,67 @@ function supDesc(id, l) {           // 辅助在 l 级时的效果描述
   return '';
 }
 const PASSIVES = [
-  { id: 'dmg',    name: '笔力', desc: '全部伤害 +10%',          fx: () => player.dmgMul *= 1.1 },
-  { id: 'haste',  name: '速写', desc: '技能冷却 -6%',            fx: () => player.cdMul *= 0.94 },
-  { id: 'spd',    name: '碎步', desc: '移动速度 +6%',            fx: () => player.speed *= 1.06 },
-  { id: 'hpup',   name: '厚纸', desc: '最大生命 +20 并回复 20',   fx: () => { player.maxhp += 20; player.hp = Math.min(player.maxhp, player.hp + 20); } },
-  { id: 'magnet', name: '灵感', desc: '普通怪物击杀经验 +15%',     fx: () => player.xpMul *= 1.15 },
-  { id: 'crit',   name: '重墨', desc: '暴击率 +10%（双倍伤害）',  fx: () => player.crit += 0.1 }
+  { id: 'dmg', name: '笔力', desc: '全部伤害 +10%', fx: () => player.dmgMul *= 1.1 },
+  { id: 'haste', name: '速写', desc: '技能冷却 -6%', fx: () => player.cdMul *= 0.94 },
+  { id: 'spd', name: '碎步', desc: '移动速度 +6%', fx: () => player.speed *= 1.06 },
+  { id: 'hpup', name: '厚纸', desc: '最大生命 +20 并回复 20', fx: () => { player.maxhp += 20; player.hp = Math.min(player.maxhp, player.hp + 20); } },
+  { id: 'magnet', name: '灵感', desc: '普通怪物击杀经验 +15%', fx: () => player.xpMul *= 1.15 },
+  { id: 'crit', name: '重墨', desc: '暴击率 +10%（双倍伤害）', fx: () => player.crit += 0.1 },
+  { id: 'twin', name: '双生画笔', desc: '小鬼/炮台上限 +1', once: true, fx: () => player.taken.twin = true },
+  { id: 'inkmaster', name: '泼墨', desc: '全部主动技能范围 +20%', once: true, fx: () => { player.taken.inkmaster = true; player.radMul *= 1.2; } },
+  { id: 'fountain', name: '笔芯连供', desc: '冷却 -12%，但伤害 -8%', once: true, fx: () => { player.taken.fountain = true; player.cdMul *= 0.88; player.dmgMul *= 0.92; } },
+  { id: 'inkarmor', name: '墨层护膜', desc: '站在己方墨迹上，受到伤害 -20%', once: true, fx: () => player.taken.inkarmor = true },
+  { id: 'inkpower', name: '领地笔意', desc: '站在己方墨迹上，全部伤害 +20%', once: true, fx: () => player.taken.inkpower = true }
 ];
-const NOTABLES = [
-  { id: 'twin',       name: '大节点·双生画笔', desc: '小鬼/炮台上限 +1',             fx: () => player.taken.twin = true },
-  { id: 'inkmaster',  name: '大节点·泼墨',     desc: '全部技能范围 +20%',             fx: () => player.radMul *= 1.2 },
-  { id: 'fountain',   name: '大节点·笔芯连供', desc: '冷却 -12%，但伤害 -8%',         fx: () => { player.cdMul *= 0.88; player.dmgMul *= 0.92; } },
-  { id: 'inkarmor',   name: '大节点·墨层护膜', desc: '站在己方墨迹上，受到伤害 -20%', fx: () => player.taken.inkarmor = true },
-  { id: 'inkpower',   name: '大节点·领地笔意', desc: '站在己方墨迹上，全部伤害 +20%', fx: () => player.taken.inkpower = true },
-  { id: 'parrycharge',name: '大节点·回墨共振', desc: '弹反成功的墨潮充能 +50%',       fx: () => player.taken.parrycharge = true },
-  { id: 'parrywell',  name: '大节点·深吸',     desc: '弹反成功的回墨量 +50%',         fx: () => player.taken.parrywell = true },
-  { id: 'divepaint',  name: '大节点·潜行笔迹', desc: '潜墨移动也会留下己方墨迹',       fx: () => player.taken.divepaint = true },
-  { id: 'surgeecho',  name: '大节点·余潮',     desc: '释放墨潮后保留 20% 充能',       fx: () => player.taken.surgeecho = true }
-];
+const OPERATION_AFFIX_LIST = typeof OPERATION_AFFIXES !== 'undefined' ? OPERATION_AFFIXES : [];
+function hasAffix(skill, id) { return !!(player && ((player.affixes && player.affixes[skill] && player.affixes[skill][id]) || (player.taken && player.taken[id]))); }
 
-/* ---------- 装备定义 ---------- */
+/* ---------- 装备与品质 ---------- */
 const SLOTS = ['head', 'body', 'hands', 'feet', 'acc'];
 const SLOT_NAME = { head: '头部', body: '上身', hands: '手部', feet: '脚部', acc: '饰品' };
-const ITEM_DEFS = {
-  crown:   { slot: 'head',  name: '涂鸦王冠', atk: 15, hp: 30, fx: '升级时四选一' },
-  cap4:    { slot: 'head',  name: '四色笔帽', atk: 12, hp: 0,  fx: '每个不同主动技能使伤害 +8%' },
-  cloak:   { slot: 'body',  name: '勇者披风', atk: 0,  hp: 50, fx: '生命低于 30% 时伤害 +40%' },
-  stapler: { slot: 'body',  name: '订书机甲', atk: 0,  hp: 70, fx: '受到伤害 -15%' },
-  glove:   { slot: 'hands', name: '红笔指套', atk: 10, hp: 0,  fx: '暴击率 +15%，暴击伤害 x2.5' },
-  compass: { slot: 'hands', name: '圆规护腕', atk: 10, hp: 0,  fx: '技能范围 +15%' },
-  shoes:   { slot: 'feet',  name: '弹簧拖鞋', atk: 0,  hp: 20, fx: '移速 +12%，受击后 2 秒移速再 +30%' },
-  tape:    { slot: 'feet',  name: '修正带鞋', atk: 0,  hp: 25, fx: '每 30 秒抵挡一次致命伤害' },
-  pendant: { slot: 'acc',   name: '墨胆吊坠', atk: 8,  hp: 20, fx: '每击杀 10 只怪物回复 1 点生命' },
-  bookmark:{ slot: 'acc',   name: '灵感书签', atk: 6,  hp: 15, fx: '击杀 8% 概率额外获得 50% 经验' }
+const RARITY_LIST = typeof RARITIES !== 'undefined' ? RARITIES : [
+  { id: 'common', name: '普通', color: '#858585', weight: 64, mul: 1 },
+  { id: 'rare', name: '稀有', color: '#3578c7', weight: 25, mul: 1.35 },
+  { id: 'legendary', name: '传说', color: '#8b52b5', weight: 8, mul: 1.75 },
+  { id: 'epic', name: '史诗', color: '#d77b24', weight: 3, mul: 2.3 }
+];
+const ITEM_DEFS = typeof EQUIPMENT_ITEM_DEFS !== 'undefined' ? EQUIPMENT_ITEM_DEFS : {
+  crown: { slot: 'head', name: '涂鸦王冠', atk: 15, hp: 30, fx: '升级时四选一' },
+  cap4: { slot: 'head', name: '四色笔帽', atk: 12, hp: 0, fx: '每个主动技能使伤害 +8%' },
+  cloak: { slot: 'body', name: '勇者披风', atk: 0, hp: 50, fx: '生命低于 30% 时伤害 +40%' },
+  stapler: { slot: 'body', name: '订书机甲', atk: 0, hp: 70, fx: '受击无敌时间 +0.2 秒' },
+  glove: { slot: 'hands', name: '红笔指套', atk: 10, hp: 0, fx: '暴击率 +15%，暴击伤害 x2.5' },
+  compass: { slot: 'hands', name: '圆规护腕', atk: 10, hp: 0, fx: '每条辅助使对应技能范围 +5%' },
+  shoes: { slot: 'feet', name: '弹簧拖鞋', atk: 0, hp: 20, fx: '移速 +12%，受击后移速再 +30%' },
+  tape: { slot: 'feet', name: '修正带鞋', atk: 0, hp: 25, fx: '每 30 秒抵挡一次致命伤害' },
+  pendant: { slot: 'acc', name: '墨胆吊坠', atk: 8, hp: 20, fx: '墨水上限 +25，基础回墨 +0.5/秒' },
+  bookmark: { slot: 'acc', name: '灵感书签', atk: 6, hp: 15, fx: '升级回复 50 墨水并完成吸墨冷却' }
 };
-const ITEM_KEYS = Object.keys(ITEM_DEFS);
+const ITEM_KEYS = typeof EQUIPMENT_ITEM_KEYS !== 'undefined' ? EQUIPMENT_ITEM_KEYS : Object.keys(ITEM_DEFS);
+function equipped(key) { return SLOTS.map(s => player.equip[s]).find(eq => eq && eq.key === key) || null; }
+function rarityIndex(eq) { return Math.max(0, Math.min(RARITY_LIST.length - 1, eq && eq.rarity || 0)); }
+function itemValues(key, rarity = 0) {
+  const def = ITEM_DEFS[key], out = {};
+  if (def && def.v) for (const k in def.v) out[k] = def.v[k][rarity];
+  return out;
+}
+function itemV(key, prop, legacy = 0) {
+  const eq = equipped(key); if (!eq) return 0;
+  const def = ITEM_DEFS[key];
+  return def.v && def.v[prop] ? def.v[prop][rarityIndex(eq)] : legacy;
+}
+function itemDescription(key, rarity = 0) {
+  const def = ITEM_DEFS[key];
+  return def.text ? def.text(itemValues(key, rarity)) : (def.fx || '');
+}
+function rollRarity() {
+  let roll = Math.random() * RARITY_LIST.reduce((s, r) => s + r.weight, 0);
+  for (let i = 0; i < RARITY_LIST.length; i++) { roll -= RARITY_LIST[i].weight; if (roll < 0) return i; }
+  return 0;
+}
+function makeEquipmentDrop(x, y) {
+  return { x, y, item: ITEM_KEYS[Math.floor(Math.random() * ITEM_KEYS.length)], rarity: rollRarity(), bob: Math.random() * 6 };
+}
 
 /* ---------- 游戏状态 ---------- */
 let state, gameTime, kills, camX, camY, shakeT, cycAng, crumpleT, hitStopT, levelupDelayT;
@@ -613,10 +639,11 @@ const diveRect = { x: W - 88, y: H - 245, w: 74, h: 52 };
 const keys = {};
 const joy = { active: false, id: -1, bx: JOY_HOME.x, by: JOY_HOME.y, dx: 0, dy: 0 };
 
+let pendingEquipment = null, diveDecoys = [];
 function resetGame() {
   state = 'start'; gameTime = 0; kills = 0; shakeT = 0; cycAng = 0; crumpleT = 0; hitStopT = 0; levelupDelayT = -1;
   joy.active = false; joy.id = -1; joy.dx = 0; joy.dy = 0;
-  camX = 0; camY = 0; spawnAcc = 0; nextId = 1;
+  camX = 0; camY = 0; spawnAcc = 0; nextId = 1; pendingEquipment = null; diveDecoys = [];
   bossStageSpawned = 0; curStage = 0; nextHordeT = 12; hordeIndex = 0; killChain = 0; killChainT = 0; enemyTrailT = 0.1;
   gestureDraw = null; pendingGesture = null; redrawOutlines = []; gestureNoticeT = 0; drawMode = false; drawModeT = 0;
   resetInkField(); inkSurgePainting = false;
@@ -627,40 +654,42 @@ function resetGame() {
   player = {
     x: 0, y: 0, r: BATTLE.player.radius, hp: BATTLE.player.hp, maxhp: BATTLE.player.hp, speed: BATTLE.player.speed, faceA: 0,
     trailX: 0, trailY: 0, diving: false, special: 0, specialAnnounced: false,
-    surgeCharging: false, surgeChargeT: 0, surgePointerId: null,
+    surgeCharging: false, surgeChargeT: 0, surgePointerId: null, surgeGrowth: 0,
     lastSeenX: 0, lastSeenY: 0, grayTick: 0, noInkT: 0, turf: 0,
-    absorbT: 0, absorbDuration: ABSORB_RULE.duration, absorbRadius: ABSORB_RULE.radius, absorbCd: 0, absorbGain: 0,
-    level: 1, xp: 0, xpNext: xpForNextLevel(1), xpMul: 1, ink: BATTLE.player.maxInk, maxInk: BATTLE.player.maxInk,
+    absorbT: 0, absorbDuration: ABSORB_RULE.duration, absorbRadius: ABSORB_RULE.radius, absorbCd: 0, absorbGain: 0, absorbHeal: 0,
+    diveT: 0, diveCd: 0, diveSpent: 0, diveFreeT: 0, diveEntryT: 0, diveDecoyT: 0, diveWashT: 0, diveBurstT: 0, diveShieldCd: 0, diveChargeAcc: 0,
+    exitShieldT: 0, parryShieldT: 0, itemAmbushT: 0, itemSurgeT: 0, itemParryT: 0, itemArmorCd: 0,
+    itemInkCd: 0, itemInkCdT: 0, itemBurstN: 0, itemBurstT: 0, itemRerolls: 0, moveT: 0, stillT: 0,
+    level: 1, xp: 0, xpNext: xpForNextLevel(1), xpMul: 1, ink: BATTLE.player.maxInk, maxInk: BATTLE.player.maxInk, bonusHp: 0,
     dmgMul: 1, cdMul: 1, radMul: 1, crit: 0, condDmg: 1,
     eqAtk: 0, eqCrit: 0, eqSpd: 1, eqDr: 0, eqRad: 1,
     hurtBoostT: 0, lastRevive: -999, leechT: 0, leechN: 0,
-    walk: 0, hurtT: 0, taken: {},
+    walk: 0, hurtT: 0, taken: {}, affixes: { dive: {}, surge: {}, absorb: {} },
     equip: { head: null, body: null, hands: null, feet: null, acc: null },
     actives: []
   };
   buildStartCards();
-  // 调试：?skill=xxx 直接以指定技能开局
   const dbg = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('skill') : null;
   if (dbg && SKILL_DEFS[dbg]) { player.actives.push({ id: dbg, lvl: 1, supports: [], t: 0.3, uc: 0 }); state = 'play'; }
 }
-function hasItem(id) { return SLOTS.some(s => player.equip[s] && player.equip[s].key === id); }
+function hasItem(id) { return !!equipped(id); }
 function getActive(id) { return player.actives.find(a => a.id === id); }
 function recomputeEquip() {
   player.eqAtk = 0; player.eqCrit = 0; player.eqSpd = 1; player.eqDr = 0; player.eqRad = 1;
   let hpBonus = 0;
+  const oldMaxInk = player.maxInk || BATTLE.player.maxInk;
   for (const s of SLOTS) {
     const eq = player.equip[s]; if (!eq) continue;
-    const key = eq.key, it = ITEM_DEFS[key];
-    const mul = 1 + 0.2 * (eq.lvl - 1);   // 装备每级属性 +20%
+    const it = ITEM_DEFS[eq.key], mul = RARITY_LIST[rarityIndex(eq)].mul;
     player.eqAtk += Math.round(it.atk * mul); hpBonus += Math.round(it.hp * mul);
-    if (key === 'glove') player.eqCrit += 0.15;
-    if (key === 'shoes') player.eqSpd *= 1.12;
-    if (key === 'stapler') player.eqDr = 0.15;
-    if (key === 'compass') player.eqRad *= 1.15;
   }
-  const ratio = player.maxhp > 0 ? player.hp / player.maxhp : 1;
-  player.maxhp = 100 + hpBonus;
-  player.hp = Math.max(1, Math.round(player.maxhp * ratio));
+  player.eqCrit += itemV('glove', 'crit', 15) / 100;
+  player.eqSpd *= 1 + itemV('shoes', 'speed', 12) / 100;
+  const hpRatio = player.maxhp > 0 ? player.hp / player.maxhp : 1;
+  player.maxhp = BATTLE.player.hp + hpBonus + player.bonusHp;
+  player.hp = Math.max(1, Math.round(player.maxhp * hpRatio));
+  player.maxInk = BATTLE.player.maxInk + itemV('pendant', 'ink', 25);
+  player.ink = Math.min(player.maxInk, player.ink + Math.max(0, player.maxInk - oldMaxInk));
 }
 function skillCalc(a) {
   // 主动等级：每级 伤害+15%、冷却-4%
@@ -711,9 +740,16 @@ function skillCalc(a) {
     else if (s === 'shock') shock += 0.5 * l;
   }
   if (isStrike && rapid) cd /= 1 + rapid;
+  const supportCount = a.supports.length;
+  const compassRadius = Math.min(itemV('compass', 'cap', 20), itemV('compass', 'radius', 5) * supportCount) / 100;
+  const itemRadius = (player.itemSurgeT > 0 ? itemV('surgeglove', 'radius') / 100 : 0) + (player.stillT >= 1 ? itemV('rulerband', 'radius') / 100 : 0);
+  const totalSupports = player.actives.reduce((n, sk) => n + sk.supports.length, 0);
+  const coreCd = Math.min(itemV('multicore', 'cap'), Math.floor(totalSupports / 4) * itemV('multicore', 'cd')) / 100;
+  const fullInkCd = player.ink >= 80 ? itemV('fullink', 'cd') / 100 : 0;
   return {
-    dmg: dmg * player.dmgMul * (1 + player.eqAtk / 100) * player.condDmg,
-    cd: cd * player.cdMul, count, rad: rad * player.radMul * player.eqRad,
+    dmg: dmg * player.dmgMul * (1 + player.eqAtk / 100) * player.condDmg * (player.itemAmbushT > 0 ? 1.45 : 1),
+    cd: cd * player.cdMul * Math.max(0.35, 1 - coreCd - fullInkCd),
+    count, rad: rad * player.radMul * player.eqRad * (1 + compassRadius + itemRadius),
     pierce, chain, dot, proj, areaT, unleash, vuln,
     bdmg, bcrit, brad, lifeMul, homing: homing ? 2 + homing : 0, blast,
     admg, soak, bossMul, core, retick, lingerT, reburst, stain,
@@ -1153,15 +1189,74 @@ function enemyInkFactor(e) {
   if (inkCircleHas(e.x, e.y, e.r * 0.35, false)) return BATTLE.ink.enemyFriendlySpeed;
   return 1;
 }
-function diveInkCost() { return playerOnOwnInk() ? BATTLE.dive.ownCost : BATTLE.dive.otherCost; }
+function diveInkCost() {
+  const own = playerOnOwnInk();
+  let reduction = hasAffix('dive', 'inksaver') ? 0.18 : 0;
+  if (!own && hasAffix('dive', 'grayboat')) reduction += 0.25;
+  if (hasAffix('dive', 'longbreath')) reduction += Math.min(0.3, Math.floor(player.diveT) * 0.05);
+  if (player.hp < player.maxhp * 0.35 && hasAffix('dive', 'lowhpdive')) reduction += 0.25;
+  if (player.surgeCharging && hasAffix('surge', 'divesurge')) reduction += 0.35;
+  return (own ? BATTLE.dive.ownCost : BATTLE.dive.otherCost) * Math.max(0.5, 1 - reduction);
+}
+function convertGrayDisk(x, y, radius) {
+  const b = inkGridBounds(x, y, x, y, radius), rr = radius * radius;
+  let converted = 0;
+  for (let gy = b.y0; gy <= b.y1; gy++) for (let gx = b.x0; gx <= b.x1; gx++) {
+    const wx = WORLD_L + (gx + 0.5) * INK_CELL - x, wy = WORLD_T + (gy + 0.5) * INK_CELL - y;
+    if (wx * wx + wy * wy > rr) continue;
+    const i = gy * INK_GW + gx; if (inkOwner[i] !== 2) continue;
+    inkOwner[i] = 1; inkAmount[i] = 1; inkPulse[i] = 0; setInkSource(i, 0); syncInkPixel(i); converted++;
+  }
+  if (converted) {
+    putInkRegion(friendlyInkLayer, b.x0, b.y0, b.x1, b.y1);
+    putInkRegion(hostileInkLayer, b.x0, b.y0, b.x1, b.y1);
+  }
+  return converted;
+}
+function enterDive() {
+  player.diving = true; player.diveT = 0; player.diveSpent = 0; player.diveEntryT = 0.6;
+  player.lastSeenX = player.x; player.lastSeenY = player.y;
+  if (hasAffix('dive', 'freeentry') && gameTime >= player.diveFreeT) { player.diveFreeT = gameTime + 4; player.diveEntryFreeT = 0.45; }
+  else player.diveEntryFreeT = 0;
+  if (hasAffix('dive', 'decoy') && gameTime >= player.diveDecoyT) {
+    player.diveDecoyT = gameTime + 4; diveDecoys.push({ x: player.x, y: player.y, t: 1.5 });
+  }
+  if (hasAffix('dive', 'entrywash') && gameTime >= player.diveWashT) {
+    player.diveWashT = gameTime + 2; convertGrayDisk(player.x, player.y, 35);
+  }
+  toast('潜墨：无敌位移 · 当前耗墨 ' + diveInkCost().toFixed(1) + '/秒');
+}
+function exitDive() {
+  if (!player.diving) return;
+  const ox = player.x, oy = player.y;
+  player.diving = false;
+  player.diveCd = (BATTLE.dive.cooldown || 1) * (hasAffix('dive', 'fastdive') ? 0.5 : 1);
+  if (hasAffix('dive', 'inkrefund')) refundInk(Math.min(12, player.diveSpent * 0.2), player.x, player.y - 28, '余墨');
+  if (hasAffix('dive', 'exitburst') && gameTime >= player.diveBurstT) {
+    player.diveBurstT = gameTime + 1.5;
+    novas.push({ x: player.x, y: player.y, t: 0.25, max: 75, col: inkFriendlyColor });
+    for (const e of enemies) {
+      if (e.dead || Math.hypot(e.x - player.x, e.y - player.y) >= 75 + e.r) continue;
+      hurtEnemy(e, 30, 0, player.x, player.y, 0, 0, 0, inkFriendlyColor);
+      if (!e.dead) { e.kbx *= 2.5; e.kby *= 2.5; e.stunT = Math.max(e.stunT || 0, e.boss ? 0.1 : 0.3); }
+    }
+  }
+  if (hasAffix('dive', 'ambush')) player.itemAmbushT = 2;
+  if (hasAffix('dive', 'exitshield') && gameTime >= player.diveShieldCd) {
+    player.diveShieldCd = gameTime + 3; player.exitShieldT = 1;
+  }
+  if (hasAffix('dive', 'exitdash')) {
+    player.x = clampW(player.x + Math.cos(player.faceA) * 55, 14);
+    player.y = clampH(player.y + Math.sin(player.faceA) * 55, 14);
+    addInkStroke(ox, oy, player.x, player.y, inkFriendlyColor, false);
+  }
+}
 function toggleDive() {
   if (state !== 'play') return false;
-  if (player.diving) { player.diving = false; return true; }
+  if (player.diving) { exitDive(); return true; }
+  if (player.diveCd > 0) { toast('潜墨冷却 ' + player.diveCd.toFixed(1) + ' 秒'); return false; }
   if (player.ink <= 0) { toast('墨水不足，无法潜墨'); return false; }
-  player.diving = true;
-  player.lastSeenX = player.x; player.lastSeenY = player.y;
-  toast('潜墨：无敌位移 · 彩墨 ' + BATTLE.dive.ownCost + '/秒，其他区域 ' + BATTLE.dive.otherCost + '/秒');
-  return true;
+  enterDive(); return true;
 }
 function chargeTurf(amount) {
   if (inkSurgePainting || amount <= 0 || player.special >= 100) return;
@@ -1172,12 +1267,17 @@ function chargeTurf(amount) {
     toast('墨潮已满！长按「墨潮」或 Q 蓄力，松开释放');
   }
 }
+function surgeChargeTime() { return BATTLE.surge.chargeTime * (hasAffix('surge', 'fastcharge') ? 0.75 : 1); }
 function inkSurgeChargeRatio() {
-  return Math.min(1, Math.max(0, player.surgeChargeT / BATTLE.surge.chargeTime));
+  return Math.min(1, Math.max(0, player.surgeChargeT / surgeChargeTime()));
 }
 function inkSurgeChargeRadius() {
   const s = BATTLE.surge;
-  return s.radius * (s.minScale + (s.maxScale - s.minScale) * inkSurgeChargeRatio());
+  let radius = s.radius * (s.minScale + (s.maxScale - s.minScale) * inkSurgeChargeRatio());
+  if (hasAffix('surge', 'surgewide')) radius *= 1.18;
+  radius *= 1 + player.surgeGrowth * 0.08;
+  if (player.diving && hasAffix('surge', 'divesurge')) radius *= 0.9;
+  return radius;
 }
 function startInkSurgeCharge(pointerId = null) {
   if (state !== 'play') return false;
@@ -1187,7 +1287,10 @@ function startInkSurgeCharge(pointerId = null) {
   return true;
 }
 function updateInkSurgeCharge(dt) {
-  if (player.surgeCharging) player.surgeChargeT = Math.min(BATTLE.surge.chargeTime, player.surgeChargeT + dt);
+  if (player.surgeCharging) {
+    const speed = player.diving && hasAffix('dive', 'divefastcharge') ? 1.35 : 1;
+    player.surgeChargeT = Math.min(surgeChargeTime(), player.surgeChargeT + dt * speed);
+  }
 }
 function cancelInkSurgeCharge(pointerId = null) {
   if (!player.surgeCharging || player.surgePointerId !== pointerId) return false;
@@ -1196,39 +1299,79 @@ function cancelInkSurgeCharge(pointerId = null) {
 }
 function releaseInkSurgeCharge(pointerId = null) {
   if (!player.surgeCharging || player.surgePointerId !== pointerId) return false;
-  const radius = inkSurgeChargeRadius();
+  const radius = inkSurgeChargeRadius(), full = inkSurgeChargeRatio() >= 0.999;
   player.surgeCharging = false; player.surgeChargeT = 0; player.surgePointerId = null;
-  return castInkSurge(radius);
+  return castInkSurge(radius, full);
 }
-function castInkSurge(radius = BATTLE.surge.radius) {
+function castInkSurge(radius = BATTLE.surge.radius, full = false) {
   if (state !== 'play') return false;
   if (player.special < 100) { toast('墨潮还未充满，涂新区域或覆盖灰墨'); return false; }
   player.special = 0; player.specialAnnounced = false;
   player.surgeCharging = false; player.surgeChargeT = 0; player.surgePointerId = null;
   const col = player.actives.length ? trailColorOf(player.actives[0].id) : INK;
+  let damage = BATTLE.surge.damage * player.dmgMul * (1 + player.eqAtk / 100);
+  if (hasAffix('surge', 'surgedamage')) damage *= 1.3;
+  if (full && hasAffix('surge', 'fulldamage')) damage *= 1.55;
+  if (full && hasAffix('surge', 'inkburst') && player.ink >= 25) { player.ink -= 25; damage *= 1.8; }
   novas.push({ x: player.x, y: player.y, t: BATTLE.surge.visual, max: radius, col });
   shakeT = Math.max(shakeT, 0.42);
   for (const e of enemies) {
-    if (e.dead || Math.hypot(e.x - player.x, e.y - player.y) >= radius + e.r) continue;
-    hurtEnemy(e, BATTLE.surge.damage * player.dmgMul * (1 + player.eqAtk / 100), 0, player.x, player.y, 0, 0, 0, col);
-    if (!e.dead) { e.kbx *= 2.2; e.kby *= 2.2; }
+    const d = Math.hypot(e.x - player.x, e.y - player.y);
+    if (e.dead || d >= radius + e.r) continue;
+    let hitDamage = damage;
+    if (hasAffix('surge', 'outerdamage') && d >= radius * 0.7) hitDamage *= 1.5;
+    if (hasAffix('surge', 'surgeseed')) e.surgeSeedT = 0.2;
+    hurtEnemy(e, hitDamage, 0, player.x, player.y, 0, 0, 0, col);
+    if (!e.dead) {
+      e.surgeSeedT = 0;
+      const kb = hasAffix('surge', 'surgeknock') ? 3.52 : 2.2;
+      e.kbx *= kb; e.kby *= kb;
+      if (e.boss && hasAffix('surge', 'surgeknock')) { e.x += (e.x - player.x) / (d || 1) * 8; e.y += (e.y - player.y) / (d || 1) * 8; }
+      if (full && hasAffix('surge', 'fullstun')) e.stunT = Math.max(e.stunT || 0, e.boss ? 0.15 : 0.6);
+      if (hasAffix('surge', 'surgeslow')) e.surgeSlowT = 3;
+      if (hasAffix('surge', 'silence') && (isShooter(e) || e.boss)) e.sealT = Math.max(e.sealT || 0, e.boss ? 0.6 : 2);
+    }
+  }
+  if (hasAffix('surge', 'clearbullets')) {
+    for (const eb of ebullets) if (Math.hypot(eb.x - player.x, eb.y - player.y) < radius) eb.life = 0;
+  }
+  if (hasAffix('surge', 'surgeprojectiles')) {
+    for (let i = 0; i < 8; i++) fireBullet(player.x, player.y, i / 8 * Math.PI * 2, 260, damage * 0.45, 'surge', { life: 1.2, col });
   }
   inkSurgePainting = true;
-  // 伤害与铺墨共用同一圆心、同一半径，一次填满，不再用多个墨团拼圆
+  if (hasAffix('surge', 'washink')) {
+    const covered = convertGrayDisk(player.x, player.y, radius);
+    if (covered) refundInk(Math.min(15, covered / 80), player.x, player.y - 30, '洗地');
+  }
   addInkStain(player.x, player.y, 28, radius, col, false, false);
+  if (full && hasAffix('surge', 'outerink')) {
+    const ringR = radius + 22.5;
+    for (let i = 0; i < 48; i++) {
+      const a = i / 48 * Math.PI * 2, b = (i + 1) / 48 * Math.PI * 2;
+      paintInkSegment(player.x + Math.cos(a) * ringR, player.y + Math.sin(a) * ringR,
+        player.x + Math.cos(b) * ringR, player.y + Math.sin(b) * ringR, 22.5, 4, col, false, false, 0);
+    }
+  }
   inkSurgePainting = false;
-  floats.push({ x: player.x, y: player.y - 42, txt: '墨潮！', t: 1.1, color: col, crit: true });
-  if (player.taken.surgeecho) chargeTurf(BATTLE.traits.surgeRetain);
+  floats.push({ x: player.x, y: player.y - 42, txt: full ? '满蓄墨潮！' : '墨潮！', t: 1.1, color: col, crit: true });
+  if (hasAffix('surge', 'surgeecho')) chargeTurf(BATTLE.traits.surgeRetain);
+  if (full && hasItem('surgeglove')) player.itemSurgeT = 3;
+  player.surgeGrowth = 0;
+  if (player.diving && !hasAffix('dive', 'divecast')) exitDive();
   return true;
 }
 function castMeleeInkSurge() {
-  const col = player.actives.length ? trailColorOf(player.actives[0].id) : INK, radius = ABSORB_RULE.meleeRadius;
+  const col = player.actives.length ? trailColorOf(player.actives[0].id) : INK;
+  const radius = ABSORB_RULE.meleeRadius * (hasAffix('absorb', 'meleeradius') ? 1.3 : 1);
+  const damage = ABSORB_RULE.meleeDamage * player.dmgMul * (1 + player.eqAtk / 100) * (hasAffix('absorb', 'meleedamage') ? 1.45 : 1);
   novas.push({ x: player.x, y: player.y, t: BATTLE.surge.visual, max: radius, col });
   for (const e of enemies) {
     if (e.dead || Math.hypot(e.x - player.x, e.y - player.y) >= radius + e.r) continue;
-    hurtEnemy(e, ABSORB_RULE.meleeDamage * player.dmgMul * (1 + player.eqAtk / 100), 0, player.x, player.y, 0, 0, 0, col);
-    // 普通怪约击退 45 像素；短暂锁定，避免后续弱攻击覆盖弹反击退
-    if (!e.dead) { e.kbx *= 3.6; e.kby *= 3.6; e.parryKbT = 0.25; }
+    hurtEnemy(e, damage, 0, player.x, player.y, 0, 0, 0, col);
+    if (!e.dead) {
+      const kb = hasAffix('absorb', 'meleeradius') ? 4.5 : 3.6;
+      e.kbx *= kb; e.kby *= kb; e.parryKbT = 0.25;
+    }
   }
   inkSurgePainting = true;
   addInkStain(player.x, player.y, 14, radius, col, false, false);
@@ -1238,23 +1381,36 @@ function castMeleeInkSurge() {
 function castAbsorb() {
   if (state !== 'play' || player.absorbCd > 0) return false;
   const onOwnInk = playerOnOwnInk();
-  player.absorbDuration = onOwnInk ? ABSORB_RULE.ownDuration : ABSORB_RULE.duration;
-  player.absorbRadius = onOwnInk ? ABSORB_RULE.ownRadius : ABSORB_RULE.radius;
-  player.absorbT = player.absorbDuration; player.absorbCd = ABSORB_RULE.cooldown; player.absorbGain = 0;
-  player.diving = false;
+  player.absorbDuration = (onOwnInk ? ABSORB_RULE.ownDuration : ABSORB_RULE.duration) + (hasAffix('absorb', 'longabsorb') ? 0.08 : 0);
+  player.absorbRadius = (onOwnInk ? ABSORB_RULE.ownRadius : ABSORB_RULE.radius) + (hasAffix('absorb', 'wideabsorb') ? 20 : 0);
+  player.absorbT = player.absorbDuration;
+  player.absorbCd = Math.max(0.45, ABSORB_RULE.cooldown * (hasAffix('absorb', 'fastabsorb') ? 0.8 : 1));
+  player.absorbGain = 0; player.absorbHeal = 0;
+  if (player.diving) exitDive();
   sparks.push({ x: player.x, y: player.y, t: 0.2, color: inkFriendlyColor });
   return true;
 }
 function rewardAbsorb(amount) {
-  amount *= player.taken.parrywell ? BATTLE.traits.absorbInkMul : 1;
-  const allowed = Math.min(amount, Math.max(0, ABSORB_RULE.maxGain - player.absorbGain));
+  amount *= hasAffix('absorb', 'parrywell') ? BATTLE.traits.absorbInkMul : 1;
+  const cap = hasAffix('absorb', 'gaincap') ? 20 : ABSORB_RULE.maxGain;
+  const allowed = Math.min(amount, Math.max(0, cap - player.absorbGain));
   if (allowed <= 0) return 0;
   const gained = refundInk(allowed, player.x, player.y - 32, '吸墨');
   player.absorbGain += gained;
   return gained;
 }
 function chargeParry() {
-  chargeTurf(ABSORB_RULE.charge * (player.taken.parrycharge ? BATTLE.traits.parryChargeMul : 1));
+  let amount = ABSORB_RULE.charge * (hasAffix('absorb', 'parrycharge') ? BATTLE.traits.parryChargeMul : 1);
+  if (hasAffix('absorb', 'perfect') && player.absorbDuration - player.absorbT <= 0.12) amount *= 2;
+  chargeTurf(amount);
+  if (hasAffix('absorb', 'parrycooldown')) player.absorbCd = Math.max(0, player.absorbCd - 0.25);
+  if (hasAffix('absorb', 'parryshield')) player.parryShieldT = 1;
+  if (hasAffix('absorb', 'parryheal') && player.absorbHeal < 6) {
+    player.absorbHeal += 2; player.hp = Math.min(player.maxhp, player.hp + 2);
+  }
+  if (hasAffix('absorb', 'surgegrowth')) player.surgeGrowth = Math.min(5, player.surgeGrowth + 1);
+  if (hasAffix('surge', 'chargeparry') && player.surgeCharging) player.surgeChargeT = Math.min(surgeChargeTime(), player.surgeChargeT + surgeChargeTime() * 0.25);
+  if (hasItem('parrygrip')) player.itemParryT = 2;
 }
 function reflectEnemyBullet(eb) {
   if (player.absorbT <= 0 || eb.reflectable === false || eb.life <= 0) return false;
@@ -1265,9 +1421,19 @@ function reflectEnemyBullet(eb) {
   const target = source || nearestEnemy(eb.x, eb.y, 480);
   const a = target ? Math.atan2(target.y - eb.y, target.x - eb.x) : Math.atan2(-eb.vy, -eb.vx);
   const speed = Math.max(160, Math.hypot(eb.vx, eb.vy) * 1.25);
-  fireBullet(eb.x, eb.y, a, speed, eb.dmg * 1.5, 'reflect',
-    { hits: 1, life: 2, col: inkFriendlyColor, reflected: true });
+  let damage = eb.dmg * 1.5 * (hasAffix('absorb', 'reflectdamage') ? 1.45 : 1);
+  const split = hasAffix('absorb', 'reflectsplit');
+  if (split) damage *= 0.55;
+  const count = split ? 3 : 1;
+  for (let i = 0; i < count; i++) {
+    const shotA = a + (i - (count - 1) / 2) * 0.22;
+    fireBullet(eb.x, eb.y, shotA, speed, damage, 'reflect', {
+      hits: 1 + (hasAffix('absorb', 'reflectpierce') ? 2 : 0), life: 2, col: inkFriendlyColor,
+      reflected: true, homing: hasAffix('absorb', 'reflecthoming') ? 7 : 0, inkWide: hasAffix('absorb', 'reflecttrail') ? 1.8 : 1
+    });
+  }
   addInkStain(eb.x, eb.y, 4, 28, inkFriendlyColor, false, true);
+  if (hasAffix('absorb', 'bulletink')) addInkStain(player.x, player.y, 8, 55, inkFriendlyColor, false, false);
   rewardAbsorb(ABSORB_RULE.bulletInk);
   chargeParry();
   floats.push({ x: player.x, y: player.y - 45, txt: '返还！', t: 0.65, color: inkFriendlyColor, crit: true });
@@ -1353,18 +1519,18 @@ function updateInkStains(dt) {
   }
 }
 function hurtPlayer(dmg) {
-  // 弹反慢放覆盖同一帧后续结算，避免“反弹成功”与扣血同时出现
-  if (player.diving || hitStopT > 0) return;   // 潜墨是无敌位移：受击不掉血，也不会被碰撞打断
+  // 潜墨、弹反慢放和受击保护均免疫伤害；hurtT 同时驱动角色闪烁反馈
+  if (player.diving || hitStopT > 0 || player.hurtT > 0) return;
   const inkDr = player.taken.inkarmor && playerOnOwnInk() ? BATTLE.traits.inkArmorReduction : 0;
   dmg = Math.round(dmg * (1 - player.eqDr) * (1 - inkDr));
   player.diving = false;
   if (player.hp - dmg <= 0 && hasItem('tape') && gameTime - player.lastRevive > 30) {
     player.lastRevive = gameTime;
-    player.hp = 1; player.hurtT = 0.6; shakeT = 0.3;
+    player.hp = 1; player.hurtT = BATTLE.player.hitInvuln; shakeT = 0.3;
     toast('修正带挡下了致命一击！');
     return;
   }
-  player.hp -= dmg; player.hurtT = 0.3; player.hurtBoostT = 2; shakeT = 0.18;
+  player.hp -= dmg; player.hurtT = BATTLE.player.hitInvuln; player.hurtBoostT = 2; shakeT = 0.18;
   floats.push({ x: player.x, y: player.y - 26, txt: '-' + dmg, t: 0.8, color: RED });
   if (player.hp <= 0) { player.hp = 0; state = 'over'; }
 }
@@ -1731,19 +1897,29 @@ function buildOptions() {
       }
     }
   }
-  for (const p of PASSIVES) pool.push({ kind: 'passive', id: p.id, tag: '[被动]', tagColor: DARK, name: p.name, desc: p.desc });
-  for (const n of NOTABLES) {
-    if (!player.taken[n.id]) pool.push({ kind: 'notable', id: n.id, tag: '[大节点]', tagColor: RED, name: n.name, desc: n.desc });
+  for (const p of PASSIVES) {
+    if (p.once && player.taken[p.id]) continue;
+    pool.push({ kind: 'passive', id: p.id, tag: '[被动]', tagColor: DARK, name: p.name, desc: p.desc });
+  }
+  const opNames = { dive: '潜墨', surge: '墨潮', absorb: '吸墨' };
+  const opColors = { dive: INK, surge: ARC, absorb: PURPLE };
+  for (const a of OPERATION_AFFIX_LIST) {
+    if (hasAffix(a.skill, a.id)) continue;
+    pool.push({ kind: 'opaffix', id: a.id, skill: a.skill, tag: '[' + opNames[a.skill] + '辅助]', tagColor: opColors[a.skill], name: a.name, desc: a.desc });
   }
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
   const nPick = hasItem('crown') ? 4 : 3;
   const picks = pool.slice(0, nPick);
-  if (!picks.some(c => c.kind === 'passive' || c.kind === 'notable')) {
-    const idx = pool.findIndex(c => c.kind === 'passive' || c.kind === 'notable');
+  if (!picks.some(c => c.kind === 'passive')) {
+    const idx = pool.findIndex(c => c.kind === 'passive');
     if (idx >= 0) picks[picks.length - 1] = pool[idx];
   }
   cards = picks;
   layoutCards(cards.length);
+}
+function rerollOptions() {
+  if (state !== 'levelup' || player.itemRerolls <= 0) return false;
+  player.itemRerolls--; buildOptions(); return true;
 }
 function applyOption(i) {
   const c = cards[i]; if (!c) return;
@@ -1757,7 +1933,7 @@ function applyOption(i) {
     if (sp && sp.lvl < MAX_LVL) sp.lvl++;
   }
   else if (c.kind === 'passive') PASSIVES.find(p => p.id === c.id).fx();
-  else if (c.kind === 'notable') NOTABLES.find(n => n.id === c.id).fx();
+  else if (c.kind === 'opaffix') player.affixes[c.skill][c.id] = true;
   cards = []; state = 'play';
   if (starting) toast('潜墨可无敌位移但持续耗墨；涂新区域攒满墨潮');
 }
@@ -2511,8 +2687,9 @@ function update(dt) {
   toasts = toasts.filter(ts => ts.t > 0);
 
   updateInkTactics();   // 统一处理本帧产生的截断、续墨和失源转化
-  camX = Math.max(WORLD_L - 70, Math.min(WORLD_R + 70 - VIEW_W, player.x - VIEW_W / 2));
-  camY = Math.max(WORLD_T - 70, Math.min(WORLD_B + 70 - VIEW_H, player.y - VIEW_H / 2));
+  // 镜头不钳制在纸张范围内：即使角色贴边，也始终位于屏幕正中央
+  camX = player.x - VIEW_W / 2;
+  camY = player.y - VIEW_H / 2;
 }
 
 /* ---------- 渲染 ---------- */
@@ -3452,14 +3629,14 @@ function drawHUD() {
   ctx.fillText(player.surgeCharging ? '蓄力中' : '墨潮', specialRect.x + specialRect.w / 2, specialRect.y + 18);
   ctx.font = '9px ' + FONT;
   ctx.fillText(player.surgeCharging ? Math.round(inkSurgeChargeRatio() * 100) + '% · 松开' : (player.special >= 100 ? '长按 · Q' : Math.floor(player.special) + '%'), specialRect.x + specialRect.w / 2, specialRect.y + 33);
-  const canDive = player.ink > 0;
+  const canDive = player.ink > 0 && player.diveCd <= 0;
   ctx.fillStyle = player.diving ? 'rgba(210,225,255,0.96)' : 'rgba(255,250,238,0.94)';
   ctx.fillRect(diveRect.x, diveRect.y, diveRect.w, diveRect.h);
   jrect(diveRect.x, diveRect.y, diveRect.w, diveRect.h, player.diving ? INK : (canDive ? INK : GRAY), 2.2);
   ctx.fillStyle = player.diving || canDive ? INK : GRAY; ctx.font = 'bold 13px ' + FONT;
   ctx.fillText(player.diving ? '潜墨中' : '潜墨', diveRect.x + diveRect.w / 2, diveRect.y + 18);
   ctx.font = '8px ' + FONT;
-  ctx.fillText(player.diving ? '无敌 · ' + diveInkCost() + '/秒' : '位移 · 空格', diveRect.x + diveRect.w / 2, diveRect.y + 33);
+  ctx.fillText(player.diving ? '无敌 · ' + diveInkCost() + '/秒' : (player.diveCd > 0 ? player.diveCd.toFixed(1) + ' 秒' : '位移 · 空格'), diveRect.x + diveRect.w / 2, diveRect.y + 33);
   // 固定左下摇杆始终可见，让玩家明确左手移动、右手技能的分区
   const jx = joy.active ? joy.bx : JOY_HOME.x, jy = joy.active ? joy.by : JOY_HOME.y;
   ctx.globalAlpha = joy.active ? 0.48 : 0.24;

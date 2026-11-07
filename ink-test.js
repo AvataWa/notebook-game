@@ -79,8 +79,8 @@ test('墨潮蓄力随时间扩大，0.6 秒为 216，1.2 秒封顶 288', () => {
   assert(near(G.inkSurgeChargeRadius(), 288) && near(G.player.surgeChargeT, 1.2), '最大范围或蓄力时间封顶错误');
   G.releaseInkSurgeCharge(); assert(near(G.novas[0].max, 288), '实际释放没有使用最大范围');
 });
-test('潜墨可以蓄力和释放墨潮，全程不被打断', () => {
-  fresh(); G.player.special = 100; assert(G.toggleDive(), '无法进入潜墨');
+test('潜潮连笔允许潜墨蓄力和释放墨潮，全程不被打断', () => {
+  fresh(); G.player.affixes.dive.divecast = true; G.player.special = 100; assert(G.toggleDive(), '无法进入潜墨');
   G.startInkSurgeCharge(7); G.updateInkSurgeCharge(0.6); G.updatePlayerInk(0.6);
   assert(G.player.diving && G.player.surgeCharging && near(G.player.ink, 78.4), '蓄力打断潜墨或影响正常耗墨');
   G.releaseInkSurgeCharge(7);
