@@ -2146,6 +2146,11 @@ function toLogical(e) {
   return { x: (e.clientX - r.left) / (r.width / W), y: (e.clientY - r.top) / (r.height / H) };
 }
 function pointInRect(p, r) { return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h; }
+// 手机浏览器：阻止长按全选/系统菜单及双指缩放，但不拦截 Pointer Events 的多指输入
+for (const type of ['contextmenu', 'selectstart', 'dragstart', 'gesturestart', 'gesturechange', 'gestureend']) {
+  canvas.addEventListener(type, e => e.preventDefault());
+}
+canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 canvas.addEventListener('pointerdown', e => {
   e.preventDefault();
   const p = toLogical(e);

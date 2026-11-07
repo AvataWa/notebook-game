@@ -77,5 +77,22 @@ test('角色位于四个场景角落时仍保持屏幕正中央', () => {
     assert(Math.abs(G.player.y - G.cam.y - G.view.h / 2) < 1e-8, '垂直方向没有居中：' + x + ',' + y);
   }
 });
-console.log(failed ? 'UI_TEST_FAILURES: ' + failed : 'UI_TEST_OK (6/6)');
+test('长按选择、系统菜单与浏览器缩放手势均被阻止', () => {
+  fresh();
+  for (const type of ['contextmenu', 'selectstart', 'dragstart', 'gesturestart', 'gesturechange', 'gestureend', 'touchmove']) {
+    assert(typeof handlers[type] === 'function', type + ' 没有防误触处理');
+    let prevented = false; handlers[type]({ preventDefault() { prevented = true; } });
+    assert(prevented, type + ' 没有阻止浏览器默认行为');
+  }
+});
+test('左手保持摇杆时右手长按墨潮，松开技能不影响移动触点', () => {
+  fresh(); G.player.special = 100; const home = G.joyHome;
+  pointer('pointerdown', 1, home.x, home.y); pointer('pointermove', 1, home.x + 35, home.y);
+  const p = center(G.specialRect); pointer('pointerdown', 4, p.x, p.y); G.update(0.6);
+  assert(G.joy.active && G.joy.dx > 0 && G.player.surgeCharging, '双指时长按墨潮打断摇杆');
+  pointer('pointerup', 4, p.x, p.y);
+  assert(G.joy.active && G.joy.dx > 0 && !G.player.surgeCharging && G.player.special === 0, '松开墨潮影响摇杆或未释放技能');
+  pointer('pointerup', 1, home.x + 35, home.y);
+});
+console.log(failed ? 'UI_TEST_FAILURES: ' + failed : 'UI_TEST_OK (8/8)');
 process.exit(failed ? 1 : 0);
