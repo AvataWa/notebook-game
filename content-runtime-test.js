@@ -2,14 +2,19 @@
 const fs = require('fs');
 const src = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'main.js', 'build-runtime.js']
   .map(f => fs.readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
-const fakeCtx = new Proxy({}, { get(t, k) { if (k === 'measureText') return () => ({ width: 10 }); return () => {}; }, set() { return true; } });
+const drawTexts = [];
+const fakeCtx = new Proxy({}, { get(t, k) {
+  if (k === 'measureText') return () => ({ width: 10 });
+  if (k === 'fillText') return txt => { drawTexts.push(String(txt)); };
+  return () => {};
+}, set() { return true; } });
 const fakeCanvas = { getContext: () => fakeCtx, width: 0, height: 0, style: {}, addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 375, height: 667 }) };
 global.window = { addEventListener() {}, devicePixelRatio: 1, innerWidth: 375, innerHeight: 667 };
 global.document = { getElementById: () => fakeCanvas }; global.requestAnimationFrame = () => {};
 eval(src + `
 ;globalThis.G = {
   resetGame, update, updatePlayerInk, render, toggleDive, enterDive, exitDive, castAbsorb, reflectEnemyBullet,
-  castInkSurge, buildOptions, rerollOptions, recomputeEquip, itemV, itemDescription, makeEquipmentDrop, hurtPlayer, inkCellAt,
+  castInkSurge, buildOptions, rerollOptions, applyOption, recomputeEquip, itemV, itemDescription, makeEquipmentDrop, hurtPlayer, inkCellAt,
   get gameTime() { return gameTime; }, set gameTime(v) { gameTime = v; },
   get RARITIES() { return RARITIES; }, get OPERATION_AFFIXES() { return OPERATION_AFFIXES; },
   get EQUIPMENT_ITEM_DEFS() { return EQUIPMENT_ITEM_DEFS; }, get PASSIVES() { return PASSIVES; },
@@ -127,5 +132,23 @@ test('潜墨冷却 1 秒，快速回潜缩短为 0.5 秒', () => {
   assert(G.player.diveCd === 0.5 && !G.toggleDive(), '快速回潜没有缩短到 0.5 秒');
   G.update(0.6); assert(G.toggleDive(), '快速回潜冷却后无法进入');
 });
-console.log(failed ? 'CONTENT_RUNTIME_TEST_FAILURES: ' + failed : 'CONTENT_RUNTIME_TEST_OK (14/14)');
+test('选择升级词条后获得完整 1 秒无敌，结束后才恢复受伤', () => {
+  fresh(); G.buildOptions(); G.state = 'levelup'; G.applyOption(0);
+  const hp = G.player.hp;
+  assert(G.state === 'play' && G.player.hurtT === 1, '选词后没有获得 1 秒保护');
+  G.hurtPlayer(50); assert(G.player.hp === hp, '选词保护期间仍然掉血');
+  G.update(0.6); G.hurtPlayer(50);
+  assert(G.player.hp === hp && G.player.hurtT > 0, '1 秒尚未结束就失去保护');
+  G.update(0.41); G.hurtPlayer(50);
+  assert(G.player.hp < hp, '保护结束后没有恢复伤害结算');
+});
+test('装备品质框在世界层绘制，不覆盖 HUD 和升级卡片', () => {
+  fresh(); G.drops = [{ x: 0, y: 0, item: 'glove', rarity: 3, bob: 0 }]; G.state = 'levelup';
+  drawTexts.length = 0; G.render();
+  const drop = drawTexts.indexOf('史诗'), hud = drawTexts.indexOf('击杀 0');
+  const card = drawTexts.findIndex(t => t.startsWith('升级！'));
+  assert(drop >= 0 && hud >= 0 && card >= 0, '缺少掉落、HUD 或升级卡片绘制');
+  assert(drop < hud && drop < card, '装备品质框仍绘制在 HUD 或卡片之上');
+});
+console.log(failed ? 'CONTENT_RUNTIME_TEST_FAILURES: ' + failed : 'CONTENT_RUNTIME_TEST_OK (16/16)');
 process.exit(failed ? 1 : 0);

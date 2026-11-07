@@ -38,7 +38,7 @@ const BATTLE = typeof BATTLE_CONFIG !== 'undefined' ? BATTLE_CONFIG : {
   ink: { ownSpeed: 1.12, hostileSpeed: 0.58, enemyOwnSpeed: 1.12, enemyFriendlySpeed: 0.82, regenBase: 0.35, regenOwnBonus: 2.5, hostileTick: 0.55, hostileDamage: 2 },
   dive: { ownCost: 12, otherCost: 36, speed: 1.55 },
   absorb: { duration: 0.35, ownDuration: 0.4, cooldown: 1.2, radius: 65, ownRadius: 100, maxGain: 12, bulletInk: 3, meleeInk: 8, charge: 20, hitStop: 0.3, slowScale: 0.15, meleeRadius: 120, meleeDamage: 27.5 },
-  surge: { radius: 240, chargeTime: 1.2, minScale: 0.6, maxScale: 1.2, damage: 55, visual: 0.35 },
+  surge: { radius: 168, chargeTime: 1.2, minScale: 0.6, maxScale: 1.2, damage: 55, visual: 0.35 },
   traits: { inkArmorReduction: 0.2, inkDamageMul: 1.2, parryChargeMul: 1.5, absorbInkMul: 1.5, surgeRetain: 20 }
 };
 const SQUASH_T = BATTLE.feedback.squash, KNOCK_V = BATTLE.feedback.knockback;
@@ -479,7 +479,6 @@ function refundInk(amount, x, y, label, crit) {
   const gained = Math.min(Math.max(0, player.maxInk - player.ink), Math.max(0, amount));
   if (gained <= 0) return 0;
   player.ink += gained;
-  floats.push({ x, y, txt: label + ' +' + gained.toFixed(1) + '墨', t: 0.85, color: inkFriendlyColor, crit: !!crit });
   return gained;
 }
 function updateInkTactics() {
@@ -568,7 +567,7 @@ function paintInkSegment(x1, y1, x2, y2, r, amount, col, hostile, trail, sourceI
     const stun = e.boss ? 0.12 : (e.elite ? 0.25 : 0.4);
     e.stunT = Math.max(e.stunT || 0, stun);
     e.groundStealCd = gameTime + (e.boss ? 2 : 1.2);
-    floats.push({ x: e.x, y: e.y - e.r - 12, txt: '夺地！', t: 0.65, color: inkFriendlyColor });
+    if (!inkSurgePainting) floats.push({ x: e.x, y: e.y - e.r - 12, txt: '夺地！', t: 0.65, color: inkFriendlyColor });
   }
   const coveredRatio = cells ? covered / cells : 0;
   if (!hostile && cells) chargeTurf(amount * fresh / cells * 1.2 + coveredRatio * 2);
@@ -643,9 +642,9 @@ const gestureCooldowns = { cross: 0, redraw: 0, v: 0, zig: 0, circle: 0 };
 const ABSORB_RULE = BATTLE.absorb;
 // 左手固定摇杆，右手拇指操作三个技能；按钮扩大并错层排列，减少误触
 const JOY_HOME = { x: 72, y: H - 174, r: 52 };
-const absorbRect = { x: W - 88, y: H - 181, w: 74, h: 52 };
-const specialRect = { x: W - 172, y: H - 181, w: 74, h: 52 };
-const diveRect = { x: W - 88, y: H - 245, w: 74, h: 52 };
+const absorbRect = { x: W - 88, y: H - 157, w: 74, h: 52 };
+const specialRect = { x: W - 172, y: H - 157, w: 74, h: 52 };
+const diveRect = { x: W - 88, y: H - 221, w: 74, h: 52 };
 const keys = {};
 const joy = { active: false, id: -1, bx: JOY_HOME.x, by: JOY_HOME.y, dx: 0, dy: 0 };
 
@@ -1274,7 +1273,7 @@ function chargeTurf(amount) {
   player.turf += amount;
   if (player.special >= 100 && !player.specialAnnounced) {
     player.specialAnnounced = true;
-    toast('墨潮已满！长按「墨潮」或 Q 蓄力，松开释放');
+    toast('墨潮已满！长按「墨潮」蓄力，松开释放');
   }
 }
 function surgeChargeTime() { return BATTLE.surge.chargeTime * (hasAffix('surge', 'fastcharge') ? 0.75 : 1); }
@@ -1323,7 +1322,7 @@ function castInkSurge(radius = BATTLE.surge.radius, full = false) {
   if (hasAffix('surge', 'surgedamage')) damage *= 1.3;
   if (full && hasAffix('surge', 'fulldamage')) damage *= 1.55;
   if (full && hasAffix('surge', 'inkburst') && player.ink >= 25) { player.ink -= 25; damage *= 1.8; }
-  novas.push({ x: player.x, y: player.y, t: BATTLE.surge.visual, max: radius, col });
+  novas.push({ x: player.x, y: player.y, t: BATTLE.surge.visual, max: radius, col, outerDamage: hasAffix('surge', 'outerdamage') });
   shakeT = Math.max(shakeT, 0.42);
   for (const e of enemies) {
     const d = Math.hypot(e.x - player.x, e.y - player.y);
@@ -1363,7 +1362,6 @@ function castInkSurge(radius = BATTLE.surge.radius, full = false) {
     }
   }
   inkSurgePainting = false;
-  floats.push({ x: player.x, y: player.y - 42, txt: full ? '满蓄墨潮！' : '墨潮！', t: 1.1, color: col, crit: true });
   if (hasAffix('surge', 'surgeecho')) chargeTurf(BATTLE.traits.surgeRetain);
   if (full && hasItem('surgeglove')) player.itemSurgeT = 3;
   player.surgeGrowth = 0;
@@ -1386,7 +1384,6 @@ function castMeleeInkSurge() {
   inkSurgePainting = true;
   addInkStain(player.x, player.y, 14, radius, col, false, false);
   inkSurgePainting = false;
-  floats.push({ x: player.x, y: player.y - 58, txt: '小墨潮！', t: 0.85, color: col, crit: true });
 }
 function castAbsorb() {
   if (state !== 'play' || player.absorbCd > 0) return false;
@@ -1413,7 +1410,8 @@ function chargeParry() {
   let amount = ABSORB_RULE.charge * (hasAffix('absorb', 'parrycharge') ? BATTLE.traits.parryChargeMul : 1);
   if (hasAffix('absorb', 'perfect') && player.absorbDuration - player.absorbT <= 0.12) amount *= 2;
   chargeTurf(amount);
-  if (hasAffix('absorb', 'parrycooldown')) player.absorbCd = Math.max(0, player.absorbCd - 0.25);
+  if (hasAffix('absorb', 'parrycooldown')) chargeTurf(4);
+  player.absorbCd = 0;
   if (hasAffix('absorb', 'parryshield')) player.parryShieldT = 1;
   if (hasAffix('absorb', 'parryheal') && player.absorbHeal < 6) {
     player.absorbHeal += 2; player.hp = Math.min(player.maxhp, player.hp + 2);
@@ -1446,7 +1444,7 @@ function reflectEnemyBullet(eb) {
   if (hasAffix('absorb', 'bulletink')) addInkStain(player.x, player.y, 8, 55, inkFriendlyColor, false, false);
   rewardAbsorb(ABSORB_RULE.bulletInk);
   chargeParry();
-  floats.push({ x: player.x, y: player.y - 45, txt: '返还！', t: 0.65, color: inkFriendlyColor, crit: true });
+  floats.push({ x: player.x, y: player.y - 45, txt: '弹反！', t: 0.65, color: inkFriendlyColor, crit: true });
   sparks.push({ x: eb.x, y: eb.y, t: 0.22, color: inkFriendlyColor });
   return true;
 }
@@ -1463,7 +1461,7 @@ function reflectMeleeSwing(e) {
   }
   rewardAbsorb(ABSORB_RULE.meleeInk);
   chargeParry();
-  floats.push({ x: player.x, y: player.y - 45, txt: '反弹！', t: 0.7, color: inkFriendlyColor, crit: true });
+  floats.push({ x: player.x, y: player.y - 45, txt: '弹反！', t: 0.7, color: inkFriendlyColor, crit: true });
   sparks.push({ x: e.x, y: e.y, t: 0.24, color: inkFriendlyColor });
   castMeleeInkSurge();
   shakeT = Math.max(shakeT, 0.1);
@@ -1487,7 +1485,7 @@ function reflectHazard(hz) {
   hurtEnemy(source, hz.dmg * 1.5, 0, player.x, player.y, 0, 0, 0, inkFriendlyColor);
   rewardAbsorb(ABSORB_RULE.meleeInk);
   chargeParry();
-  floats.push({ x: player.x, y: player.y - 45, txt: '反弹！', t: 0.7, color: inkFriendlyColor, crit: true });
+  floats.push({ x: player.x, y: player.y - 45, txt: '弹反！', t: 0.7, color: inkFriendlyColor, crit: true });
   castMeleeInkSurge();
   return true;
 }
@@ -1755,7 +1753,7 @@ function fireSkill(a, c) {
     brands.push({ tgt: t0, t: 4 * (1 + c.lingerT), tick: 0, dmg: 9 * c.dmg, chain: 1 + c.chain, c });
   } else if (a.id === 'cola') {        // 冰可乐新星：冻慢身边一圈
     const rad = 110 * c.rad;
-    novas.push({ x: px, y: py, t: 0.35, max: rad, col: c.col });
+    novas.push({ x: px, y: py, t: 0.35, max: rad, col: c.col, c });
     if (a.lvl >= 3) fields.push({ kind: 'ice', x: px, y: py, r: rad * 0.9, t: 2.8, tick: 0.2, dmg: 4 * c.dmg, c });
     let shatters = 0;
     for (const e of enemies) {
@@ -1863,10 +1861,34 @@ function updateSkills(dt) {
 }
 
 /* ---------- 选卡（起手 / 升级共用） ---------- */
+function wrapCardDescription(text, maxWidth) {
+  const lines = [];
+  let line = '';
+  for (const ch of String(text || '')) {
+    if (ch === '\n') { lines.push(line); line = ''; continue; }
+    if (line && ctx.measureText(line + ch).width > maxWidth) { lines.push(line); line = ch; }
+    else line += ch;
+  }
+  if (line || !lines.length) lines.push(line);
+  return lines;
+}
 function layoutCards(n) {
-  const h = n === 4 ? 84 : 92, gap = n === 4 ? 14 : 18;
-  const total = n * h + (n - 1) * gap, y0 = 130 + (430 - total) / 2;
-  cardRects = cards.map((c, i) => ({ x: 47, y: y0 + i * (h + gap), w: 280, h }));
+  const baseH = n === 4 ? 84 : 92, gap = n === 4 ? 12 : 16;
+  ctx.save(); ctx.font = '12px ' + FONT;
+  const heights = cards.map(c => {
+    c.descLines = wrapCardDescription(c.desc, 248);
+    return Math.max(baseH, 92 + (c.descLines.length - 1) * 15);
+  });
+  ctx.restore();
+  const total = heights.reduce((sum, h) => sum + h, 0) + (n - 1) * gap;
+  const bottomLimit = state === 'levelup' && hasItem('rerollnote') ? 600 : H - 28;
+  const y0 = Math.max(74, Math.min(130 + (430 - total) / 2, bottomLimit - total));
+  let y = y0;
+  cardRects = cards.map((c, i) => {
+    const h = heights[i], rect = { x: 47, y, w: 280, h };
+    y += h + gap;
+    return rect;
+  });
 }
 function buildStartCards() {
   const ids = Object.keys(SKILL_DEFS);
@@ -1945,6 +1967,7 @@ function applyOption(i) {
   else if (c.kind === 'passive') PASSIVES.find(p => p.id === c.id).fx();
   else if (c.kind === 'opaffix') player.affixes[c.skill][c.id] = true;
   cards = []; state = 'play';
+  if (!starting) player.hurtT = Math.max(player.hurtT, 1);
   if (starting) toast('潜墨可无敌位移但持续耗墨；涂新区域攒满墨潮');
 }
 
@@ -3257,6 +3280,56 @@ function renderInkTerritory() {
   if (friendlyInkLayer.canvas) { ctx.globalAlpha = 0.23; ctx.drawImage(friendlyInkLayer.canvas, WORLD_L, WORLD_T, WORLD_W, WORLD_H); }
   ctx.restore();
 }
+function floatPopScale(f) {
+  if (!f.maxT) f.maxT = f.t;
+  const pop = Math.max(0, 1 - (f.maxT - f.t) / 0.12);
+  return 1.5 + 0.5 * pop * pop;
+}
+function drawCoreDamageZone(x, y, radius, c, showLabel = true) {
+  if (!c || !c.core || !radius) return;
+  const innerR = radius * 0.5, col = c.col || INK;
+  ctx.save();
+  ctx.fillStyle = col; ctx.globalAlpha = 0.07;
+  ctx.beginPath(); ctx.arc(x, y, innerR, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = col; ctx.globalAlpha = 0.7; ctx.lineWidth = 1.2; ctx.setLineDash([3, 3]);
+  ctx.beginPath(); ctx.arc(x, y, innerR, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+  if (showLabel) {
+    ctx.globalAlpha = 0.95; ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.font = 'bold 9px ' + FONT;
+    ctx.shadowColor = PAPER; ctx.shadowBlur = 3;
+    ctx.fillText('圆心增伤 +' + Math.round(c.core * 100) + '%', x, y + innerR + 12);
+  }
+  ctx.restore();
+}
+function drawOuterSurgeDamageZone(x, y, radius, alpha = 1) {
+  if (!radius) return;
+  const innerR = radius * 0.7;
+  ctx.save();
+  ctx.fillStyle = INK; ctx.globalAlpha = 0.055 * alpha;
+  ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.arc(x, y, innerR, 0, Math.PI * 2, true); ctx.fill('evenodd');
+  ctx.strokeStyle = INK; ctx.globalAlpha = 0.75 * alpha; ctx.lineWidth = 1.4; ctx.setLineDash([5, 4]);
+  ctx.beginPath(); ctx.arc(x, y, innerR, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+  ctx.globalAlpha = 0.95 * alpha; ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.font = 'bold 10px ' + FONT;
+  ctx.shadowColor = PAPER; ctx.shadowBlur = 3;
+  ctx.fillText('外圈增伤 +50%', x, y + innerR + 14);
+  ctx.restore();
+}
+function drawPlayerResources() {
+  const hpRatio = Math.max(0, Math.min(1, player.hp / player.maxhp));
+  const inkRatio = Math.max(0, Math.min(1, player.ink / player.maxInk));
+  const centerY = player.y + 4;
+  ctx.save();
+  ctx.globalAlpha = 0.95; ctx.lineCap = 'round';
+  function resourceArc(radius, color, width, ratio = 1) {
+    const start = Math.PI / 6, span = Math.PI * 2 / 3;
+    ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = width;
+    ctx.arc(player.x, centerY, radius, start, start + span * ratio); ctx.stroke();
+  }
+  resourceArc(28, 'rgba(245,241,230,0.82)', 2.8);
+  resourceArc(23, 'rgba(245,241,230,0.82)', 2.6);
+  if (hpRatio > 0) resourceArc(28, RED, 1.6, hpRatio);
+  if (inkRatio > 0) resourceArc(23, INK, 1.4, inkRatio);
+  ctx.restore();
+}
 function render() {
   ctx.setTransform(viewScale, 0, 0, viewScale, 0, 0);
   ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
@@ -3269,9 +3342,14 @@ function render() {
   drawPaper(curStage || 1);
   renderInkTerritory();
 
+  let eruptionCoreLabeled = false;
   for (const er of erupts) {
     setSeed(3000 + Math.floor(er.x));
     const ec = er.c && er.c.col ? er.c.col : INK;
+    if (er.c && er.c.core) {
+      drawCoreDamageZone(er.x, er.y, er.r, er.c, !eruptionCoreLabeled);
+      eruptionCoreLabeled = true;
+    }
     if (!er.done && er.warn) {   // 粉笔头落点：属性色涂鸦预警圈（随延迟收缩）
       ctx.globalAlpha = 0.4 + 0.3 * Math.sin(er.delay * 20);
       jcircle(er.x, er.y, er.r * (0.5 + er.delay), ec, 1.8);
@@ -3371,9 +3449,14 @@ function render() {
     scribbleFill(tt.x - 5, tt.y - 13, 10, 6, ALLY);
   }
   // 毒墨云：涂鸦云团 + 雨线
+  let cloudCoreLabeled = false;
   for (const cl of clouds) {
     setSeed(7300 + Math.floor(cl.x));
     const cc = cl.c.col || INK;
+    if (cl.c.core) {
+      drawCoreDamageZone(cl.x, cl.y, cl.r, cl.c, !cloudCoreLabeled);
+      cloudCoreLabeled = true;
+    }
     ctx.globalAlpha = Math.min(0.85, cl.t);
     jcircle(cl.x - cl.r * 0.4, cl.y - cl.r * 0.7, cl.r * 0.32, cc, 2);
     jcircle(cl.x + cl.r * 0.1, cl.y - cl.r * 0.85, cl.r * 0.4, cc, 2);
@@ -3386,8 +3469,13 @@ function render() {
     ctx.globalAlpha = 1;
   }
   // 雷网与冰面：持续存在的觉醒领域
+  let fieldCoreLabeled = false;
   for (const f of fields) {
     setSeed(7350 + Math.floor(f.x)); const fc = f.kind === 'ice' ? '#7ec8e3' : (f.c.col || ARC);
+    if (f.c.core) {
+      drawCoreDamageZone(f.x, f.y, f.r, f.c, !fieldCoreLabeled);
+      fieldCoreLabeled = true;
+    }
     ctx.globalAlpha = Math.min(0.65, f.t * 0.5);
     jcircle(f.x, f.y, f.r, fc, f.kind === 'ice' ? 2 : 2.5);
     jcircle(f.x, f.y, f.r * 0.72, fc, 1.2);
@@ -3419,6 +3507,8 @@ function render() {
   // 冰可乐新星：扩散的泡泡圈
   for (const nv of novas) {
     const k = 1 - nv.t / 0.35;
+    if (nv.c && nv.c.core) drawCoreDamageZone(nv.x, nv.y, nv.max, nv.c);
+    if (nv.outerDamage) drawOuterSurgeDamageZone(nv.x, nv.y, nv.max, Math.max(0, nv.t / BATTLE.surge.visual));
     setSeed(7950);
     ctx.globalAlpha = 1 - k;
     jcircle(nv.x, nv.y, nv.max * (0.3 + 0.7 * k), nv.col || ARC, 3);
@@ -3430,6 +3520,7 @@ function render() {
     const rings = ca.lvl >= 5 ? [1, 1.32, 1.64] : (ca.lvl >= 3 ? [1, 1.35] : [1]);
     for (let ri = 0; ri < rings.length; ri++) {
       const rad = baseRad * rings[ri], n = ca.lvl >= 5 ? 4 : 3;
+      if (cc.core) drawCoreDamageZone(player.x, player.y, rad, cc, ri === 0);
       for (let i = 0; i < n; i++) {
         const a = cycAng * (ri % 2 ? -1 : 1) + ri * 0.4 + i * Math.PI * 2 / n;
         const x1 = player.x + Math.cos(a) * rad, y1 = player.y + Math.sin(a) * rad;
@@ -3494,6 +3585,7 @@ function render() {
   const candle = getActive('candle');
   if (candle && !player.diving) {   // 蜡烛头：灼烧光环 + 头顶火苗
     const cc = skillCalc(candle), rad = 90 * cc.rad;
+    if (cc.core) drawCoreDamageZone(player.x, player.y, rad, cc);
     setSeed(8900);
     ctx.globalAlpha = 0.25;
     jcircle(player.x, player.y, rad, cc.col, 1.2);
@@ -3522,6 +3614,7 @@ function render() {
   if (player.surgeCharging) {
     const cr = inkSurgeChargeRatio(), radius = inkSurgeChargeRadius();
     const col = player.actives.length ? trailColorOf(player.actives[0].id) : INK;
+    if (hasAffix('surge', 'outerdamage')) drawOuterSurgeDamageZone(player.x, player.y, radius);
     setSeed(8918); ctx.globalAlpha = 0.35 + cr * 0.35;
     jcircle(player.x, player.y, radius, col, 2 + cr * 1.5);
     jcircle(player.x, player.y, 20 + cr * 9, col, 1.5);
@@ -3541,6 +3634,7 @@ function render() {
       ctx.globalAlpha = 1;
     } else drawStick(player.x, player.y, 30, player.walk, player.hurtT > 0 ? RED : INK);
   }
+  drawPlayerResources();
   for (const s of sparks) {
     const k = 1 - s.t / 0.18, sc = s.color || DARK;
     ctx.globalAlpha = 1 - k;
@@ -3556,12 +3650,18 @@ function render() {
   }
   ctx.textAlign = 'center';
   for (const f of floats) {
+    const scale = floatPopScale(f);
+    ctx.save();
     ctx.globalAlpha = Math.min(1, f.t * 2);
     ctx.fillStyle = f.color;
-    // 暴击沿用本次属性伤害颜色，仅放大、加粗，并在数值后显示“!”
+    // 所有跳字基础放大 1.5 倍；出现瞬间为 2 倍，再快速收回
+    ctx.translate(f.x, f.y); ctx.scale(scale, scale);
     ctx.font = (f.crit ? '900 18px ' : 'bold 13px ') + FONT;
-    ctx.fillText(f.txt, f.x, f.y);
+    ctx.fillText(f.txt, 0, 0);
+    ctx.restore();
   }
+  // 装备掉落等扩展内容仍在世界层绘制，不能越过 HUD 与选词卡
+  if (window.__drawWorldExtras) { ctx.save(); window.__drawWorldExtras(); ctx.restore(); }
   ctx.globalAlpha = 1;
   ctx.restore();
 
@@ -3586,13 +3686,12 @@ function render() {
 
 function drawHUD() {
   setSeed(42);
-  // 桌面上的信息使用浅纸色底板，保证技能、装备和顶部数据清晰可读
+  const boss = enemies.find(e => e.boss && !e.dead);
+  const skillTop = boss ? 70 : 58;
+  const equipTop = skillTop + 12 + player.actives.length * 15 + 6;
+  // 顶部只保留关卡、经验与击杀；技能下紧跟装备，不再占用底部操作区
   ctx.fillStyle = 'rgba(255,250,238,0.88)';
   ctx.fillRect(7, 4, W - 14, 45);
-  ctx.fillRect(10, 66, W - 20, 12 + player.actives.length * 15);
-  ctx.fillRect(10, H - 104, 156, 84);
-  ctx.fillRect(W - 194, H - 104, 184, 84);
-  // 顶部中央：关卡-波数 + 计时
   const t = Math.floor(gameTime);
   const mm = String(Math.floor(t / 60)).padStart(2, '0'), ss = String(t % 60).padStart(2, '0');
   const wv = ((player.level - 1) % 10) + 1;
@@ -3600,11 +3699,7 @@ function drawHUD() {
   ctx.fillText(curStage + '-' + wv, W / 2, 22);
   ctx.font = '11px ' + FONT; ctx.fillStyle = '#686868';
   ctx.fillText(mm + ':' + ss, W / 2, 37);
-  // 左上：血条 + 经验条；等级独立放在经验条下方，避免与关卡重叠
   const top = 8;
-  jrect(14, top, 150, 13, INK, 2);
-  const ratio = Math.max(0, player.hp / player.maxhp);
-  if (ratio > 0) { setSeed(43); ctx.save(); ctx.beginPath(); ctx.rect(15, top + 1, 148 * ratio, 11); ctx.clip(); scribbleFill(15, top + 1, 148 * ratio, 11, RED); ctx.restore(); }
   setSeed(45);
   jrect(14, top + 17, 150, 6, PICKUP, 1.5);
   const xr = Math.max(0, Math.min(1, player.xp / player.xpNext));
@@ -3617,8 +3712,6 @@ function drawHUD() {
     ctx.fillStyle = killChain >= 25 ? RED : INK; ctx.font = '900 14px ' + FONT;
     ctx.fillText(killChain + ' 连擦', W - 16, top + 30);
   }
-  // Boss 血条
-  const boss = enemies.find(e => e.boss && !e.dead);
   if (boss) {
     const bw = 230, bx = (W - bw) / 2, by = 50;
     setSeed(88);
@@ -3632,41 +3725,31 @@ function drawHUD() {
     ctx.fillStyle = RED; ctx.textAlign = 'center'; ctx.font = 'bold 12px ' + FONT;
     ctx.fillText(boss.name + (boss.phase === 2 ? '·暴走' : ''), W / 2, by - 4);
   }
-  // 技能列表
+  ctx.save();
+  ctx.shadowColor = 'rgba(255,250,238,0.96)'; ctx.shadowBlur = 4;
+  ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
   ctx.textAlign = 'left'; ctx.font = 'bold 11px ' + FONT;
   player.actives.forEach((a, i) => {
     const supTxt = a.supports.map(sp => SUPPORTS[sp.id].name + '·' + sp.lvl).join('+');
     ctx.fillStyle = INK;
     const nameTxt = SKILL_DEFS[a.id].name + ' Lv' + a.lvl;
-    ctx.fillText(nameTxt, 16, 78 + i * 15);
-    if (supTxt) { ctx.fillStyle = PURPLE; ctx.fillText('  ' + supTxt, 16 + ctx.measureText(nameTxt).width + 4, 78 + i * 15); }
+    const y = skillTop + 12 + i * 15;
+    ctx.fillText(nameTxt, 16, y);
+    if (supTxt) { ctx.fillStyle = PURPLE; ctx.fillText('  ' + supTxt, 16 + ctx.measureText(nameTxt).width + 4, y); }
   });
-  // 装备栏
   ctx.font = 'bold 10px ' + FONT;
   SLOTS.forEach((s, i) => {
-    const eq = player.equip[s];
-    ctx.fillStyle = eq ? INK : '#686868';
-    ctx.fillText('[' + SLOT_NAME[s] + ']' + (eq ? ITEM_DEFS[eq.key].name + (eq.lvl > 1 ? ' Lv' + eq.lvl : '') : '—'), 16, H - 96 + i * 14);
+    const eq = player.equip[s], rarity = eq ? RARITY_LIST[rarityIndex(eq)] : null;
+    ctx.fillStyle = rarity ? rarity.color : '#686868';
+    const eqTxt = eq ? rarity.name + '·' + ITEM_DEFS[eq.key].name : '—';
+    ctx.fillText('[' + SLOT_NAME[s] + ']' + eqTxt, 16, equipTop + 12 + i * 14);
   });
-  // 右下：领地资源与三个独立操作
-  ctx.textAlign = 'left'; ctx.fillStyle = INK; ctx.font = 'bold 10px ' + FONT;
-  ctx.fillText('墨水 ' + Math.floor(player.ink) + '/' + player.maxInk, W - 184, H - 92);
-  setSeed(16700); jrect(W - 184, H - 85, 160, 7, INK, 1.2);
-  const ir = Math.max(0, player.ink / player.maxInk);
-  if (ir > 0) { ctx.save(); ctx.beginPath(); ctx.rect(W - 183, H - 84, 158 * ir, 5); ctx.clip(); scribbleFill(W - 183, H - 84, 158 * ir, 5, INK); ctx.restore(); }
-  ctx.fillStyle = player.special >= 100 ? INK : DARK; ctx.font = 'bold 10px ' + FONT;
-  ctx.fillText('墨潮 ' + Math.floor(player.special) + '%' + (player.special >= 100 ? ' · 可蓄力' : ''), W - 184, H - 64);
-  setSeed(16710); jrect(W - 184, H - 57, 160, 6, player.special >= 100 ? INK : GRAY, 1.1);
-  const sr = player.special / 100;
-  if (sr > 0) { ctx.save(); ctx.beginPath(); ctx.rect(W - 183, H - 56, 158 * sr, 4); ctx.clip(); scribbleFill(W - 183, H - 56, 158 * sr, 4, INK); ctx.restore(); }
-  ctx.fillStyle = DARK; ctx.font = '9px ' + FONT;
-  ctx.fillText('E 吸墨弹反 · 空格潜墨', W - 184, H - 38);
-  ctx.fillText('灰墨：减速受伤 · 彩墨阻怪', W - 184, H - 22);
+  ctx.restore();
   ctx.textAlign = 'center';
   toasts.forEach((ts, i) => {
     ctx.globalAlpha = Math.min(1, ts.t);
     ctx.fillStyle = DARK; ctx.font = 'bold 13px ' + FONT;
-    ctx.fillText(ts.txt, W / 2, H - 236 - i * 20);
+    ctx.fillText(ts.txt, W / 2, H - 278 - i * 20);
     ctx.globalAlpha = 1;
   });
   setSeed(16800);
@@ -3677,14 +3760,14 @@ function drawHUD() {
   ctx.fillStyle = absorbReady ? INK : GRAY; ctx.font = 'bold 13px ' + FONT;
   ctx.fillText(player.absorbT > 0 ? '吸墨中' : '吸墨', absorbRect.x + absorbRect.w / 2, absorbRect.y + 18);
   ctx.font = '8px ' + FONT;
-  ctx.fillText(absorbReady ? '弹反 · E' : player.absorbCd.toFixed(1) + ' 秒', absorbRect.x + absorbRect.w / 2, absorbRect.y + 33);
+  ctx.fillText(absorbReady ? '弹反' : player.absorbCd.toFixed(1) + ' 秒', absorbRect.x + absorbRect.w / 2, absorbRect.y + 33);
   ctx.fillStyle = player.surgeCharging ? 'rgba(190,215,250,0.96)' : (player.special >= 100 ? 'rgba(210,225,255,0.96)' : 'rgba(255,250,238,0.94)');
   ctx.fillRect(specialRect.x, specialRect.y, specialRect.w, specialRect.h);
   jrect(specialRect.x, specialRect.y, specialRect.w, specialRect.h, player.special >= 100 ? INK : GRAY, player.surgeCharging ? 3 : 2.2);
   ctx.fillStyle = player.special >= 100 ? INK : GRAY; ctx.font = 'bold 14px ' + FONT;
   ctx.fillText(player.surgeCharging ? '蓄力中' : '墨潮', specialRect.x + specialRect.w / 2, specialRect.y + 18);
   ctx.font = '9px ' + FONT;
-  ctx.fillText(player.surgeCharging ? Math.round(inkSurgeChargeRatio() * 100) + '% · 松开' : (player.special >= 100 ? '长按 · Q' : Math.floor(player.special) + '%'), specialRect.x + specialRect.w / 2, specialRect.y + 33);
+  ctx.fillText(player.surgeCharging ? Math.round(inkSurgeChargeRatio() * 100) + '% · 松开' : (player.special >= 100 ? '长按' : Math.floor(player.special) + '%'), specialRect.x + specialRect.w / 2, specialRect.y + 33);
   const canDive = player.ink > 0 && player.diveCd <= 0;
   ctx.fillStyle = player.diving ? 'rgba(210,225,255,0.96)' : 'rgba(255,250,238,0.94)';
   ctx.fillRect(diveRect.x, diveRect.y, diveRect.w, diveRect.h);
@@ -3692,7 +3775,7 @@ function drawHUD() {
   ctx.fillStyle = player.diving || canDive ? INK : GRAY; ctx.font = 'bold 13px ' + FONT;
   ctx.fillText(player.diving ? '潜墨中' : '潜墨', diveRect.x + diveRect.w / 2, diveRect.y + 18);
   ctx.font = '8px ' + FONT;
-  ctx.fillText(player.diving ? '无敌 · ' + diveInkCost() + '/秒' : (player.diveCd > 0 ? player.diveCd.toFixed(1) + ' 秒' : '位移 · 空格'), diveRect.x + diveRect.w / 2, diveRect.y + 33);
+  ctx.fillText(player.diving ? '无敌 · ' + diveInkCost() + '/秒' : (player.diveCd > 0 ? player.diveCd.toFixed(1) + ' 秒' : '位移'), diveRect.x + diveRect.w / 2, diveRect.y + 33);
   // 固定左下摇杆始终可见，让玩家明确左手移动、右手技能的分区
   const jx = joy.active ? joy.bx : JOY_HOME.x, jy = joy.active ? joy.by : JOY_HOME.y;
   ctx.globalAlpha = joy.active ? 0.48 : 0.24;
@@ -3709,8 +3792,9 @@ function drawCards(title) {
   ctx.fillStyle = 'rgba(245,241,230,0.2)';
   ctx.fillRect(0, 0, W, H);
   setSeed(777);
+  const titleY = cardRects.length ? Math.min(100, cardRects[0].y - 22) : 100;
   ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.font = 'bold 22px ' + FONT;
-  ctx.fillText(title, W / 2, 100);
+  ctx.fillText(title, W / 2, titleY);
   cards.forEach((cd, i) => {
     const r = cardRects[i];
     setSeed(1000 + i);
@@ -3722,8 +3806,9 @@ function drawCards(title) {
     ctx.fillText(cd.tag, r.x + 16, r.y + 20);
     ctx.fillStyle = INK; ctx.font = 'bold 16px ' + FONT;
     ctx.fillText(cd.name, r.x + 16, r.y + 42);
-    ctx.fillStyle = DARK; ctx.font = '13px ' + FONT;
-    ctx.fillText(cd.desc, r.x + 16, r.y + 62);
+    ctx.fillStyle = DARK; ctx.font = '12px ' + FONT;
+    const lines = cd.descLines || wrapCardDescription(cd.desc, r.w - 32);
+    lines.forEach((line, row) => ctx.fillText(line, r.x + 16, r.y + 58 + row * 15));
     ctx.fillStyle = GRAY; ctx.font = '11px ' + FONT;
     ctx.fillText('点按选择  [按 ' + (i + 1) + ']', r.x + 16, r.y + r.h - 10);
   });

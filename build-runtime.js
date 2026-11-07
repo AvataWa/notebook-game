@@ -386,9 +386,8 @@
       ctx.fillStyle = color; ctx.font = 'bold 13px ' + FONT; ctx.textAlign = 'center'; ctx.fillText(label, rect.x + rect.w / 2, rect.y + 29);
     }
   }
-  render = function() {
-    baseRender();
-    ctx.save(); ctx.setTransform(viewScale, 0, 0, viewScale, 0, 0); ctx.scale(ZOOM, ZOOM); ctx.translate(-camX, -camY);
+  // 主渲染在恢复屏幕坐标前调用：掉落框属于世界层，不再覆盖 HUD 和卡片
+  window.__drawWorldExtras = function() {
     for (const dr of drops) {
       const rarity = RARITY_LIST[rarityIndex(dr)], bobY = dr.y + Math.sin(dr.bob) * 3;
       ctx.globalAlpha = 0.25; ctx.fillStyle = rarity.color; ctx.fillRect(dr.x - 10, bobY - 10, 20, 20); ctx.globalAlpha = 1;
@@ -399,15 +398,12 @@
       ctx.globalAlpha = Math.min(0.65, d.t); drawStick(d.x, d.y, 27, 0, inkFriendlyColor);
       jcircle(d.x, d.y, 22 + Math.sin(d.t * 8) * 3, inkFriendlyColor, 1.2); ctx.globalAlpha = 1;
     }
-    ctx.restore();
-    SLOTS.forEach((s, i) => {
-      const eq = player.equip[s]; if (!eq) return;
-      const y = H - 103 + i * 14;
-      ctx.fillStyle = 'rgba(255,250,238,0.9)'; ctx.fillRect(12, y, 151, 13);
-      ctx.fillStyle = RARITY_LIST[rarityIndex(eq)].color; ctx.textAlign = 'left'; ctx.font = 'bold 10px ' + FONT;
-      ctx.fillText('[' + SLOT_NAME[s] + ']' + RARITY_LIST[rarityIndex(eq)].name + '·' + ITEM_DEFS[eq.key].name, 16, y + 10);
-    });
+  };
+  render = function() {
+    baseRender();
     if (state === 'levelup' && hasItem('rerollnote')) {
+      const lastCard = cardRects[cardRects.length - 1];
+      rerollRect.y = Math.min(H - 45, (lastCard ? lastCard.y + lastCard.h : 532) + 12);
       ctx.fillStyle = 'rgba(255,250,238,0.9)'; ctx.fillRect(rerollRect.x, rerollRect.y, rerollRect.w, rerollRect.h);
       jrect(rerollRect.x, rerollRect.y, rerollRect.w, rerollRect.h, player.itemRerolls > 0 ? INK : GRAY, 2);
       ctx.fillStyle = player.itemRerolls > 0 ? INK : GRAY; ctx.textAlign = 'center'; ctx.font = 'bold 12px ' + FONT;

@@ -57,34 +57,34 @@ test('墨潮释放后清零，且自身铺墨不会重新充能', () => {
 test('墨潮圆周内部完整填充，一次覆盖范围内灰墨', () => {
   fresh(); G.addInkStain(60, 60, 200, 30, '#70645e', true, false); G.addInkStain(300, 0, 200, 30, '#70645e', true, false);
   G.player.special = 100; G.castInkSurge();
-  for (let y = -200; y <= 200; y += 20) for (let x = -200; x <= 200; x += 20) {
-    if (Math.hypot(x, y) <= 200) assert(G.inkCellAt(x, y).owner === 1, '墨潮内部空洞或灰墨残留：' + x + ',' + y);
+  for (let y = -140; y <= 140; y += 20) for (let x = -140; x <= 140; x += 20) {
+    if (Math.hypot(x, y) <= 140) assert(G.inkCellAt(x, y).owner === 1, '墨潮内部空洞或灰墨残留：' + x + ',' + y);
   }
   assert(G.inkCellAt(60, 60).owner === 1 && G.inkCellAt(60, 60).amount === 1, '灰墨未被一次覆盖');
   assert(G.inkCellAt(300, 0).owner === 2 && G.inkCellAt(300, 0).amount === 1, '范围外灰墨被误清');
   assert(G.inkCellAt(250, 0).owner === 0, '墨潮超出设定半径');
 });
-test('墨潮按下只蓄力，快速松开释放 144 像素最小范围', () => {
+test('墨潮按下只蓄力，快速松开释放 100.8 像素最小范围', () => {
   fresh(); G.player.special = 100;
   assert(G.startInkSurgeCharge(), '满墨潮无法开始蓄力');
   assert(G.player.surgeCharging && G.player.special === 100 && G.novas.length === 0, '按下时提前消耗或释放墨潮');
   assert(G.releaseInkSurgeCharge(), '松开时没有释放墨潮');
-  assert(near(G.novas[0].max, 144) && G.player.special === 0 && !G.player.surgeCharging, '最小范围或释放结算错误');
+  assert(near(G.novas[0].max, 100.8) && G.player.special === 0 && !G.player.surgeCharging, '最小范围或释放结算错误');
 });
-test('墨潮蓄力随时间扩大，0.6 秒为 216，1.2 秒封顶 288', () => {
+test('墨潮蓄力随时间扩大，0.6 秒为 151.2，1.2 秒封顶 201.6', () => {
   fresh(); G.player.special = 100; G.startInkSurgeCharge();
   G.updateInkSurgeCharge(0.6);
-  assert(near(G.inkSurgeChargeRadius(), 216), '半蓄力范围不是基准的 90%');
+  assert(near(G.inkSurgeChargeRadius(), 151.2), '半蓄力范围不是基准的 90%');
   G.updateInkSurgeCharge(10);
-  assert(near(G.inkSurgeChargeRadius(), 288) && near(G.player.surgeChargeT, 1.2), '最大范围或蓄力时间封顶错误');
-  G.releaseInkSurgeCharge(); assert(near(G.novas[0].max, 288), '实际释放没有使用最大范围');
+  assert(near(G.inkSurgeChargeRadius(), 201.6) && near(G.player.surgeChargeT, 1.2), '最大范围或蓄力时间封顶错误');
+  G.releaseInkSurgeCharge(); assert(near(G.novas[0].max, 201.6), '实际释放没有使用最大范围');
 });
 test('潜潮连笔允许潜墨蓄力和释放墨潮，全程不被打断', () => {
   fresh(); G.player.affixes.dive.divecast = true; G.player.special = 100; assert(G.toggleDive(), '无法进入潜墨');
   G.startInkSurgeCharge(7); G.updateInkSurgeCharge(0.6); G.updatePlayerInk(0.6);
   assert(G.player.diving && G.player.surgeCharging && near(G.player.ink, 78.4), '蓄力打断潜墨或影响正常耗墨');
   G.releaseInkSurgeCharge(7);
-  assert(G.player.diving && near(G.novas[0].max, 216), '释放墨潮打断潜潮或范围错误');
+  assert(G.player.diving && near(G.novas[0].max, 151.2), '释放墨潮打断潜潮或范围错误');
 });
 test('错误触点不能释放，取消蓄力不消耗墨潮', () => {
   fresh(); G.player.special = 100; G.startInkSurgeCharge(4); G.updateInkSurgeCharge(0.6);

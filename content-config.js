@@ -59,7 +59,7 @@ const OPERATION_AFFIXES = [
   { skill: 'absorb', id: 'fastabsorb', name: '快吸', desc: '吸墨冷却 -20%' },
   { skill: 'absorb', id: 'perfect', name: '完美窗口', desc: '吸墨前 0.12 秒弹反成功的墨潮充能翻倍' },
   { skill: 'absorb', id: 'deepslow', name: '静场', desc: '弹反慢放倍率由 0.15 降至 0.07' },
-  { skill: 'absorb', id: 'parrycooldown', name: '连反', desc: '每次弹反成功减少吸墨冷却 0.25 秒' },
+  { skill: 'absorb', id: 'parrycooldown', name: '连反', desc: '弹反成功额外获得 4% 墨潮充能' },
   { skill: 'absorb', id: 'gaincap', name: '墨囊扩容', desc: '单次吸墨回墨上限由 12 提升至 20' },
   { skill: 'absorb', id: 'reflectdamage', name: '倍返', desc: '返还子弹伤害 +45%' },
   { skill: 'absorb', id: 'reflectsplit', name: '散返', desc: '返还子弹分裂为 3 颗，每颗造成 55% 伤害' },

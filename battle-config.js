@@ -59,10 +59,10 @@ const BATTLE_CONFIG = {
   },
 
   surge: {
-    radius: 240,            // 墨潮基准半径
+    radius: 168,            // 墨潮基准半径（原 240，整体缩小 30%）
     chargeTime: 1.2,        // 从最小到最大范围的蓄力时间
-    minScale: 0.6,          // 点按快速松开：144 像素
-    maxScale: 1.2,          // 蓄满：288 像素
+    minScale: 0.6,          // 点按快速松开：100.8 像素
+    maxScale: 1.2,          // 蓄满：201.6 像素
     damage: 55,             // 墨潮基础伤害（蓄力只改变范围）
     visual: 0.35            // 墨潮扩散动画时间
   },

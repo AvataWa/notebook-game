@@ -100,7 +100,8 @@ test('吸墨将敌弹转为飞向发射者的己方高伤返还弹', () => {
   assert(near(G.hitStop, 0.3) && G.novas.length === 0, '子弹弹反慢放错误或误放小墨潮');
   G.hurtPlayer(20);
   assert(G.player.hp === hp, '弹反慢放期间仍受到其他伤害');
-  assert(G.floats.some(f => f.txt === '返还！'), '缺少返还反馈');
+  assert(G.floats.some(f => f.txt === '弹反！'), '缺少弹反反馈');
+  assert(G.floats.every(f => f.txt === '弹反！' || /^\d+!?$/.test(f.txt)), '弹反出现了额外资源或墨潮跳字');
 });
 test('吸墨反弹挥击伤害并僵直攻击者，玩家不受伤', () => {
   fresh(); G.player.ink = 50; G.player.special = 37;
@@ -110,10 +111,11 @@ test('吸墨反弹挥击伤害并僵直攻击者，玩家不受伤', () => {
   assert(G.player.hp === hp, '成功反弹后玩家仍受伤');
   assert(near(ehp - e.hp, e.dmg * 1.5 + 27.5), '挥击反伤与小墨潮总伤害错误');
   assert(e.stunT >= 0.49 && e.swingT === 0, '反弹没有打断挥击或僵直');
-  assert(near(G.player.ink, 58) && G.floats.some(f => f.txt === '反弹！'), '挥击返墨或反馈错误');
+  assert(near(G.player.ink, 58) && G.floats.some(f => f.txt === '弹反！'), '挥击返墨或反馈错误');
   assert(near(G.hitStop, 0.3), '近战弹反没有触发 0.3 秒慢放');
   assert(G.novas.length === 1 && near(G.novas[0].max, 120), '小墨潮数量或半径错误');
   assert(near(G.player.special, 57), '近战弹反没有充能 20%，或小墨潮错误改变了充能');
+  assert(G.floats.every(f => f.txt === '弹反！' || /^\d+!?$/.test(f.txt)), '近战弹反出现了小墨潮或具体回墨跳字：' + JSON.stringify(G.floats.map(f => f.txt)));
 });
 test('近战攻击圈与弹反圈相交即可弹反，不要求角色中心进入攻击圈', () => {
   fresh(); const e = enemy('stick', 90, 0); e.hp = e.maxhp = 500;
@@ -158,7 +160,7 @@ test('已造成伤害的挥击不能补报弹反成功', () => {
   const hitHp = G.player.hp;
   G.castAbsorb(); G.updateMeleeSwing(e, 0.02);
   assert(e.hp === ehp && e.swingT > 0 && G.player.hp === hitHp, '已命中挥击被补报为弹反');
-  assert(!G.floats.some(f => f.txt === '反弹！'), '已命中挥击仍出现弹反成功反馈');
+  assert(!G.floats.some(f => f.txt === '弹反！'), '已命中挥击仍出现弹反成功反馈');
 });
 test('单次吸墨的子弹返墨最多为 12', () => {
   fresh(); G.player.ink = 50; const e = enemy('pencilthrower', 100, 0); G.castAbsorb();
@@ -174,7 +176,7 @@ test('Boss 近身碰撞可以被弹反，玩家不掉血且 Boss 受反伤', () 
   const hp = G.player.hp, ehp = e.hp;
   G.castAbsorb(); G.update(0);
   assert(G.player.hp === hp && e.hp < ehp, 'Boss 近身碰撞未弹反或仍造成伤害');
-  assert(e.stunT > 0 && G.floats.some(f => f.txt === '反弹！'), 'Boss 弹反缺少僵直或成功反馈');
+  assert(e.stunT > 0 && G.floats.some(f => f.txt === '弹反！'), 'Boss 弹反缺少僵直或成功反馈');
 });
 test('Boss 陨石可以被弹反，危险区消失且玩家不掉血', () => {
   fresh(); G.player.xpNext = 999; G.spawnBoss(4);
@@ -184,7 +186,7 @@ test('Boss 陨石可以被弹反，危险区消失且玩家不掉血', () => {
   G.hazards.push({ kind: 'meteor', x: G.player.x, y: G.player.y, r: 46, delay: 0, dmg: 20, t: 0.35, done: false, sourceId: e.id });
   G.castAbsorb(); G.update(0);
   assert(G.hazards.length === 0 && G.player.hp === hp && e.hp < ehp, 'Boss 陨石未弹反、危险区未移除或玩家仍受伤');
-  assert(G.floats.some(f => f.txt === '反弹！'), 'Boss 陨石弹反缺少成功反馈');
+  assert(G.floats.some(f => f.txt === '弹反！'), 'Boss 陨石弹反缺少成功反馈');
 });
 test('弹反慢放按 0.15 倍速推进，结束后恢复正常速度', () => {
   fresh(); G.hitStop = 0.3; G.last = 1000; G.loop(1016);
@@ -206,5 +208,18 @@ test('受击保护结束后才允许再次扣血', () => {
   G.update(0.06); G.hurtPlayer(20);
   assert(G.player.hp === hp - 32, '保护结束后没有恢复伤害结算');
 });
-console.log(failed ? 'PARRY_TEST_FAILURES: ' + failed : 'PARRY_TEST_OK (22/22)');
+test('子弹与近战弹反成功都会立即刷新吸墨冷却', () => {
+  fresh(); const shooter = enemy('pencilthrower', 100, 0);
+  const eb = { x: 0, y: 0, vx: -100, vy: 0, dmg: 10, life: 2, sourceId: shooter.id, reflectable: true };
+  G.castAbsorb(); assert(G.player.absorbCd > 0, '测试前吸墨没有进入冷却');
+  assert(G.reflectEnemyBullet(eb), '子弹弹反未成功');
+  assert(near(G.player.absorbCd, 0) && G.castAbsorb(), '子弹弹反后吸墨没有立即就绪');
+
+  fresh(); const melee = enemy('stick', 30, 0); melee.hp = melee.maxhp = 500;
+  melee.swingT = 0.13; melee.swingHit = false;
+  G.castAbsorb(); G.updateMeleeSwing(melee, 0.02);
+  assert(melee.swingT === 0, '近战弹反未成功');
+  assert(near(G.player.absorbCd, 0) && G.castAbsorb(), '近战弹反后吸墨没有立即就绪');
+});
+console.log(failed ? 'PARRY_TEST_FAILURES: ' + failed : 'PARRY_TEST_OK (23/23)');
 process.exit(failed ? 1 : 0);

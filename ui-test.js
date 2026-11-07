@@ -1,7 +1,15 @@
 // 升级延迟与左右手触控布局回归
 const src = require('fs').readFileSync(__dirname + '/enemy-config.js', 'utf8') + '\n' + require('fs').readFileSync(__dirname + '/main.js', 'utf8').replace("'use strict';", '');
 const handlers = {};
-const fakeCtx = new Proxy({}, { get(t, k) { if (k === 'measureText') return () => ({ width: 10 }); return () => {}; }, set() { return true; } });
+const drawTexts = [], drawRects = [], drawArcs = [];
+const fakeCtx = new Proxy({}, { get(t, k) {
+  if (k in t) return t[k];
+  if (k === 'measureText') return text => ({ width: String(text).length * 10 });
+  if (k === 'fillText') return (txt, x, y) => { drawTexts.push({ txt: String(txt), x, y, shadowBlur: t.shadowBlur || 0 }); };
+  if (k === 'fillRect') return (x, y, w, h) => { drawRects.push({ x, y, w, h, color: t.fillStyle }); };
+  if (k === 'arc') return (x, y, r, start, end) => { drawArcs.push({ x, y, r, start, end, color: t.strokeStyle, width: t.lineWidth }); };
+  return () => {};
+}, set(t, k, v) { t[k] = v; return true; } });
 const fakeCanvas = {
   getContext: () => fakeCtx, width: 0, height: 0, style: {},
   addEventListener(type, fn) { handlers[type] = fn; },
@@ -11,8 +19,10 @@ global.window = { addEventListener() {}, devicePixelRatio: 1, innerWidth: 375, i
 global.document = { getElementById: () => fakeCanvas }; global.requestAnimationFrame = () => {};
 eval(src + `
 ;globalThis.G = {
-  resetGame, applyOption, update, render,
+  resetGame, applyOption, update, render, floatPopScale, drawPlayerResources,
+  layoutCards, drawCards, drawCoreDamageZone, drawOuterSurgeDamageZone,
   get state() { return state; }, get player() { return player; }, get cards() { return cards; },
+  get cardRects() { return cardRects; }, get erupts() { return erupts; }, get novas() { return novas; },
   get joy() { return joy; }, get levelupDelay() { return levelupDelayT; },
   get joyHome() { return JOY_HOME; }, get absorbRect() { return absorbRect; },
   get diveRect() { return diveRect; }, get specialRect() { return specialRect; },
@@ -94,5 +104,71 @@ test('左手保持摇杆时右手长按墨潮，松开技能不影响移动触�
   assert(G.joy.active && G.joy.dx > 0 && !G.player.surgeCharging && G.player.special === 0, '松开墨潮影响摇杆或未释放技能');
   pointer('pointerup', 1, home.x + 35, home.y);
 });
-console.log(failed ? 'UI_TEST_FAILURES: ' + failed : 'UI_TEST_OK (8/8)');
+test('伤害跳字出现瞬间为 2 倍，随后回落并稳定为 1.5 倍', () => {
+  const f = { t: 0.8 };
+  assert(G.floatPopScale(f) === 2, '跳字首帧没有放大到 2 倍');
+  f.t = f.maxT - 0.06;
+  assert(Math.abs(G.floatPopScale(f) - 1.625) < 1e-8, '跳字回缩曲线错误');
+  f.t = 0;
+  assert(G.floatPopScale(f) === 1.5, '跳字稳定尺寸不是 1.5 倍');
+});
+test('触屏按钮不显示快捷键，下移后装备紧跟技能列表', () => {
+  fresh(); G.player.special = 100; drawTexts.length = 0; drawRects.length = 0; G.render();
+  const texts = drawTexts.map(t => t.txt);
+  for (const label of ['弹反', '长按', '位移']) assert(texts.includes(label), '按钮缺少文字：' + label);
+  for (const forbidden of ['弹反 · E', '长按 · Q', '位移 · 空格', 'E 吸墨弹反 · 空格潜墨']) {
+    assert(!texts.includes(forbidden), '按钮仍显示快捷键：' + forbidden);
+  }
+  assert(!texts.some(t => t.startsWith('墨水 ') || /^墨潮 \d/.test(t)), '右下角仍重复显示资源信息');
+  assert(G.absorbRect.y === 510 && G.specialRect.y === 510 && G.diveRect.y === 446, '三个按钮没有按新布局下移');
+  const skills = drawTexts.filter(t => t.x === 16 && t.y === 70);
+  const equipment = drawTexts.filter(t => t.x === 16 && t.txt.startsWith('['));
+  assert(skills.length > 0 && equipment.length > 0 && equipment[0].y > skills[skills.length - 1].y, '装备信息没有紧跟技能列表');
+  assert(!drawRects.some(r => r.x === 10 && r.y === 58), '技能和装备仍有白色背景板');
+  assert([...skills, ...equipment].every(t => t.shadowBlur === 4), '技能和装备文字缺少浅色阴影');
+});
+test('角色血量与墨量使用整圆三分之一的细圆弧，并按比例绘制', () => {
+  fresh(); G.player.x = 12; G.player.y = 34;
+  G.player.hp = 50; G.player.maxhp = 100; G.player.ink = 25; G.player.maxInk = 100;
+  drawArcs.length = 0; G.drawPlayerResources();
+  assert(drawArcs.length === 4, '双资源圆弧及其底色数量错误');
+  assert(drawArcs.every(a => a.x === 12 && a.y === 38 && Math.abs(a.start - Math.PI / 6) < 1e-8 && a.end <= Math.PI * 5 / 6 && a.width <= 2.8), '120° 圆弧位置、方向或线宽错误');
+  const hp = drawArcs.find(a => a.color === '#c0392b'), ink = drawArcs.find(a => a.color === '#1a2b8f');
+  assert(hp && hp.r === 28 && hp.width === 1.6 && Math.abs(hp.end - Math.PI / 2) < 1e-8, '50% 血量圆弧终点错误');
+  assert(ink && ink.r === 23 && ink.width === 1.4 && Math.abs(ink.end - Math.PI / 3) < 1e-8, '25% 墨量圆弧终点错误');
+});
+test('三选一长描述按实际宽度换行，卡片加高且文字不压选择提示', () => {
+  fresh(); G.cards.length = 0;
+  G.cards.push(
+    { tag: '[辅助]', tagColor: '#6c4da1', name: '长描述测试', desc: '这是一段用于验证自动换行的超长词条描述，必须在卡片内部完整显示并且不能超出边界或遮挡选择提示。' },
+    { tag: '[被动]', tagColor: '#333', name: '普通词条', desc: '普通长度描述' },
+    { tag: '[主动]', tagColor: '#1a2b8f', name: '另一个词条', desc: '另一个普通描述' }
+  );
+  G.layoutCards(3); drawTexts.length = 0; G.drawCards('测试');
+  const r = G.cardRects[0], lines = G.cards[0].descLines;
+  assert(lines.length > 1 && r.h > 92, '长描述没有换行或卡片没有加高');
+  assert(lines.every(line => line.length * 10 <= r.w - 32), '换行后的描述仍超出卡片宽度');
+  const lastY = r.y + 58 + (lines.length - 1) * 15;
+  assert(lastY <= r.y + r.h - 25, '描述末行压到卡片底部选择提示');
+  assert(!drawTexts.some(t => t.txt === G.cards[0].desc), '绘制时仍把长描述作为单行输出');
+  lines.forEach(line => assert(drawTexts.some(t => t.txt === line && t.x === r.x + 16), '换行文本没有实际绘制：' + line));
+});
+test('圆心与墨潮外圈增伤标注严格对应 50% 和 70% 半径', () => {
+  fresh(); drawArcs.length = 0; drawTexts.length = 0;
+  G.drawCoreDamageZone(12, 34, 80, { core: 0.3, col: '#1a2b8f' });
+  assert(drawArcs.some(a => a.x === 12 && a.y === 34 && a.r === 40), '圆心增伤内圈不是区域半径的 50%');
+  assert(drawTexts.some(t => t.txt === '圆心增伤 +30%'), '缺少圆心增伤数值标注');
+  G.drawOuterSurgeDamageZone(12, 34, 100);
+  assert(drawArcs.some(a => a.x === 12 && a.y === 34 && a.r === 70), '墨潮外圈内边界不是半径的 70%');
+  assert(drawTexts.some(t => t.txt === '外圈增伤 +50%'), '缺少墨潮外圈增伤标注');
+});
+test('区域技能与墨潮新星在实际渲染中调用增伤范围标注', () => {
+  fresh();
+  G.erupts.push({ x: 12, y: 34, r: 80, c: { core: 0.3, col: '#1a2b8f' }, done: false, delay: 0, t: 0 });
+  G.novas.push({ x: 12, y: 34, t: 0.35, max: 100, col: '#1a2b8f', outerDamage: true });
+  drawArcs.length = 0; drawTexts.length = 0; G.render();
+  assert(drawArcs.some(a => a.r === 40) && drawArcs.some(a => a.r === 70), '实际战斗渲染缺少增伤边界');
+  assert(drawTexts.some(t => t.txt === '圆心增伤 +30%') && drawTexts.some(t => t.txt === '外圈增伤 +50%'), '实际战斗渲染缺少增伤文字');
+});
+console.log(failed ? 'UI_TEST_FAILURES: ' + failed : 'UI_TEST_OK (14/14)');
 process.exit(failed ? 1 : 0);

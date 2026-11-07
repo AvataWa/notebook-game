@@ -26,7 +26,7 @@ test('非轨迹夺地按覆盖面积返墨，大片夺地单次封顶 4', () => 
   fresh(); G.addHostileInk(0, 0, 30, 8, 101); G.addInkStain(0, 0, 30, 8, '#1a2b8f', false, false);
   const smallGain = G.player.ink - 50;
   assert(smallGain > 0 && smallGain < 4, '小片夺地没有按面积返墨：' + smallGain);
-  assert(G.floats.some(f => f.txt.startsWith('夺地 +') && f.txt.endsWith('墨')), '夺地返墨缺少反馈跳字');
+  assert(!G.floats.some(f => f.txt.startsWith('夺地 +')), '夺地返墨仍显示具体数字跳字');
   fresh(); G.addHostileInk(0, 0, 30, 60, 102); G.addInkStain(0, 0, 30, 60, '#1a2b8f', false, false);
   assert(near(G.player.ink, 54), '大片夺地未封顶 4：' + (G.player.ink - 50));
   G.ink = 99.9; G.addHostileInk(100, 0, 30, 8, 103); G.addInkStain(100, 0, 30, 8, '#1a2b8f', false, false);
@@ -53,7 +53,7 @@ test('失源截墨成功返墨，大面积转化单次封顶 12', () => {
   fresh(); G.spawnEnemy('stick', 0, 0); const e = G.enemies[0]; cutLine(e, 600);
   G.time = 1.01; G.updateInkTactics();
   assert(near(G.player.ink, 62), '截墨没有返墨或未封顶 12：' + (G.player.ink - 50));
-  assert(G.floats.some(f => f.txt === '截墨 +12.0墨'), '截墨返墨反馈数值错误');
+  assert(!G.floats.some(f => f.txt.startsWith('截墨 +')), '截墨返墨仍显示具体数字跳字');
   fresh(); G.spawnEnemy('stick', 0, 0); const full = G.enemies[0]; G.ink = 100; cutLine(full, 160);
   G.time = 1.01; G.updateInkTactics();
   assert(near(G.player.ink, 100) && G.floats.some(f => f.txt === '截墨！'), '满墨截墨未保留原反馈');
