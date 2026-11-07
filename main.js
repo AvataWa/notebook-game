@@ -44,16 +44,26 @@ const BATTLE = typeof BATTLE_CONFIG !== 'undefined' ? BATTLE_CONFIG : {
 const SQUASH_T = BATTLE.feedback.squash, KNOCK_V = BATTLE.feedback.knockback;
 
 const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
-let viewScale = 1;
+let ctx = canvas.getContext('2d');
+let viewScale = 1, renderQuality = 0;
+const perfStats = { frameMs: 16.7, dpr: 1, cacheHits: 0, quality: 0 };
+function renderDprCap() {
+  const mobile = window.innerWidth <= 600 || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  return (mobile ? [1.5, 1.25, 1] : [2, 1.5, 1])[renderQuality];
+}
 function resize() {
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = Math.min(window.devicePixelRatio || 1, renderDprCap());
   const s = Math.min(window.innerWidth / W, window.innerHeight / H);
-  viewScale = s * dpr;
+  viewScale = s * dpr; perfStats.dpr = dpr;
   canvas.width = Math.round(W * viewScale);
   canvas.height = Math.round(H * viewScale);
   canvas.style.width = (W * s) + 'px';
   canvas.style.height = (H * s) + 'px';
+}
+function setRenderQuality(level) {
+  const next = Math.max(0, Math.min(2, level));
+  if (next === renderQuality) return;
+  renderQuality = next; perfStats.quality = next; resize();
 }
 window.addEventListener('resize', resize);
 resize();
@@ -3007,7 +3017,7 @@ function drawBoss(e, c) {
     jcircle(x, y, r + 7, RED, 1.5);
   }
 }
-function drawEnemy(e) {
+function drawEnemyFull(e) {
   setSeed(e.id);
   const c = e.flash > 0 ? FLASH : DARK;
   const p = 1 - e.squash / SQUASH_T;
@@ -3163,6 +3173,47 @@ function drawEnemy(e) {
   ctx.restore();
   // 攻击圈不参与怪物受击压扁，始终与固定圆形判定一致
   drawMeleeTelegraph(e);
+}
+
+/* 普通怪缓存：只简化远处绘制，攻击圈仍每帧按真实判定单独绘制 */
+const ENEMY_SPRITE_SIZE = 112, enemySpriteCache = new Map();
+function shouldUseEnemySprite(e) {
+  if (typeof document.createElement !== 'function' || (!renderQuality && enemies.length <= 70)) return false;
+  if (e.boss || e.elite || e.shade || e.flash > 0 || e.squash > 0 || e.ink > 0 || e.dotT > 0 || e.shotWindup > 0) return false;
+  return (e.x - player.x) ** 2 + (e.y - player.y) ** 2 > 180 * 180;
+}
+function getEnemySprite(e) {
+  const frame = ((Math.floor(e.walk / (Math.PI / 2)) % 4) + 4) % 4;
+  const key = e.type + ':' + frame;
+  if (enemySpriteCache.has(key)) return enemySpriteCache.get(key);
+  const layer = document.createElement('canvas'), scale = 2;
+  layer.width = layer.height = ENEMY_SPRITE_SIZE * scale;
+  const layerCtx = layer.getContext('2d');
+  if (!layerCtx) return null;
+  layerCtx.setTransform(scale, 0, 0, scale, 0, 0);
+  let stableId = 0; for (let i = 0; i < e.type.length; i++) stableId = (stableId * 31 + e.type.charCodeAt(i)) | 0;
+  const fake = Object.assign({}, e, {
+    id: stableId, x: ENEMY_SPRITE_SIZE / 2, y: ENEMY_SPRITE_SIZE / 2, walk: frame * Math.PI / 2,
+    flash: 0, squash: 0, elite: false, shade: false, ink: 0, dotT: 0, shotWindup: 0, swingT: 0
+  });
+  const mainCtx = ctx, mainBoil = boilT, mainSeed = _seed;
+  try {
+    ctx = layerCtx; boilT = 0; drawEnemyFull(fake);
+  } finally {
+    ctx = mainCtx; boilT = mainBoil; _seed = mainSeed;
+  }
+  enemySpriteCache.set(key, layer);
+  return layer;
+}
+function drawEnemy(e) {
+  if (shouldUseEnemySprite(e)) {
+    const sprite = getEnemySprite(e);
+    if (sprite) {
+      ctx.drawImage(sprite, e.x - ENEMY_SPRITE_SIZE / 2, e.y - ENEMY_SPRITE_SIZE / 2, ENEMY_SPRITE_SIZE, ENEMY_SPRITE_SIZE);
+      perfStats.cacheHits++; drawMeleeTelegraph(e); return;
+    }
+  }
+  drawEnemyFull(e);
 }
 
 function drawMeleeTelegraph(e) {
@@ -3694,20 +3745,38 @@ function drawEnd(win) {
   ctx.fillText('点按任意处重开一局', W / 2, 400);
 }
 
-/* ---------- 主循环 ---------- */
-let last = 0;
+/* ---------- 主循环与自动画质：只降低渲染成本，逻辑始终逐帧更新 ---------- */
+let last = 0, qualityBadT = 0, qualityGoodT = 0, renderFrame = 0;
+function updateAdaptiveQuality(rawDt) {
+  const ms = Math.min(100, rawDt * 1000);
+  perfStats.frameMs += (ms - perfStats.frameMs) * 0.08;
+  if (state !== 'play') return;
+  if (perfStats.frameMs > 24 && enemies.length >= 45) qualityBadT += rawDt;
+  else qualityBadT = Math.max(0, qualityBadT - rawDt * 2);
+  if (qualityBadT >= 1.2 && renderQuality < 2) {
+    setRenderQuality(renderQuality + 1); qualityBadT = 0; qualityGoodT = 0;
+  }
+  // 怪物仍然很多时不自动升档，避免低画质与卡顿之间反复跳变
+  if (perfStats.frameMs < 18 && enemies.length < 35) qualityGoodT += rawDt;
+  else qualityGoodT = 0;
+  if (qualityGoodT >= 6 && renderQuality > 0) {
+    setRenderQuality(renderQuality - 1); qualityGoodT = 0; qualityBadT = 0;
+  }
+}
 function loop(now) {
   requestAnimationFrame(loop);
-  const dt = Math.min(0.05, (now - last) / 1000 || 0.016);
+  const rawDt = (now - last) / 1000 || 0.016;
+  const dt = Math.min(0.05, rawDt);
   last = now;
-  boilT = Math.floor(now / 120);
+  boilT = Math.floor(now / ([120, 200, 300][renderQuality]));
   if (state === 'play') {
     if (hitStopT > 0) {
       hitStopT = Math.max(0, hitStopT - dt);
       update(dt * ABSORB_RULE.slowScale);
     } else update(dt);
   }
-  render();
+  updateAdaptiveQuality(rawDt); renderFrame++;
+  if (!(state === 'play' && renderQuality === 2 && rawDt < 0.024 && renderFrame % 2)) render();
 }
 resetGame();
 requestAnimationFrame(loop);
