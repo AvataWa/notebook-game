@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  let buildTab = 'skills', buildPage = 0;
+  let buildTab = 'skills', buildPage = 0, buildReturnState = 'play';
   const buildCloseRect = { x: 307, y: 41, w: 43, h: 31 };
   const buildTabRects = [
     { id: 'skills', name: '技能', x: 24, y: 86, w: 105, h: 36 },
@@ -13,7 +13,8 @@
   const buildNextRect = { x: 265, y: 590, w: 82, h: 32 };
 
   function openBuildView() {
-    if (state !== 'play') return false;
+    if (state !== 'play' && state !== 'levelup' && state !== 'start') return false;
+    buildReturnState = state;
     player.passiveCounts ||= {};
     if (player.surgeCharging) cancelInkSurgeCharge(player.surgePointerId);
     joy.active = false; joy.dx = 0; joy.dy = 0;
@@ -23,7 +24,7 @@
   }
   function closeBuildView() {
     if (state !== 'build') return false;
-    state = 'play'; return true;
+    state = buildReturnState; return true;
   }
   function setBuildTab(id) {
     if (!buildTabRects.some(t => t.id === id)) return false;
@@ -167,7 +168,7 @@
 
   canvas.addEventListener('pointerdown', e => {
     const p = toLogical(e);
-    if (state === 'play' && pointInRect(p, buildRect)) {
+    if ((state === 'play' || state === 'levelup' || state === 'start') && pointInRect(p, buildRect)) {
       e.preventDefault(); e.stopImmediatePropagation(); openBuildView(); return;
     }
     if (state !== 'build') return;

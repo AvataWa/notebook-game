@@ -131,5 +131,15 @@ test('养成面板渲染完整且暂停战斗计时，返回后恢复', () => {
   assert(G.buildView.close() && G.state === 'play', '返回战斗失败');
 });
 
+test('养成面板可从战斗和三选一打开，返回后保留原界面与卡牌', () => {
+  fresh(); G.state = 'levelup'; G.cards = [{ kind: 'passive', id: 'dmg' }];
+  const levelCards = G.cards;
+  assert(G.buildView.open() && G.state === 'build', '升级三选一无法打开养成');
+  assert(G.buildView.close() && G.state === 'levelup' && G.cards === levelCards, '返回后未恢复升级三选一');
+  G.resetGame(); const startCards = G.cards;
+  assert(G.buildView.open() && G.state === 'build', '起手三选一无法打开养成');
+  assert(G.buildView.close() && G.state === 'start' && G.cards === startCards, '返回后未恢复起手三选一');
+});
+
 console.log(failed ? 'ACTIVE_REWORK_TEST_FAILURES: ' + failed : 'ACTIVE_REWORK_TEST_OK (' + passed + '/' + passed + ')');
 process.exit(failed ? 1 : 0);

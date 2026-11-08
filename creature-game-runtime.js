@@ -123,7 +123,8 @@
     const d = rig.def;
     const naturalHeight = (d.upperLen + d.lowerLen) * d.hipHeight + d.torsoH + d.headR * 1.92;
     const heightFactor = body.boss ? 2.5 : body.elite ? 2.2 : 2.5;
-    return Math.max(0.1, body.r * heightFactor / Math.max(1, naturalHeight));
+    const displayScale = body.creatureId === 'player' ? 1.5 : 1.3;
+    return Math.max(0.1, body.r * heightFactor / Math.max(1, naturalHeight)) * displayScale;
   }
 
   function drawBiped(ctx, body, color) {
@@ -198,6 +199,6 @@
       legs: body.creatureRig ? body.creatureRig.legs.length : body.bipedRig ? 2 : 0 };
   }
 
-  return { BIPED_IDS, BOSS_IDS, resolveEnemyId, attachPlayer, attachEnemy,
+  return { BIPED_IDS, BOSS_IDS, resolveEnemyId, attachPlayer, attachEnemy, bipedScale,
     updatePlayer, updateEnemy, drawEnemyBody, drawPlayer, drawDivingPlayer, requiresLiveBody, getDebugState };
 });

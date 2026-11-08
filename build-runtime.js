@@ -90,13 +90,13 @@
         player.hp = Math.min(player.maxhp, player.hp + heal);
       }
       if (hostile) regen = 0;
-      player.ink = Math.min(player.maxInk, player.ink + regen * dt);
+      player.ink = Math.min(player.maxInk, player.ink + regen * (player.metaRegenMul || 1) * dt);
     }
     if (hostile) {
       player.grayTick += dt;
       if (player.grayTick >= BATTLE.ink.hostileTick) {
         player.grayTick -= BATTLE.ink.hostileTick;
-        hurtPlayer(BATTLE.ink.hostileDamage, 'gray');
+        hurtPlayer(BATTLE.ink.hostileDamage + (player.metaGrayDamageAdd || 0), 'gray');
       }
     } else player.grayTick = 0;
     return { own, hostile };
@@ -243,6 +243,7 @@
   }
   function collectEquipment(dr) {
     const it = ITEM_DEFS[dr.item], cur = player.equip[it.slot];
+    if (window.__metaRuntime) window.__metaRuntime.recordEquipment(dr);
     drops = drops.filter(d => d !== dr);
     if (!cur) {
       player.equip[it.slot] = { key: dr.item, rarity: rarityIndex(dr) }; recomputeEquip();

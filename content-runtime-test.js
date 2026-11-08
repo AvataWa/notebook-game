@@ -15,8 +15,9 @@ eval(src + `
 ;globalThis.G = {
   resetGame, update, updatePlayerInk, render, toggleDive, enterDive, exitDive, castAbsorb, reflectEnemyBullet,
   castInkSurge, buildOptions, rerollOptions, applyOption, recomputeEquip, itemV, itemDescription, makeEquipmentDrop, hurtPlayer, inkCellAt,
-  spawnEnemy, addInkStain, updateInkStains,
+  spawnEnemy, addInkStain, updateInkStains, killEnemy,
   get gameTime() { return gameTime; }, set gameTime(v) { gameTime = v; },
+  get toasts() { return toasts; },
   get RARITIES() { return RARITIES; }, get OPERATION_AFFIXES() { return OPERATION_AFFIXES; },
   get EQUIPMENT_ITEM_DEFS() { return EQUIPMENT_ITEM_DEFS; }, get PASSIVES() { return PASSIVES; },
   get player() { return player; }, get enemies() { return enemies; }, get bullets() { return bullets; }, get floats() { return floats; },
@@ -58,6 +59,19 @@ test('空部位直接装备，品质影响基础攻防', () => {
   assert(G.player.equip.hands.key === 'glove' && G.player.equip.hands.rarity === 3, '空部位未直接装备');
   assert(G.player.eqAtk === 23 && G.player.eqCrit === 0.35, '史诗属性或暴击数值错误');
   assert(G.state === 'play' && G.drops.length === 0, '直接装备后状态或掉落错误');
+});
+test('相邻两件装备只走新拾取逻辑，不再弹出 undefined', () => {
+  fresh(); G.drops = [{ x: 0, y: 0, item: 'glove', rarity: 3, bob: 0 }, { x: 0, y: 0, item: 'compass', rarity: 2, bob: 0 }];
+  G.update(0.016);
+  assert(G.player.equip.hands.key === 'glove' && G.player.equip.hands.rarity === 3 && !G.player.equip.hands.lvl, '第一件装备走进了旧强化逻辑');
+  assert(G.drops.length === 1, '第一件拾取后掉落数量错误');
+  G.update(0.016); drawTexts.length = 0; G.render();
+  assert(G.state === 'equipment' && G.pendingEquipment.drop.item === 'compass', '第二件装备未进入替换弹窗');
+  assert(!G.toasts.some(t => String(t.txt).includes('undefined')) && !drawTexts.some(t => t.includes('undefined')), '拾取提示或弹窗仍含 undefined');
+});
+test('Boss 掉落通过统一入口生成并带有合法品质', () => {
+  fresh(); G.killEnemy({ id: 999, boss: true, stage: 1, name: '测试 Boss', x: 100, y: 100, r: 20, dead: false });
+  assert(G.drops.length === 1 && Number.isInteger(G.drops[0].rarity) && G.drops[0].rarity >= 0 && G.drops[0].rarity < 4, 'Boss 掉落缺少品质');
 });
 test('同部位拾取必须询问，替换会穿上新装备', () => {
   fresh(); equip('glove', 0); G.drops = [{ x: 0, y: 0, item: 'compass', rarity: 2, bob: 0 }];
@@ -159,5 +173,5 @@ test('装备运行层同样保留墨迹持续伤害弱跳字', () => {
   G.updateInkStains.dotT = 0; G.updateInkStains.poolT = 0; G.updateInkStains(0);
   assert(G.floats.length === 2 && G.floats.every(f => f.weak), '装备运行层覆盖了弱跳字标记');
 });
-console.log(failed ? 'CONTENT_RUNTIME_TEST_FAILURES: ' + failed : 'CONTENT_RUNTIME_TEST_OK (17/17)');
+console.log(failed ? 'CONTENT_RUNTIME_TEST_FAILURES: ' + failed : 'CONTENT_RUNTIME_TEST_OK (19/19)');
 process.exit(failed ? 1 : 0);

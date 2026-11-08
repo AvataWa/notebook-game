@@ -43,7 +43,7 @@ const BATTLE = typeof BATTLE_CONFIG !== 'undefined' ? BATTLE_CONFIG : {
     captureCellDivisor: 180, captureSingleCap: 2, captureInkPerSecond: 2
   },
   dive: { ownCost: 12, otherCost: 36, speed: 1.55 },
-  absorb: { duration: 0.35, ownDuration: 0.4, cooldown: 1.2, radius: 65, ownRadius: 100, maxGain: 12, bulletInk: 3, meleeInk: 8, charge: 20, hitStop: 0.3, slowScale: 0.15, meleeRadius: 120, meleeDamage: 27.5 },
+  absorb: { duration: 0.35, ownDuration: 0.4, cooldown: 1.2, successCooldown: 0.5, radius: 65, ownRadius: 100, maxGain: 12, bulletInk: 3, meleeInk: 8, charge: 20, hitStop: 0.3, slowScale: 0.15, meleeRadius: 120, meleeDamage: 27.5 },
   surge: { radius: 168, chargeTime: 1.2, minScale: 0.6, maxScale: 1.2, damage: 55, visual: 0.35 },
   skills: { closeRadius: 125, colaRadius: 150, vortexCap: 6, vortexPerCast: 2, vortexDuration: 5, projectileSize: 1.2, ballistaBulletSpeed: 620 },
   traits: { inkArmorReduction: 0.2, inkDamageMul: 1.2, parryChargeMul: 1.5, absorbInkMul: 1.5, surgeRetain: 20 }
@@ -669,7 +669,7 @@ const JOY_HOME = { x: 72, y: H - 174, r: 52 };
 const absorbRect = { x: W - 88, y: H - 157, w: 74, h: 64 }; // 向下多延伸 12 像素，扩大右手拇指热区
 const specialRect = { x: W - 172, y: H - 157, w: 74, h: 52 };
 const diveRect = { x: W - 88, y: H - 221, w: 74, h: 52 };
-const buildRect = { x: W - 82, y: 53, w: 68, h: 30 };
+const buildRect = { x: W / 2 - 42, y: H - 62, w: 84, h: 36 };
 const keys = {};
 const joy = { active: false, id: -1, bx: JOY_HOME.x, by: JOY_HOME.y, dx: 0, dy: 0 };
 
@@ -723,9 +723,9 @@ function recomputeEquip() {
   player.eqCrit += itemV('glove', 'crit', 15) / 100;
   player.eqSpd *= 1 + itemV('shoes', 'speed', 12) / 100;
   const hpRatio = player.maxhp > 0 ? player.hp / player.maxhp : 1;
-  player.maxhp = BATTLE.player.hp + hpBonus + player.bonusHp;
+  player.maxhp = BATTLE.player.hp + (player.metaHpBonus || 0) + hpBonus + player.bonusHp;
   player.hp = Math.max(1, Math.round(player.maxhp * hpRatio));
-  player.maxInk = BATTLE.player.maxInk + itemV('pendant', 'ink', 25);
+  player.maxInk = BATTLE.player.maxInk + (player.metaInkBonus || 0) + itemV('pendant', 'ink', 25);
   player.ink = Math.min(player.maxInk, player.ink + Math.max(0, player.maxInk - oldMaxInk));
 }
 function skillCalc(a) {
@@ -868,7 +868,7 @@ function updateShooter(e, dt) {
   } else if (e.shotWindup > 0) {
     e.shotWindup -= dt;
     if (e.shotWindup <= 0) {
-      e.shotCd = d0.shotCd;
+      e.shotCd = d0.shotCd * (player.metaEnemyAttackMul || 1);
       if (d0.burst) { e.burstLeft = d0.burst; e.burstT = 0; }
       else fireEnemyShot(e, e.aimA);
     }
@@ -898,7 +898,7 @@ function updateMeleeSwing(e, dt) {
       }
     }
   } else if (e.swingCd <= 0 && d < range + player.r + BATTLE.melee.triggerExtra) {
-    e.swingCd = BATTLE.melee.period; e.swingT = BATTLE.melee.total; e.swingHit = false; e.swingDamage = false;
+    e.swingCd = BATTLE.melee.period * (player.metaEnemyAttackMul || 1); e.swingT = BATTLE.melee.total; e.swingHit = false; e.swingDamage = false;
     e.swingA = Math.atan2(player.y - e.y, player.x - e.x);
   }
 }
@@ -914,7 +914,7 @@ function spawnEnemy(typeOverride, x, y) {
   if (normalEnemyCount() >= normalEnemyCap()) return;
   const t = gameTime;
   const normalPool = Object.keys(ENEMY_DEFS).filter(k => !ENEMY_DEFS[k].elite && t >= ENEMY_DEFS[k].after);
-  const elitePool = Object.keys(ENEMY_DEFS).filter(k => ENEMY_DEFS[k].elite && t >= ENEMY_DEFS[k].after);
+  const elitePool = Object.keys(ENEMY_DEFS).filter(k => ENEMY_DEFS[k].elite && t + (player.metaEliteEarly || 0) >= ENEMY_DEFS[k].after);
   let type = typeOverride || normalPool[Math.floor(Math.random() * normalPool.length)] || 'stick';
   // 精英约 4.5% 概率替换本次普通刷怪；编队指定怪物时不随机替换
   if (!typeOverride && elitePool.length && Math.random() < 0.045) type = elitePool[Math.floor(Math.random() * elitePool.length)];
@@ -963,7 +963,7 @@ function spawnHorde() {
     spawnEnemy(type, x, y);
   }
   if (hordeIndex % 4 === 0 && gameTime >= 100) {
-    const elites = Object.keys(ENEMY_DEFS).filter(k => ENEMY_DEFS[k].elite && gameTime >= ENEMY_DEFS[k].after);
+    const elites = Object.keys(ENEMY_DEFS).filter(k => ENEMY_DEFS[k].elite && gameTime + (player.metaEliteEarly || 0) >= ENEMY_DEFS[k].after);
     if (elites.length) spawnEnemy(elites[Math.floor(Math.random() * elites.length)], player.x + fx * 400, player.y + fy * 400);
   }
   toast(label);
@@ -1029,11 +1029,11 @@ function updateInkShade(e, dt) {
 }
 function updateBoss(e, dt) {
   const pa = Math.atan2(player.y - e.y, player.x - e.x);
-  if (e.phase === 1 && e.hp < e.maxhp * 0.5) {
+  if (e.phase === 1 && e.hp < e.maxhp * (player.metaBossPhaseAt || 0.5)) {
     e.phase = 2; e.sp *= 1.35; crumpleT = 0.7; shakeT = 0.5;
     toast(e.name + ' 暴走了！线条开始崩坏！');
   }
-  const rate = e.phase === 2 ? 0.6 : 1;
+  const rate = (e.phase === 2 ? 0.6 : 1) * (player.metaEnemyAttackMul || 1);
   e.walk += dt * 5;
   if (e.arch === 'charger') {
     e.modeT -= dt; e.summonT -= dt;
@@ -1132,7 +1132,7 @@ function killEnemy(e) {
   }
   if (e.boss) {
     shakeT = 0.5;
-    drops.push({ x: e.x, y: e.y, item: ITEM_KEYS[Math.floor(Math.random() * ITEM_KEYS.length)], bob: 0 });
+    drops.push({ ...makeEquipmentDrop(e.x, e.y), bob: 0 });
     if (e.stage >= 10) { crumpleT = 0.8; state = 'win'; }
     else toast(e.name + ' 被涂掉了！第 ' + e.stage + ' 页通过！');
     return;
@@ -1141,7 +1141,7 @@ function killEnemy(e) {
   if (erases.length > 140) erases.shift();
   const rate = e.elite ? 0.35 : (e.type === 'rage' ? 0.15 : 0.025);
   if (Math.random() < rate && drops.length < 12) {
-    drops.push({ x: e.x, y: e.y, item: ITEM_KEYS[Math.floor(Math.random() * ITEM_KEYS.length)], bob: Math.random() * 6 });
+    drops.push(makeEquipmentDrop(e.x, e.y));
   }
 }
 function hurtEnemy(e, dmg, dotDps, sx, sy, vuln, critAdd, bossMul, hitCol, weakFloat) {
@@ -1286,7 +1286,7 @@ function exitDive() {
     novas.push({ x: player.x, y: player.y, t: 0.25, max: 75, col: inkFriendlyColor });
     for (const e of enemies) {
       if (e.dead || Math.hypot(e.x - player.x, e.y - player.y) >= 75 + e.r) continue;
-      hurtEnemy(e, 30, 0, player.x, player.y, 0, 0, 0, inkFriendlyColor);
+      hurtEnemy(e, 30 * (player.metaDiveMul || 1), 0, player.x, player.y, 0, 0, 0, inkFriendlyColor);
       if (!e.dead) { e.kbx *= 2.5; e.kby *= 2.5; e.stunT = Math.max(e.stunT || 0, e.boss ? 0.1 : 0.3); }
     }
   }
@@ -1370,7 +1370,7 @@ function castInkSurge(radius = BATTLE.surge.radius, full = false) {
   player.special = 0; player.specialAnnounced = false;
   player.surgeCharging = false; player.surgeChargeT = 0; player.surgePointerId = null;
   const col = player.actives.length ? trailColorOf(player.actives[0].id) : INK;
-  let damage = BATTLE.surge.damage * player.dmgMul * (1 + player.eqAtk / 100);
+  let damage = BATTLE.surge.damage * player.dmgMul * (1 + player.eqAtk / 100) * (player.metaSurgeMul || 1);
   if (hasAffix('surge', 'surgedamage')) damage *= 1.3;
   if (full && hasAffix('surge', 'fulldamage')) damage *= 1.55;
   if (full && hasAffix('surge', 'inkburst') && player.ink >= 25) { player.ink -= 25; damage *= 1.8; }
@@ -1423,7 +1423,7 @@ function castInkSurge(radius = BATTLE.surge.radius, full = false) {
 function castMeleeInkSurge() {
   const col = player.actives.length ? trailColorOf(player.actives[0].id) : INK;
   const radius = ABSORB_RULE.meleeRadius * (hasAffix('absorb', 'meleeradius') ? 1.3 : 1);
-  const damage = ABSORB_RULE.meleeDamage * player.dmgMul * (1 + player.eqAtk / 100) * (hasAffix('absorb', 'meleedamage') ? 1.45 : 1);
+  const damage = ABSORB_RULE.meleeDamage * player.dmgMul * (1 + player.eqAtk / 100) * (hasAffix('absorb', 'meleedamage') ? 1.45 : 1) * (player.metaAbsorbMul || 1);
   novas.push({ x: player.x, y: player.y, t: BATTLE.surge.visual, max: radius, col });
   for (const e of enemies) {
     if (e.dead || Math.hypot(e.x - player.x, e.y - player.y) >= radius + e.r) continue;
@@ -1465,7 +1465,7 @@ function chargeParry() {
   if (hasAffix('absorb', 'perfect') && player.absorbDuration - player.absorbT <= 0.12) amount *= 2;
   chargeTurf(amount);
   if (hasAffix('absorb', 'parrycooldown')) chargeTurf(4);
-  player.absorbCd = 0;
+  player.absorbCd = ABSORB_RULE.successCooldown;
   if (hasAffix('absorb', 'parryshield')) player.parryShieldT = 1;
   if (hasAffix('absorb', 'parryheal') && player.absorbHeal < 6) {
     player.absorbHeal += 2; player.hp = Math.min(player.maxhp, player.hp + 2);
@@ -1483,7 +1483,7 @@ function reflectEnemyBullet(eb) {
   const target = source || nearestEnemy(eb.x, eb.y, 480);
   const a = target ? Math.atan2(target.y - eb.y, target.x - eb.x) : Math.atan2(-eb.vy, -eb.vx);
   const speed = Math.max(160, Math.hypot(eb.vx, eb.vy) * 1.25);
-  let damage = eb.dmg * 1.5 * (hasAffix('absorb', 'reflectdamage') ? 1.45 : 1);
+  let damage = eb.dmg * 1.5 * (hasAffix('absorb', 'reflectdamage') ? 1.45 : 1) * (player.metaAbsorbMul || 1);
   const split = hasAffix('absorb', 'reflectsplit');
   if (split) damage *= 0.55;
   const count = split ? 3 : 1;
@@ -1508,7 +1508,7 @@ function reflectMeleeSwing(e) {
   const d = Math.hypot(player.x - e.x, player.y - e.y);
   if (d >= enemySwingRange(e) + player.absorbRadius) return false;
   hitStopT = Math.max(hitStopT, ABSORB_RULE.hitStop);
-  hurtEnemy(e, e.dmg * 1.5, 0, player.x, player.y, 0, 0, 0, inkFriendlyColor);
+  hurtEnemy(e, e.dmg * 1.5 * (player.metaAbsorbMul || 1), 0, player.x, player.y, 0, 0, 0, inkFriendlyColor);
   if (!e.dead) {
     e.stunT = Math.max(e.stunT || 0, e.elite ? 0.2 : 0.5);
     e.swingT = 0;
@@ -1536,7 +1536,7 @@ function reflectHazard(hz) {
   if (!source || !source.boss) return false;
   hz.done = true; hz.t = 0;
   hitStopT = Math.max(hitStopT, ABSORB_RULE.hitStop);
-  hurtEnemy(source, hz.dmg * 1.5, 0, player.x, player.y, 0, 0, 0, inkFriendlyColor);
+  hurtEnemy(source, hz.dmg * 1.5 * (player.metaAbsorbMul || 1), 0, player.x, player.y, 0, 0, 0, inkFriendlyColor);
   rewardAbsorb(ABSORB_RULE.meleeInk);
   chargeParry();
   floats.push({ x: player.x, y: player.y - 45, txt: '弹反！', t: 0.7, color: inkFriendlyColor, crit: true });
@@ -1559,7 +1559,7 @@ function updatePlayerInk(dt) {
     player.grayTick += dt;
     if (player.grayTick >= BATTLE.ink.hostileTick) {
       player.grayTick -= BATTLE.ink.hostileTick;
-      hurtPlayer(BATTLE.ink.hostileDamage);
+      hurtPlayer(BATTLE.ink.hostileDamage + (player.metaGrayDamageAdd || 0));
     }
   } else player.grayTick = 0;
   return { own, hostile };
@@ -1586,7 +1586,7 @@ function hurtPlayer(dmg) {
   const inkDr = player.taken.inkarmor && playerOnOwnInk() ? BATTLE.traits.inkArmorReduction : 0;
   dmg = Math.round(dmg * (1 - player.eqDr) * (1 - inkDr));
   player.diving = false;
-  if (player.hp - dmg <= 0 && hasItem('tape') && gameTime - player.lastRevive > 30) {
+  if (player.hp - dmg <= 0 && !player.metaNoRevive && hasItem('tape') && gameTime - player.lastRevive > 30) {
     player.lastRevive = gameTime;
     player.hp = 1; player.hurtT = BATTLE.player.hitInvuln; shakeT = 0.3;
     toast('修正带挡下了致命一击！');
@@ -2762,7 +2762,7 @@ function update(dt) {
 
   for (const dr of drops) {
     dr.bob += dt * 4;
-    if (Math.hypot(player.x - dr.x, player.y - dr.y) < 20) {
+    if (!window.__buildRuntime && Math.hypot(player.x - dr.x, player.y - dr.y) < 20) {
       dr.got = true;
       const it = ITEM_DEFS[dr.item];
       const cur = player.equip[it.slot];
@@ -3928,8 +3928,16 @@ function render() {
   if (state === 'levelup') drawCards(hasItem('crown') ? '升级！选一张涂鸦卡（王冠：四选一）' : '升级！选一张涂鸦卡');
   if (state === 'over') drawEnd(false);
   if (state === 'win') drawEnd(true);
+  if (state === 'play' || state === 'levelup' || state === 'start') drawBuildButton();
 }
 
+function drawBuildButton() {
+  setSeed(47);
+  ctx.fillStyle = 'rgba(255,250,238,0.94)'; ctx.fillRect(buildRect.x, buildRect.y, buildRect.w, buildRect.h);
+  jrect(buildRect.x, buildRect.y, buildRect.w, buildRect.h, INK, 1.8);
+  ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.font = 'bold 13px ' + FONT;
+  ctx.fillText('养成', buildRect.x + buildRect.w / 2, buildRect.y + buildRect.h / 2 + 5);
+}
 function drawHUD() {
   setSeed(42);
   const boss = enemies.find(e => e.boss && !e.dead);
@@ -3958,11 +3966,6 @@ function drawHUD() {
     ctx.fillStyle = killChain >= 25 ? RED : INK; ctx.font = '900 14px ' + FONT;
     ctx.fillText(killChain + ' 连擦', W - 16, top + 30);
   }
-  buildRect.y = boss ? 69 : 53;
-  ctx.fillStyle = 'rgba(255,250,238,0.94)'; ctx.fillRect(buildRect.x, buildRect.y, buildRect.w, buildRect.h);
-  jrect(buildRect.x, buildRect.y, buildRect.w, buildRect.h, INK, 1.8);
-  ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.font = 'bold 12px ' + FONT;
-  ctx.fillText('养成', buildRect.x + buildRect.w / 2, buildRect.y + 20);
   if (boss) {
     const bw = 230, bx = (W - bw) / 2, by = 50;
     setSeed(88);

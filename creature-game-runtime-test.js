@@ -115,5 +115,20 @@ test('潜墨复用主角骨架绘制游泳动作，不改变坐标与战斗状�
   assert(G.player.x === before.x && G.player.y === before.y && G.player.r === before.r && G.player.diving === before.diving, '潜墨绘制修改了战斗状态');
 });
 
-console.log(failed ? 'CREATURE_GAME_TEST_FAILURES: ' + failed : 'CREATURE_GAME_TEST_OK (6/6)');
+test('主角绘制放大 1.5 倍，人形怪绘制放大 1.3 倍且不改碰撞', () => {
+  fresh();
+  const pd = G.player.bipedRig.def;
+  const ph = (pd.upperLen + pd.lowerLen) * pd.hipHeight + pd.torsoH + pd.headR * 1.92;
+  const ps = G.runtime.bipedScale(G.player, G.player.bipedRig);
+  assert(Math.abs(ps - G.player.r * 2.5 / ph * 1.5) < 0.000001, '主角绘制倍率不是 1.5');
+  G.spawnEnemy('stick', 80, 0); const e = G.enemies[0];
+  G.runtime.attachEnemy(e);
+  const radius = e.r, d = e.bipedRig.def;
+  const nh = (d.upperLen + d.lowerLen) * d.hipHeight + d.torsoH + d.headR * 1.92;
+  const es = G.runtime.bipedScale(e, e.bipedRig);
+  assert(Math.abs(es - e.r * 2.5 / nh * 1.3) < 0.000001, '人形怪绘制倍率不是 1.3');
+  assert(e.r === radius, '外观放大修改了怪物碰撞半径');
+});
+
+console.log(failed ? 'CREATURE_GAME_TEST_FAILURES: ' + failed : 'CREATURE_GAME_TEST_OK (7/7)');
 process.exit(failed ? 1 : 0);

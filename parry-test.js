@@ -217,18 +217,18 @@ test('受击保护结束后才允许再次扣血', () => {
   G.update(0.06); G.hurtPlayer(20);
   assert(G.player.hp === hp - 32, '保护结束后没有恢复伤害结算');
 });
-test('子弹与近战弹反成功都会立即刷新吸墨冷却', () => {
+test('子弹与近战弹反成功后吸墨冷却均为 0.5 秒', () => {
   fresh(); const shooter = enemy('pencilthrower', 100, 0);
   const eb = { x: 0, y: 0, vx: -100, vy: 0, dmg: 10, life: 2, sourceId: shooter.id, reflectable: true };
   G.castAbsorb(); assert(G.player.absorbCd > 0, '测试前吸墨没有进入冷却');
   assert(G.reflectEnemyBullet(eb), '子弹弹反未成功');
-  assert(near(G.player.absorbCd, 0) && G.castAbsorb(), '子弹弹反后吸墨没有立即就绪');
+  assert(near(G.player.absorbCd, 0.5) && !G.castAbsorb(), '子弹弹反后的吸墨冷却不是 0.5 秒');
 
   fresh(); const melee = enemy('stick', 30, 0); melee.hp = melee.maxhp = 500;
   melee.swingT = 0.13; melee.swingHit = false;
   G.castAbsorb(); G.updateMeleeSwing(melee, 0.02);
   assert(melee.swingT === 0, '近战弹反未成功');
-  assert(near(G.player.absorbCd, 0) && G.castAbsorb(), '近战弹反后吸墨没有立即就绪');
+  assert(near(G.player.absorbCd, 0.5) && !G.castAbsorb(), '近战弹反后的吸墨冷却不是 0.5 秒');
 });
 console.log(failed ? 'PARRY_TEST_FAILURES: ' + failed : 'PARRY_TEST_OK (23/23)');
 process.exit(failed ? 1 : 0);

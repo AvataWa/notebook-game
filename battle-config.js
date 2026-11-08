@@ -57,6 +57,7 @@ const BATTLE_CONFIG = {
     duration: 0.35,         // 基础弹反判定时间
     ownDuration: 0.4,       // 己方墨迹上弹反判定时间
     cooldown: 1.2,          // 吸墨冷却
+    successCooldown: 0.5,   // 弹反成功后的吸墨冷却
     radius: 65,             // 基础弹反半径
     ownRadius: 100,         // 己方墨迹上弹反半径
     maxGain: 12,            // 单次吸墨最多回复的墨水
