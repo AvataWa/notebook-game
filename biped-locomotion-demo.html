@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>我穿越到笔记本了 · 主角与人形怪双足原型</title>
+<style>
+  :root {
+    --paper: #f5f1e6; --paper-deep: #ece6d7; --ink: #1a2b8f; --graphite: #353238;
+    --muted: #6c645e; --rule: rgba(101, 135, 158, .19); --red: #a85e55;
+  }
+  * { box-sizing: border-box; }
+  html { background: #d8d2c6; }
+  body { margin: 0; min-height: 100dvh; color: var(--graphite); font-family: "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+    background-color: var(--paper); background-image: repeating-linear-gradient(0deg, transparent 0, transparent 31px, var(--rule) 32px, transparent 33px); }
+  button, input { font: inherit; }
+  #game { display: none !important; }
+  button:focus-visible, input:focus-visible { outline: 3px solid var(--red); outline-offset: 3px; }
+  header { padding: 24px clamp(16px, 4vw, 48px) 18px; border-bottom: 2px solid var(--graphite); background: rgba(245, 241, 230, .97); }
+  .heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; max-width: 1180px; margin: auto; }
+  h1 { margin: 0; color: var(--ink); font-size: clamp(25px, 3.5vw, 38px); line-height: 1.2; letter-spacing: 1px; }
+  .stamp { flex: 0 0 auto; padding: 5px 9px; color: var(--red); border: 2px solid var(--red); border-radius: 50%; font-weight: bold; font-size: 14px; transform: rotate(-5deg); }
+  .intro { max-width: 1180px; margin: 10px auto 0; font-family: "Microsoft YaHei", sans-serif; font-size: 14px; line-height: 1.75; color: #56504b; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; max-width: 1180px; margin: 16px auto 0; }
+  button { min-height: 44px; padding: 8px 16px; border: 1.8px solid var(--graphite); border-radius: 5px 7px 4px 6px;
+    background: var(--paper); color: var(--graphite); cursor: pointer; font-weight: bold; transition: transform 150ms ease-out, background-color 150ms ease-out; }
+  button:hover { transform: translateY(-1px); background: var(--paper-deep); }
+  button:active { transform: translateY(1px); }
+  button[aria-pressed="true"] { color: var(--paper); background: var(--graphite); }
+  #pause { color: var(--ink); border-color: var(--ink); }
+  #pause[aria-pressed="true"] { color: var(--paper); background: var(--ink); }
+  .speed { display: flex; align-items: center; gap: 9px; min-height: 44px; font-family: "Microsoft YaHei", sans-serif; font-size: 14px; }
+  input[type="range"] { width: 150px; min-height: 44px; accent-color: var(--ink); cursor: pointer; }
+  output { min-width: 38px; color: var(--ink); font-weight: bold; }
+  main { max-width: 1240px; margin: auto; padding: 24px clamp(12px, 3vw, 32px) 40px; }
+  .principle { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .principle div { padding: 10px 12px; border-top: 2px solid var(--graphite); background: rgba(245, 241, 230, .72); }
+  .principle strong { display: block; margin-bottom: 3px; color: var(--ink); font-size: 16px; }
+  .principle span { font-family: "Microsoft YaHei", sans-serif; font-size: 12px; line-height: 1.6; color: #56504b; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+  .card { overflow: hidden; border: 1.8px solid var(--graphite); border-radius: 7px 4px 8px 5px; background: rgba(250, 247, 238, .94); box-shadow: 3px 4px 0 rgba(53, 50, 56, .12); }
+  .card.player { border: 2.5px solid var(--ink); }
+  .card.boss { border-color: var(--red); }
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 13px 16px 7px; }
+  h2 { margin: 0; font-size: 22px; line-height: 1.25; }
+  .player h2 { color: var(--ink); }
+  .kind { color: var(--muted); font-family: "Microsoft YaHei", sans-serif; font-size: 12px; white-space: nowrap; }
+  canvas { display: block; width: 100%; height: 250px; border-top: 1px dashed rgba(53, 50, 56, .25); border-bottom: 1px dashed rgba(53, 50, 56, .25); }
+  .info { padding: 11px 16px 15px; }
+  .state { display: flex; justify-content: space-between; gap: 12px; color: var(--ink); font-size: 14px; line-height: 1.5; }
+  .params { color: var(--muted); font-family: "Microsoft YaHei", sans-serif; font-size: 12px; }
+  .desc { margin: 7px 0 0; color: #4f4945; font-family: "Microsoft YaHei", sans-serif; font-size: 14px; line-height: 1.65; }
+  footer { margin-top: 24px; padding: 16px 4px; border-top: 1px solid rgba(53, 50, 56, .45); color: #56504b; font-family: "Microsoft YaHei", sans-serif; font-size: 13px; line-height: 1.75; }
+  @media (max-width: 760px) {
+    .heading { gap: 12px; } .stamp { font-size: 12px; }
+    .principle { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid { grid-template-columns: 1fr; }
+    main { padding-top: 18px; }
+  }
+  @media (max-width: 420px) {
+    header { padding: 18px 14px 14px; } .stamp { display: none; }
+    .controls { gap: 8px 12px; } button { padding: 8px 12px; }
+    .speed { width: 100%; } input[type="range"] { flex: 1; width: auto; }
+    canvas { height: 238px; } .card-head { padding-left: 13px; padding-right: 13px; }
+    .info { padding-left: 13px; padding-right: 13px; } .state { flex-direction: column; gap: 2px; }
+  }
+  @media (prefers-reduced-motion: reduce) { button { transition: none; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="heading"><h1>主角与人形怪 · 双足原型</h1><span class="stamp">独立算法打样</span></div>
+  <div class="intro">不再复用蜘蛛原型。八个角色共用双足状态机，但各自拥有独立骨长、步幅、摆腿时间、膝弯方向与人形配件。淡色是远侧肢体，地面刻度向后移动，角色始终保持在画面中央。</div>
+  <div class="controls">
+    <button id="pause" type="button" aria-pressed="false">暂停动作</button>
+    <button id="skeleton" type="button" aria-pressed="false">显示骨架</button>
+    <button id="reset" type="button">重置动作</button>
+    <label class="speed" for="speed">播放速度 <input id="speed" type="range" min="0.4" max="1.6" step="0.1" value="1"><output id="speedValue" for="speed">1.0×</output></label>
+  </div>
+</header>
+<main>
+  <section class="principle" aria-label="双足算法要点">
+    <div><strong>固定支撑脚</strong><span>支撑期间保存世界坐标，身体前进时脚不跟着滑。</span></div>
+    <div><strong>单腿摆动</strong><span>后脚依次抬脚、前摆、落脚，普通步行不双飞。</span></div>
+    <div><strong>双段膝关节</strong><span>大腿与小腿骨长固定，提前换脚避免支撑腿跪压。</span></div>
+    <div><strong>躯干保持直立</strong><span>头、躯干和骨盆共线，变速不变倾斜；手臂反向摆动。</span></div>
+  </section>
+  <section id="grid" class="grid" aria-label="八个双足角色动态预览"></section>
+  <footer>此页只验证双足运动与人形外观，尚未接入正式战斗。暴躁涂鸦的纸屑来自实际落脚事件；红笔判官使用反向膝弯；铅笔投手与橡皮弩手的武器直接绑定手部骨架。</footer>
+</main>
+<canvas id="game" hidden></canvas>
+<script>
+  window.__bipedRaf = window.requestAnimationFrame.bind(window);
+  window.requestAnimationFrame = () => 0;
+</script>
+<script src="battle-config.js"></script>
+<script src="enemy-config.js"></script>
+<script src="content-config.js"></script>
+<script src="main.js"></script>
+<script src="build-runtime.js"></script>
+<script>
+  window.doodleBridge = { line: jline, circle: jcircle, rect: jrect };
+  resetGame(); state = 'pause';
+  window.requestAnimationFrame = window.__bipedRaf;
+</script>
+<script src="biped-locomotion.js?v=20261108-upright-fast"></script>
+<script src="biped-renderer.js?v=20261108-upright-fast"></script>
+<script>
+(() => {
+  const grid = document.getElementById('grid');
+  const roleNames = { player: '玩家', normal: '普通怪', elite: '精英', boss: 'Boss' };
+  let cards = [], playing = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let skeleton = false, timeScale = 1, last = 0;
+  const pauseButton = document.getElementById('pause');
+  const skeletonButton = document.getElementById('skeleton');
+
+  function makeCards() {
+    grid.innerHTML = ''; cards = [];
+    BipedLocomotion.DEFS.forEach((d, index) => {
+      const article = document.createElement('article');
+      article.className = `card ${d.role}`; article.dataset.id = d.id;
+      article.innerHTML = `<div class="card-head"><h2>${d.name}</h2><span class="kind">${roleNames[d.role]} · 独立双足</span></div>
+        <canvas width="360" height="250" aria-label="${d.name}双足步态动画"></canvas>
+        <div class="info"><div class="state"><span class="leg-state"></span><span class="params">步幅 ${d.stepLength} · 摆腿 ${d.swingTime.toFixed(2)} 秒</span></div>
+        <p class="desc">${d.description}</p></div>`;
+      grid.appendChild(article);
+      const rig = new BipedLocomotion.BipedRig(d);
+      for (let f = 0; f < index * 7; f++) rig.update(1 / 60);
+      cards.push({ d, rig, canvas: article.querySelector('canvas'), label: article.querySelector('.leg-state') });
+    });
+    updateButtons(); drawAll();
+  }
+
+  function updateButtons() {
+    pauseButton.textContent = playing ? '暂停动作' : '播放动作';
+    pauseButton.setAttribute('aria-pressed', String(!playing));
+    skeletonButton.textContent = skeleton ? '隐藏骨架' : '显示骨架';
+    skeletonButton.setAttribute('aria-pressed', String(skeleton));
+  }
+
+  function drawGround(c, rig, scale) {
+    c.save(); c.strokeStyle = 'rgba(53,50,56,.48)'; c.lineWidth = 1.25; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(14, 210.5); c.lineTo(346, 210.5); c.stroke();
+    const offset = ((rig.x * scale) % 32 + 32) % 32;
+    c.strokeStyle = 'rgba(101,121,135,.28)'; c.lineWidth = 1;
+    for (let x = -32; x < 390; x += 32) {
+      const px = x - offset;
+      c.beginPath(); c.moveTo(px, 211); c.lineTo(px - 8, 217); c.stroke();
+      c.beginPath(); c.moveTo(px + 16, 211); c.lineTo(px + 13, 214); c.stroke();
+    }
+    c.restore();
+  }
+
+  function drawAll() {
+    for (const item of cards) {
+      const c = item.canvas.getContext('2d'), d = item.d, rig = item.rig;
+      ctx = c; setSeed(100 + BipedLocomotion.DEFS.indexOf(d) * 31);
+      c.clearRect(0, 0, 360, 250);
+      const totalH = (d.upperLen + d.lowerLen) * d.hipHeight + d.torsoH + d.headR * 2.7;
+      const scale = Math.min(2.45, 172 / totalH);
+      drawGround(c, rig, scale);
+      const pose = BipedRenderer.draw(c, rig, { cx: 180, groundY: 210, scale, skeleton });
+      const left = pose.legs[0].phase === 'stance' ? '左脚支撑' : '左脚前摆';
+      const right = pose.legs[1].phase === 'stance' ? '右脚支撑' : '右脚前摆';
+      item.label.textContent = `${left} · ${right} · 已落脚 ${rig.steps} 次`;
+    }
+  }
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (!playing || now - last < 28) return;
+    const dt = Math.min(0.05, (now - last) / 1000 || 0.033); last = now;
+    for (const item of cards) item.rig.update(dt * timeScale);
+    drawAll();
+  }
+
+  pauseButton.addEventListener('click', () => { playing = !playing; last = 0; updateButtons(); });
+  skeletonButton.addEventListener('click', () => { skeleton = !skeleton; updateButtons(); drawAll(); });
+  document.getElementById('reset').addEventListener('click', () => { makeCards(); last = 0; });
+  document.getElementById('speed').addEventListener('input', event => {
+    timeScale = Number(event.target.value);
+    document.getElementById('speedValue').textContent = `${timeScale.toFixed(1)}×`;
+  });
+  window.__bipedDemoStats = () => ({ total: cards.length, playing, skeleton, timeScale,
+    rigs: cards.map(item => ({ id: item.d.id, steps: item.rig.steps,
+      swinging: item.rig.legs.filter(l => l.phase === 'swing').length,
+      finite: item.rig.getPose().legs.every(l => [l.hip, l.knee, l.foot].every(p => Number.isFinite(p.x) && Number.isFinite(p.y))) })) });
+  makeCards();
+  window.__BIPED_DEMO_READY__ = true;
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

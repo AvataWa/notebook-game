@@ -8,8 +8,8 @@ eval(src + `
 ;globalThis.G = {
   resetGame, updateSkills, updateInkEater, updatePlayerInk, toggleDive, castInkSurge, inkCellAt, inkStats,
   startInkSurgeCharge, updateInkSurgeCharge, releaseInkSurgeCharge, cancelInkSurgeCharge, inkSurgeChargeRadius,
-  killEnemy, spawnEnemy, addInkStain, spendSkillInk, render,
-  get player() { return player; }, get enemies() { return enemies; }, get novas() { return novas; }, set state(v) { state = v; }
+  killEnemy, spawnEnemy, addInkStain, spendSkillInk, updateInkStains, render,
+  get player() { return player; }, get enemies() { return enemies; }, get novas() { return novas; }, get floats() { return floats; }, set state(v) { state = v; }
 };`);
 let failed = 0;
 function test(name, fn) { try { fn(); console.log('OK  ' + name); } catch (e) { failed++; console.log('ERR ' + name + ': ' + e.message); } }
@@ -92,5 +92,10 @@ test('错误触点不能释放，取消蓄力不消耗墨潮', () => {
   assert(G.cancelInkSurgeCharge(4), '正确触点无法取消蓄力');
   assert(G.player.special === 100 && G.novas.length === 0 && !G.player.surgeCharging, '取消蓄力消耗资源或误放技能');
 });
-console.log(failed ? 'INK_TEST_FAILURES: ' + failed : 'INK_TEST_OK (13/13)');
+test('墨迹持续伤害产生的全部跳字都标记为弱反馈', () => {
+  fresh(); G.spawnEnemy('stick', 50, 0); G.addInkStain(50, 0, 10, 40, '#1a2b8f');
+  G.updateInkStains(0);
+  assert(G.floats.length === 2 && G.floats.every(f => f.weak), '墨迹持续伤害仍使用普通命中跳字');
+});
+console.log(failed ? 'INK_TEST_FAILURES: ' + failed : 'INK_TEST_OK (14/14)');
 process.exit(failed ? 1 : 0);

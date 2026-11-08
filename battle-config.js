@@ -24,6 +24,11 @@ const BATTLE_CONFIG = {
     triggerExtra: 32        // 进入攻击范围外多少像素时开始挥击
   },
 
+  spawning: {
+    baseNormal: 20,         // 第 1 关普通怪、精英和召唤怪合计上限
+    perStage: 10            // 之后每关增加的上限；Boss 额外保留 1 个位置
+  },
+
   ink: {
     ownSpeed: 1.12,         // 普通状态站在己方墨迹上的移速倍率
     hostileSpeed: 0.58,     // 站在敌方墨迹上的移速倍率
@@ -32,7 +37,13 @@ const BATTLE_CONFIG = {
     regenBase: 0.35,        // 非潜墨状态基础回墨/秒
     regenOwnBonus: 2.5,     // 非潜墨站己方墨迹额外回墨/秒
     hostileTick: 0.55,      // 灰墨伤害间隔
-    hostileDamage: 2        // 灰墨每次伤害
+    hostileDamage: 2,       // 灰墨每次伤害
+    trailFreshCharge: 0.003,// 移动／弹道轨迹每个新增格提供的墨潮充能%
+    trailCoverCharge: 0.005,// 移动／弹道轨迹每个覆盖灰墨格提供的墨潮充能%
+    trailChargePerSecond: 6,// 全部移动／弹道轨迹共享的墨潮充能预算/秒
+    captureCellDivisor: 180,// 夺地返墨的覆盖格数除数
+    captureSingleCap: 2,    // 单次夺地返墨上限
+    captureInkPerSecond: 2  // 全部主动技能夺地共享的返墨预算/秒
   },
 
   dive: {
@@ -65,6 +76,16 @@ const BATTLE_CONFIG = {
     maxScale: 1.2,          // 蓄满：201.6 像素
     damage: 55,             // 墨潮基础伤害（蓄力只改变范围）
     visual: 0.35            // 墨潮扩散动画时间
+  },
+
+  skills: {
+    closeRadius: 125,       // 旋转蜡笔／刀阵／蜡烛头基础半径，覆盖近战攻击圈
+    colaRadius: 150,        // 冰可乐新星基础半径
+    vortexCap: 6,           // 刀阵基础上限
+    vortexPerCast: 2,       // 刀阵每次施放新增碎片数
+    vortexDuration: 5,      // 刀阵基础持续时间
+    projectileSize: 1.2,    // 全部玩家子弹视觉与命中尺寸倍率，不影响敌弹
+    ballistaBulletSpeed: 620// 图钉炮台基础弹速
   },
 
   // 大节点词条强度；是否拥有词条由 player.taken 决定

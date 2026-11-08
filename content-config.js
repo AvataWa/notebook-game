@@ -82,6 +82,7 @@ const EQUIPMENT_ITEM_DEFS = {
   multicore: equipmentDef('head', '多芯头带', 10, 10, { cd: [5, 6, 8, 10], cap: [20, 24, 32, 40] }, v => '每 4 条辅助冷却 -' + v.cd + '%，最多 ' + v.cap + '%'),
   highscore: equipmentDef('head', '高分头带', 10, 15, { crit: [12, 16, 21, 28] }, v => '生命高于 80% 时暴击率 +' + v.crit + '%'),
   rulerband: equipmentDef('head', '定规头带', 10, 15, { radius: [25, 34, 44, 58] }, v => '站立 1 秒后主动技能范围 +' + v.radius + '%'),
+  scatterband: equipmentDef('head', '散墨头带', 12, 10, { count: [1, 1, 1, 2] }, v => '全部子弹技能弹数 +' + v.count),
   cloak: equipmentDef('body', '勇者披风', 0, 50, { dmg: [40, 54, 70, 92] }, v => '生命低于 30% 时伤害 +' + v.dmg + '%'),
   stapler: equipmentDef('body', '订书机甲', 0, 70, { invuln: [0.2, 0.25, 0.3, 0.4] }, v => '受击无敌时间 +' + v.invuln + ' 秒'),
   blotarmor: equipmentDef('body', '吸墨纸甲', 0, 55, { graydr: [60, 68, 76, 85] }, v => '灰墨周期伤害 -' + v.graydr + '%'),
@@ -105,6 +106,7 @@ const EQUIPMENT_ITEM_DEFS = {
   lowink: equipmentDef('acc', '低压墨囊', 8, 15, { dmg: [25, 34, 44, 58] }, v => '墨水低于 20 时全部伤害 +' + v.dmg + '%'),
   fullink: equipmentDef('acc', '满墨瓶塞', 8, 15, { cd: [15, 20, 26, 34] }, v => '墨水不低于 80 时主动技能冷却 -' + v.cd + '%'),
   inklens: equipmentDef('acc', '墨渍放大镜', 6, 15, { charge: [25, 34, 44, 58] }, v => '涂地与覆盖灰墨的墨潮充能 +' + v.charge + '%'),
-  rerollnote: equipmentDef('acc', '刷新便利贴', 6, 15, { reroll: [1, 1, 2, 3] }, v => '每次升级可刷新 ' + v.reroll + ' 次选项')
+  rerollnote: equipmentDef('acc', '刷新便利贴', 6, 15, { reroll: [1, 1, 2, 3] }, v => '每次升级可刷新 ' + v.reroll + ' 次选项'),
+  widependant: equipmentDef('acc', '广角书签', 8, 15, { radius: [20, 26, 34, 44] }, v => '全部主动技能范围 +' + v.radius + '%')
 };
 const EQUIPMENT_ITEM_KEYS = Object.keys(EQUIPMENT_ITEM_DEFS);

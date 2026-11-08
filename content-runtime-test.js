@@ -1,4 +1,4 @@
-// 62 条操作辅助、30 件四品质装备与手动替换的综合回归
+// 62 条操作辅助、32 件四品质装备与手动替换的综合回归
 const fs = require('fs');
 const src = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'main.js', 'build-runtime.js']
   .map(f => fs.readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
@@ -15,10 +15,11 @@ eval(src + `
 ;globalThis.G = {
   resetGame, update, updatePlayerInk, render, toggleDive, enterDive, exitDive, castAbsorb, reflectEnemyBullet,
   castInkSurge, buildOptions, rerollOptions, applyOption, recomputeEquip, itemV, itemDescription, makeEquipmentDrop, hurtPlayer, inkCellAt,
+  spawnEnemy, addInkStain, updateInkStains,
   get gameTime() { return gameTime; }, set gameTime(v) { gameTime = v; },
   get RARITIES() { return RARITIES; }, get OPERATION_AFFIXES() { return OPERATION_AFFIXES; },
   get EQUIPMENT_ITEM_DEFS() { return EQUIPMENT_ITEM_DEFS; }, get PASSIVES() { return PASSIVES; },
-  get player() { return player; }, get enemies() { return enemies; }, get bullets() { return bullets; },
+  get player() { return player; }, get enemies() { return enemies; }, get bullets() { return bullets; }, get floats() { return floats; },
   get drops() { return drops; }, set drops(v) { drops = v; }, get pendingEquipment() { return pendingEquipment; },
   get state() { return state; }, set state(v) { state = v; }, get cards() { return cards; },
   get runtime() { return window.__buildRuntime; }
@@ -29,14 +30,17 @@ function assert(ok, msg) { if (!ok) throw new Error(msg); }
 function fresh() { G.resetGame(); G.state = 'play'; G.player.xpNext = 999999; G.player.hp = G.player.maxhp = 9999; G.player.actives = [{ id: 'cyclone', lvl: 1, supports: [], t: 999, uc: 0 }]; }
 function equip(key, rarity = 0) { const slot = G.EQUIPMENT_ITEM_DEFS[key].slot; G.player.equip[slot] = { key, rarity }; G.recomputeEquip(); }
 
-test('内容数量完整：11 被动、62 辅助、30 装备，潜墨 22 条', () => {
+test('内容数量完整：11 被动、62 辅助、32 装备，潜墨 22 条', () => {
   fresh();
   assert(G.PASSIVES.length === 11, '通用被动数量错误');
   assert(G.OPERATION_AFFIXES.length === 62, '专属辅助数量错误');
   assert(new Set(G.OPERATION_AFFIXES.map(a => a.id)).size === 62, '辅助 ID 重复');
   for (const [skill, count] of [['dive', 22], ['surge', 20], ['absorb', 20]]) assert(G.OPERATION_AFFIXES.filter(a => a.skill === skill).length === count, skill + ' 数量错误');
-  assert(Object.keys(G.EQUIPMENT_ITEM_DEFS).length === 30, '装备数量错误');
-  for (const slot of ['head', 'body', 'hands', 'feet', 'acc']) assert(Object.values(G.EQUIPMENT_ITEM_DEFS).filter(d => d.slot === slot).length === 6, slot + ' 不是 6 件');
+  assert(Object.keys(G.EQUIPMENT_ITEM_DEFS).length === 32, '装备数量错误');
+  for (const slot of ['head', 'body', 'hands', 'feet', 'acc']) {
+    const expected = slot === 'head' || slot === 'acc' ? 7 : 6;
+    assert(Object.values(G.EQUIPMENT_ITEM_DEFS).filter(d => d.slot === slot).length === expected, slot + ' 装备数量错误');
+  }
 });
 test('四品质概率、颜色与数值倍率完整且递增', () => {
   assert(G.RARITIES.length === 4, '品质不是四档');
@@ -135,10 +139,10 @@ test('潜墨冷却 1 秒，快速回潜缩短为 0.5 秒', () => {
 test('选择升级词条后获得完整 1 秒无敌，结束后才恢复受伤', () => {
   fresh(); G.buildOptions(); G.state = 'levelup'; G.applyOption(0);
   const hp = G.player.hp;
-  assert(G.state === 'play' && G.player.hurtT === 1, '选词后没有获得 1 秒保护');
+  assert(G.state === 'play' && G.player.goldT === 1 && G.player.hurtT === 0, '选词后没有获得独立 1 秒金色保护');
   G.hurtPlayer(50); assert(G.player.hp === hp, '选词保护期间仍然掉血');
   G.update(0.6); G.hurtPlayer(50);
-  assert(G.player.hp === hp && G.player.hurtT > 0, '1 秒尚未结束就失去保护');
+  assert(G.player.hp === hp && G.player.goldT > 0 && G.player.hurtT === 0, '金色保护误用了受击红闪或提前结束');
   G.update(0.41); G.hurtPlayer(50);
   assert(G.player.hp < hp, '保护结束后没有恢复伤害结算');
 });
@@ -150,5 +154,10 @@ test('装备品质框在世界层绘制，不覆盖 HUD 和升级卡片', () => 
   assert(drop >= 0 && hud >= 0 && card >= 0, '缺少掉落、HUD 或升级卡片绘制');
   assert(drop < hud && drop < card, '装备品质框仍绘制在 HUD 或卡片之上');
 });
-console.log(failed ? 'CONTENT_RUNTIME_TEST_FAILURES: ' + failed : 'CONTENT_RUNTIME_TEST_OK (16/16)');
+test('装备运行层同样保留墨迹持续伤害弱跳字', () => {
+  fresh(); G.spawnEnemy('stick', 50, 0); G.addInkStain(50, 0, 10, 40, '#1a2b8f');
+  G.updateInkStains.dotT = 0; G.updateInkStains.poolT = 0; G.updateInkStains(0);
+  assert(G.floats.length === 2 && G.floats.every(f => f.weak), '装备运行层覆盖了弱跳字标记');
+});
+console.log(failed ? 'CONTENT_RUNTIME_TEST_FAILURES: ' + failed : 'CONTENT_RUNTIME_TEST_OK (17/17)');
 process.exit(failed ? 1 : 0);

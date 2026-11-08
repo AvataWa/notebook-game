@@ -52,6 +52,8 @@
     if (hasItem('cloak') && lowHp) c.dmg *= (1 + itemV('cloak', 'dmg') / 100) / 1.4;
     if (hasItem('blankcap')) c.dmg *= 1 + itemV('blankcap', 'dmg') / 100 * (MAX_ACTIVES - player.actives.length);
     if (hasItem('lowink') && player.ink < 20) c.dmg *= 1 + itemV('lowink', 'dmg') / 100;
+    if ((SKILL_TAGS[a.id] || []).includes('proj')) c.count += itemV('scatterband', 'count');
+    c.rad *= 1 + itemV('widependant', 'radius') / 100;
     return c;
   };
 
@@ -124,7 +126,7 @@
     }
   };
 
-  hurtEnemy = function(e, dmg, dotDps, sx, sy, vuln, critAdd, bossMul, hitCol) {
+  hurtEnemy = function(e, dmg, dotDps, sx, sy, vuln, critAdd, bossMul, hitCol, weakFloat) {
     if (e.dead) return;
     if (player.taken.inkpower && playerOnOwnInk()) dmg *= BATTLE.traits.inkDamageMul;
     if (e.vulnT > 0) dmg *= 1 + e.vuln;
@@ -143,7 +145,7 @@
     if (!(e.parryKbT > 0)) { e.kbx = kx / kd * KNOCK_V * kbMul; e.kby = ky / kd * KNOCK_V * kbMul; }
     if (dotDps) { e.dotDps = Math.max(e.dotDps, dotDps); e.dotT = 3; }
     sparks.push({ x: e.x + (Math.random() - 0.5) * e.r, y: e.y + (Math.random() - 0.5) * e.r, t: 0.18, color: hitCol || INK });
-    floats.push({ x: e.x + (Math.random() - 0.5) * 40, y: e.y - e.r - 8 - Math.random() * 18, txt: Math.round(dmg) + (crit ? '!' : ''), t: 0.7, color: hitCol || INK, crit });
+    floats.push({ x: e.x + (Math.random() - 0.5) * 40, y: e.y - e.r - 8 - Math.random() * 18, txt: Math.round(dmg) + (crit ? '!' : ''), t: 0.7, color: hitCol || INK, crit, weak: !!weakFloat });
     if (crit && hasItem('burstglove') && player.itemBurstN < 6) {
       player.itemBurstN++;
       addInkStain(e.x, e.y, 2, itemV('burstglove', 'radius'), inkFriendlyColor, false, true);
@@ -185,7 +187,7 @@
       }
       const c = skillCalc(a);
       player.itemAmbushT = 0; player.itemSurgeT = 0; player.itemParryT = 0;
-      const baseCd = { cyclone: 0.45, volcanic: 2.2, tornado: 0.8, chainclip: 0.9, arc: 1.6, spark: 1.8, srs: 3.5, ballista: 5,
+      const baseCd = { cyclone: 0.45, volcanic: 2.2, tornado: 0.8, chainclip: 0.9, arc: 1.6, spark: 1.8, ballista: 5,
         boomerang: 2.2, vortex: 1.5, candle: 0.25, icespear: 1.1, inkrain: 2.8, ruler: 2, chalk: 2.4,
         pinburst: 1.3, absolve: 2, brand: 2.5, cola: 1.8 }[a.id];
       a.t = baseCd * c.cd;

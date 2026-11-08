@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>我穿越到笔记本了 · 全角色程序化造型总览</title>
+<style>
+  * { box-sizing: border-box; }
+  html { background: #303039; }
+  body { margin: 0; color: #2b2b2b; font-family: "KaiTi", "STKaiti", "Yuanti SC", serif;
+    background-color: #f5f1e6; background-image: repeating-linear-gradient(0deg, transparent 0, transparent 27px, rgba(117,155,190,.17) 28px, transparent 29px); }
+  header { position: sticky; top: 0; z-index: 5; padding: 18px clamp(14px, 4vw, 48px) 13px;
+    background: rgba(245,241,230,.96); border-bottom: 2px solid rgba(43,43,43,.65); backdrop-filter: blur(8px); }
+  h1 { margin: 0; color: #1a2b8f; font-size: clamp(22px, 3vw, 34px); letter-spacing: 1px; }
+  .sub { margin: 6px 0 11px; max-width: 920px; color: #666; font-size: 13px; line-height: 1.65; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 7px; }
+  button { border: 1.7px solid #2b2b2b; border-radius: 5px; background: #f5f1e6; color: #2b2b2b;
+    min-height: 34px; padding: 5px 13px; font: bold 13px "KaiTi", "STKaiti", serif; cursor: pointer; }
+  button.active { color: #f5f1e6; background: #2b2b2b; }
+  #pause { margin-left: auto; color: #1a2b8f; border-color: #1a2b8f; }
+  main { max-width: 1500px; margin: auto; padding: 8px clamp(12px, 3vw, 38px) 50px; }
+  section { margin-top: 25px; }
+  h2 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 11px; font-size: 23px; color: #2b2b2b; }
+  h2 small { color: #777; font-size: 12px; font-weight: normal; }
+  .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; }
+  .player-grid { grid-template-columns: minmax(260px, 390px); }
+  .card { position: relative; overflow: hidden; border: 1.7px solid #4b4b4b; border-radius: 7px 5px 8px 4px;
+    background: rgba(250,247,238,.91); box-shadow: 2px 3px 0 rgba(43,43,43,.12); }
+  .card.player { border: 2.5px solid #1a2b8f; }
+  .card.elite { border-color: #75617f; }
+  .card.boss { border-width: 2px; background: rgba(242,235,220,.94); }
+  canvas { display: block; width: 100%; height: 174px; border-bottom: 1px dashed rgba(43,43,43,.25); }
+  .info { padding: 9px 12px 12px; }
+  h3 { margin: 0 0 3px; font-size: 18px; line-height: 1.25; }
+  .player h3 { color: #1a2b8f; }
+  .meta { display: inline-block; margin: 2px 0 6px; color: #70645e; font-size: 11px; letter-spacing: .5px; }
+  .desc { margin: 0; color: #555; font-size: 13px; line-height: 1.55; min-height: 40px; }
+  .number { position: absolute; right: 8px; top: 6px; color: rgba(43,43,43,.28); font-size: 12px; }
+  footer { margin-top: 30px; padding: 15px; color: #666; border-top: 1px solid #999; font-size: 12px; line-height: 1.7; }
+  @media (max-width: 1100px) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 760px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } canvas { height: 155px; } }
+  @media (max-width: 480px) { .grid, .player-grid { grid-template-columns: 1fr; } canvas { height: 180px; } #pause { margin-left: 0; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>全角色程序化造型总览</h1>
+  <div class="sub">玩家＋13 个普通怪＋5 个精英＋10 个 Boss。所有腿部由统一的多足模组生成；此页只做造型与动作打样，不修改正式游戏。<br>主体保持石墨涂鸦，蓝／绿仍专属于玩家与经验；怪物的材质色只占小面积。</div>
+  <div class="toolbar" id="filters">
+    <button class="active" data-group="all">全部 29</button>
+    <button data-group="player">玩家</button>
+    <button data-group="normal">普通怪</button>
+    <button data-group="elite">精英</button>
+    <button data-group="boss">Boss</button>
+    <button id="pause">暂停动作</button>
+  </div>
+</header>
+<main id="overview"></main>
+<canvas id="game" hidden></canvas>
+<script>
+  window.__overviewRaf = window.requestAnimationFrame.bind(window);
+  window.requestAnimationFrame = () => 0;
+</script>
+<script src="battle-config.js"></script>
+<script src="enemy-config.js"></script>
+<script src="content-config.js"></script>
+<script src="procedural-locomotion.js?v=20261108-spider-reach"></script>
+<script src="main.js?v=20261108-spider-reach"></script>
+<script src="build-runtime.js"></script>
+<script>
+  window.doodleBridge = { line: jline, circle: jcircle, rect: jrect };
+  window.drawSpiderBaseline = e => drawEnemyFull(e);
+  resetGame(); state = 'pause';
+  window.requestAnimationFrame = window.__overviewRaf;
+</script>
+<script src="creature-designs.js?v=20261108-bio2"></script>
+<script src="creature-bio-rig.js?v=20261108-bio2"></script>
+<script src="creature-design-renderer.js?v=20261108-bio2"></script>
+<script>
+(() => {
+  const groupNames = { player: '玩家', normal: '普通怪物', elite: '精英怪物', boss: 'Boss' };
+  const gaitNames = { biped: '双足交替支撑', wave: '分足波动步态', tripod: '交替三足步态', diagonal: '对角快步', bound: '成组跨步', suction: '吸附式爬行', flight: '无足飞行' };
+  const groupNotes = {
+    player: '单腿摆动时另一腿持续支撑，重心随步伐上下移动。',
+    normal: '每种怪物分别定义髋点、骨长、落脚点和步态，不套统一比例。',
+    elite: '独立支撑方式与重心特征，不只是普通怪描粗。',
+    boss: '独立腿部布局与运动节奏，保留各自攻击前摇的可读性。'
+  };
+  const main = document.getElementById('overview'), cards = [];
+  for (const group of ['player', 'normal', 'elite', 'boss']) {
+    const section = document.createElement('section'); section.dataset.group = group;
+    const list = CreatureDesigns.DEFS.filter(d => d.group === group);
+    section.innerHTML = `<h2>${groupNames[group]} <small>${list.length} 个 · ${groupNotes[group]}</small></h2><div class="grid ${group === 'player' ? 'player-grid' : ''}"></div>`;
+    const grid = section.querySelector('.grid');
+    for (const d of list) {
+      const profile = CreatureBioRig.PROFILES[d.id];
+      const card = document.createElement('article'); card.className = `card ${group}`;
+      card.innerHTML = `<span class="number">${String(cards.length + 1).padStart(2, '0')}</span><canvas width="300" height="185"></canvas><div class="info"><h3>${d.name}${d.id === 'spider' ? ' · 原型直出' : ''}</h3><div class="meta">${d.legs} 足 · ${gaitNames[profile.gait]}</div><p class="desc">${d.desc}</p></div>`;
+      grid.appendChild(card);
+      const body = { id: cards.length + 1, type: d.id === 'spider' ? 'spider' : d.shape,
+        x: 0, y: 0, r: d.r, locomotionAngle: Math.PI / 2, flash: 0, squash: 0,
+        dotT: 0, shotWindup: 0, swingT: 0, ink: 0, elite: false, shade: false };
+      const rig = CreatureBioRig.createBioRig(d, body);
+      body.locomotionRig = rig;
+      for (let f = 0; f < 10 + cards.length % 13; f++) {
+        body.x += d.speed / 60; CreatureBioRig.updateBio(d, body, rig, 1 / 60, f / 60);
+      }
+      cards.push({ d, body, rig, canvas: card.querySelector('canvas'), section, card });
+    }
+    main.appendChild(section);
+  }
+  const footer = document.createElement('footer');
+  footer.textContent = '运动基准：世界坐标落脚点／双段 IK／支撑脚不滑动／速度自适应收步／腿长保护。双足、波动、三足、对角、成组、吸附和飞行分别更新；蜘蛛直接调用原型骨架与正式绘制函数。';
+  main.appendChild(footer);
+
+  let playing = true, last = 0, time = 0;
+  const pause = document.getElementById('pause');
+  pause.onclick = () => { playing = !playing; pause.textContent = playing ? '暂停动作' : '播放动作'; drawAll(); };
+  document.getElementById('filters').addEventListener('click', e => {
+    const button = e.target.closest('button[data-group]'); if (!button) return;
+    const group = button.dataset.group;
+    document.querySelectorAll('#filters button[data-group]').forEach(b => b.classList.toggle('active', b === button));
+    for (const section of document.querySelectorAll('section')) section.hidden = group !== 'all' && section.dataset.group !== group;
+    drawAll();
+  });
+  function drawAll() {
+    for (const item of cards) {
+      if (item.section.hidden) continue;
+      const cardCtx = item.canvas.getContext('2d');
+      ctx = cardCtx; setSeed(item.body.id);
+      cardCtx.clearRect(0, 0, 300, 185);
+      CreatureRenderer.draw(cardCtx, item.d, item.body, item.rig, time, 150, 84, 128, 72);
+    }
+  }
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (!playing || now - last < 60) return;
+    const dt = Math.min(0.06, (now - last) / 1000 || 0.06); last = now; time += dt;
+    for (const item of cards) {
+      if (item.section.hidden) continue;
+      item.body.x += item.d.speed * dt;
+      CreatureBioRig.updateBio(item.d, item.body, item.rig, dt, time);
+    }
+    drawAll();
+  }
+  drawAll();
+  window.__CREATURE_OVERVIEW_READY__ = true;
+  window.__creatureOverviewStats = () => ({ total: cards.length, player: cards.filter(c => c.d.group === 'player').length,
+    normal: cards.filter(c => c.d.group === 'normal').length, elite: cards.filter(c => c.d.group === 'elite').length,
+    boss: cards.filter(c => c.d.group === 'boss').length, playing,
+    spiderUsesOriginalRig: cards.find(c => c.d.id === 'spider').rig.options.stepDistance === 4.5 });
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

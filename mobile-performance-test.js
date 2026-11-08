@@ -1,5 +1,7 @@
 // 手机渲染分辨率、怪物缓存与自动画质分级回归
-const src = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'main.js']
+const src = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'procedural-locomotion.js',
+  'creature-designs.js', 'creature-bio-rig.js', 'creature-design-renderer.js',
+  'biped-locomotion.js', 'biped-renderer.js', 'creature-game-runtime.js', 'main.js']
   .map(f => require('fs').readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
 let mainDrawImages = 0;
 function makeCtx(main) {

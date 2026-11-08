@@ -1,13 +1,17 @@
 // 升级延迟与左右手触控布局回归
-const src = require('fs').readFileSync(__dirname + '/enemy-config.js', 'utf8') + '\n' + require('fs').readFileSync(__dirname + '/main.js', 'utf8').replace("'use strict';", '');
+const src = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'procedural-locomotion.js',
+  'creature-designs.js', 'creature-bio-rig.js', 'creature-design-renderer.js',
+  'biped-locomotion.js', 'biped-renderer.js', 'creature-game-runtime.js', 'main.js']
+  .map(f => require('fs').readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
 const handlers = {};
-const drawTexts = [], drawRects = [], drawArcs = [];
+const drawTexts = [], drawRects = [], drawArcs = [], drawStrokes = [];
 const fakeCtx = new Proxy({}, { get(t, k) {
   if (k in t) return t[k];
   if (k === 'measureText') return text => ({ width: String(text).length * 10 });
-  if (k === 'fillText') return (txt, x, y) => { drawTexts.push({ txt: String(txt), x, y, shadowBlur: t.shadowBlur || 0 }); };
+  if (k === 'fillText') return (txt, x, y) => { drawTexts.push({ txt: String(txt), x, y, color: t.fillStyle, font: t.font, alpha: t.globalAlpha, shadowBlur: t.shadowBlur || 0 }); };
   if (k === 'fillRect') return (x, y, w, h) => { drawRects.push({ x, y, w, h, color: t.fillStyle }); };
-  if (k === 'arc') return (x, y, r, start, end) => { drawArcs.push({ x, y, r, start, end, color: t.strokeStyle, width: t.lineWidth }); };
+  if (k === 'arc') return (x, y, r, start, end) => { drawArcs.push({ x, y, r, start, end, color: t.strokeStyle, width: t.lineWidth, alpha: t.globalAlpha === undefined ? 1 : t.globalAlpha }); };
+  if (k === 'stroke') return () => { drawStrokes.push({ width: t.lineWidth, color: t.strokeStyle, shadowColor: t.shadowColor, alpha: t.globalAlpha === undefined ? 1 : t.globalAlpha }); };
   return () => {};
 }, set(t, k, v) { t[k] = v; return true; } });
 const fakeCanvas = {
@@ -19,10 +23,12 @@ global.window = { addEventListener() {}, devicePixelRatio: 1, innerWidth: 375, i
 global.document = { getElementById: () => fakeCanvas }; global.requestAnimationFrame = () => {};
 eval(src + `
 ;globalThis.G = {
-  resetGame, applyOption, update, render, floatPopScale, drawPlayerResources,
+  resetGame, applyOption, update, render, floatPopScale, floatIsFlashing, drawPlayerResources,
   layoutCards, drawCards, drawCoreDamageZone, drawOuterSurgeDamageZone,
-  get state() { return state; }, get player() { return player; }, get cards() { return cards; },
-  get cardRects() { return cardRects; }, get erupts() { return erupts; }, get novas() { return novas; },
+  spawnEnemy, drawMeleeTelegraph, enemySwingRange,
+  get state() { return state; }, get player() { return player; }, get cards() { return cards; }, get enemies() { return enemies; },
+  get cardRects() { return cardRects; }, get erupts() { return erupts; }, get novas() { return novas; }, get floats() { return floats; },
+  set hitStop(v) { hitStopT = v; },
   get joy() { return joy; }, get levelupDelay() { return levelupDelayT; },
   get joyHome() { return JOY_HOME; }, get absorbRect() { return absorbRect; },
   get diveRect() { return diveRect; }, get specialRect() { return specialRect; },
@@ -104,11 +110,17 @@ test('左手保持摇杆时右手长按墨潮，松开技能不影响移动触�
   assert(G.joy.active && G.joy.dx > 0 && !G.player.surgeCharging && G.player.special === 0, '松开墨潮影响摇杆或未释放技能');
   pointer('pointerup', 1, home.x + 35, home.y);
 });
-test('伤害跳字出现瞬间为 2 倍，随后回落并稳定为 1.5 倍', () => {
+test('跳字两帧长到 2 倍，闪白延长一帧后恢复并回缩', () => {
   const f = { t: 0.8 };
-  assert(G.floatPopScale(f) === 2, '跳字首帧没有放大到 2 倍');
-  f.t = f.maxT - 0.06;
-  assert(Math.abs(G.floatPopScale(f) - 1.625) < 1e-8, '跳字回缩曲线错误');
+  assert(G.floatPopScale(f) === 1.5 && G.floatIsFlashing(f), '跳字初始不是 1.5 倍或没有闪白');
+  f.t = f.maxT - 1 / 60;
+  assert(Math.abs(G.floatPopScale(f) - 1.75) < 1e-8, '第一帧没有展示到 1.75 倍');
+  f.t = f.maxT - 2 / 60;
+  assert(Math.abs(G.floatPopScale(f) - 2) < 1e-8, '第二帧没有长到 2 倍');
+  f.t = f.maxT - (2 / 60 + 0.06);
+  assert(Math.abs(G.floatPopScale(f) - 1.625) < 1e-8 && G.floatIsFlashing(f), '跳字回缩曲线或延长后的闪白窗口错误');
+  f.t = f.maxT - 0.1;
+  assert(!G.floatIsFlashing(f), '闪白超过增加一帧后的时长仍未结束');
   f.t = 0;
   assert(G.floatPopScale(f) === 1.5, '跳字稳定尺寸不是 1.5 倍');
 });
@@ -120,7 +132,7 @@ test('触屏按钮不显示快捷键，下移后装备紧跟技能列表', () =>
     assert(!texts.includes(forbidden), '按钮仍显示快捷键：' + forbidden);
   }
   assert(!texts.some(t => t.startsWith('墨水 ') || /^墨潮 \d/.test(t)), '右下角仍重复显示资源信息');
-  assert(G.absorbRect.y === 510 && G.specialRect.y === 510 && G.diveRect.y === 446, '三个按钮没有按新布局下移');
+  assert(G.absorbRect.y === 510 && G.absorbRect.h === 64 && G.specialRect.y === 510 && G.diveRect.y === 446, '按钮布局或吸墨向下扩展错误');
   const skills = drawTexts.filter(t => t.x === 16 && t.y === 70);
   const equipment = drawTexts.filter(t => t.x === 16 && t.txt.startsWith('['));
   assert(skills.length > 0 && equipment.length > 0 && equipment[0].y > skills[skills.length - 1].y, '装备信息没有紧跟技能列表');
@@ -170,5 +182,42 @@ test('区域技能与墨潮新星在实际渲染中调用增伤范围标注', ()
   assert(drawArcs.some(a => a.r === 40) && drawArcs.some(a => a.r === 70), '实际战斗渲染缺少增伤边界');
   assert(drawTexts.some(t => t.txt === '圆心增伤 +30%') && drawTexts.some(t => t.txt === '外圈增伤 +50%'), '实际战斗渲染缺少增伤文字');
 });
-console.log(failed ? 'UI_TEST_FAILURES: ' + failed : 'UI_TEST_OK (14/14)');
+test('近战预警外圈低于半透，生成打击后才恢复高亮', () => {
+  fresh(); G.spawnEnemy('stick', 100, 0); const e = G.enemies[G.enemies.length - 1];
+  e.swingT = 0.3; drawStrokes.length = 0; G.drawMeleeTelegraph(e);
+  const warning = drawStrokes.find(s => s.width === 1.8);
+  assert(warning && warning.alpha <= 0.38, '未生成打击时外圈仍过于醒目');
+  e.swingT = 0.1; drawStrokes.length = 0; G.drawMeleeTelegraph(e);
+  const active = drawStrokes.find(s => Math.abs(s.width - 3) < 1e-8);
+  assert(active && active.alpha === 0.8 && warning.alpha < active.alpha * 0.5, '打击生成后没有与预警外圈形成明显区分');
+});
+test('吸墨按钮向下延伸后的底部区域仍可触发弹反', () => {
+  fresh(); const r = G.absorbRect;
+  pointer('pointerdown', 8, r.x + r.w / 2, r.y + r.h - 3);
+  assert(G.player.absorbT > 0, '向下新增的触控区域没有响应');
+});
+test('选词与弹反无敌显示金色描边，真实受击不显示金光', () => {
+  fresh(); G.player.goldT = 1; drawStrokes.length = 0; G.render();
+  assert(drawStrokes.some(s => s.color === '#d8a64b' && s.shadowColor === '#d8a64b'), '选词保护没有金色描边');
+  G.player.goldT = 0; G.hitStop = 0.3; drawStrokes.length = 0; G.render();
+  assert(drawStrokes.some(s => s.color === '#d8a64b'), '弹反保护没有金色描边');
+  G.hitStop = 0; G.player.hurtT = 0.5; drawStrokes.length = 0; G.render();
+  assert(!drawStrokes.some(s => s.color === '#d8a64b'), '真实受击仍被画成金色保护');
+});
+test('跳字闪白延长一帧，结束后恢复原色并保留原色光晕', () => {
+  fresh(); const f = { x: 0, y: 0, txt: '99', t: 0.7, color: '#1a2b8f' }; G.floats.push(f);
+  drawTexts.length = 0; G.render(); let text = drawTexts.find(t => t.txt === '99');
+  assert(text && text.color === '#ffffff' && text.shadowBlur === 5, '跳字首帧没有白色闪光和原色光晕');
+  f.t = f.maxT - 0.09; drawTexts.length = 0; G.render(); text = drawTexts.find(t => t.txt === '99');
+  assert(text && text.color === '#ffffff', '原闪白结束后额外一帧没有保持白色');
+  f.t = f.maxT - 0.1; drawTexts.length = 0; G.render(); text = drawTexts.find(t => t.txt === '99');
+  assert(text && text.color === '#1a2b8f', '延长闪白结束后没有恢复原色');
+});
+test('墨迹持续伤害跳字使用低透小字且不闪白', () => {
+  fresh(); G.floats.push({ x: 0, y: 0, txt: '2', t: 0.7, color: '#1a2b8f', weak: true });
+  drawTexts.length = 0; G.render(); const text = drawTexts.find(t => t.txt === '2');
+  assert(text && text.color === '#1a2b8f' && text.shadowBlur === 0, '持续伤害跳字仍闪白或带光晕');
+  assert(text.font.startsWith('10px') && Math.abs(text.alpha - 0.58) < 1e-8, '持续伤害跳字没有使用低透小字');
+});
+console.log(failed ? 'UI_TEST_FAILURES: ' + failed : 'UI_TEST_OK (19/19)');
 process.exit(failed ? 1 : 0);

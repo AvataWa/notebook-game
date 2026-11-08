@@ -1,5 +1,7 @@
 // 无头冒烟测试：模拟一整局 10 关 100 波，验证关卡制 + Boss 链 + 胜利条件
-const src = ['enemy-config.js', 'content-config.js', 'main.js', 'build-runtime.js']
+const src = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'procedural-locomotion.js',
+  'creature-designs.js', 'creature-bio-rig.js', 'creature-design-renderer.js',
+  'biped-locomotion.js', 'biped-renderer.js', 'creature-game-runtime.js', 'main.js', 'build-runtime.js']
   .map(f => require('fs').readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
 
 const fakeCtx = new Proxy({}, {
@@ -16,7 +18,7 @@ const fakeCanvas = {
   getBoundingClientRect: () => ({ left: 0, top: 0, width: 375, height: 667 })
 };
 global.window = { addEventListener() {}, devicePixelRatio: 1, innerWidth: 375, innerHeight: 667 };
-global.document = { getElementById: () => fakeCanvas };
+global.document = { getElementById: () => fakeCanvas, createElement: () => fakeCanvas };
 global.requestAnimationFrame = () => {};
 
 eval(src + `
@@ -46,7 +48,7 @@ try {
       G.player.dmgMul = 200;
       if (steps % 150 === 0) { G.player.x += (Math.random() - 0.5) * 500; G.player.y += (Math.random() - 0.5) * 500; }
       G.update(dt);
-      if (steps % 10 === 0) G.render();   // 渲染每 10 帧抽验一次即可
+      if (steps % 60 === 0) G.render();   // 战斗逻辑逐帧跑完；完整角色绘制每秒抽验一次
       for (const e of G.enemies) {
         if (e.boss && !e.dead) { bossSeen.add(e.stage + ':' + e.name); if (e.phase === 2) sawPhase2 = true; }
       }

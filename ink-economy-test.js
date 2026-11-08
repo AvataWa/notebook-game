@@ -6,7 +6,7 @@ global.window = { addEventListener() {}, devicePixelRatio: 1, innerWidth: 375, i
 global.document = { getElementById: () => fakeCanvas }; global.requestAnimationFrame = () => {};
 eval(src + `
 ;globalThis.G = {
-  resetGame, addInkStain, addHostileInk, addInkStroke, addLinkedTrail, updateInkTactics,
+  resetGame, addInkStain, addHostileInk, addInkStroke, addLinkedTrail, updateInkTactics, regenInkResourceBudgets,
   spawnEnemy, render,
   get player() { return player; }, get floats() { return floats; }, get enemies() { return enemies; },
   set time(v) { gameTime = v; }, set state(v) { state = v; },
@@ -22,15 +22,25 @@ function cutLine(e, length) {
   G.addInkStroke(80, -20, 80, 20, '#1a2b8f', false); G.updateInkTactics();
 }
 
-test('非轨迹夺地按覆盖面积返墨，大片夺地单次封顶 4', () => {
+test('非轨迹夺地按覆盖面积返墨，大片夺地单次封顶 2', () => {
   fresh(); G.addHostileInk(0, 0, 30, 8, 101); G.addInkStain(0, 0, 30, 8, '#1a2b8f', false, false);
   const smallGain = G.player.ink - 50;
-  assert(smallGain > 0 && smallGain < 4, '小片夺地没有按面积返墨：' + smallGain);
+  assert(smallGain > 0 && smallGain < 2, '小片夺地没有按面积返墨：' + smallGain);
   assert(!G.floats.some(f => f.txt.startsWith('夺地 +')), '夺地返墨仍显示具体数字跳字');
   fresh(); G.addHostileInk(0, 0, 30, 60, 102); G.addInkStain(0, 0, 30, 60, '#1a2b8f', false, false);
-  assert(near(G.player.ink, 54), '大片夺地未封顶 4：' + (G.player.ink - 50));
-  G.ink = 99.9; G.addHostileInk(100, 0, 30, 8, 103); G.addInkStain(100, 0, 30, 8, '#1a2b8f', false, false);
+  assert(near(G.player.ink, 52), '大片夺地未封顶 2：' + (G.player.ink - 50));
+  fresh(); G.ink = 99.9; G.addHostileInk(100, 0, 30, 8, 103); G.addInkStain(100, 0, 30, 8, '#1a2b8f', false, false);
   assert(G.player.ink <= 100 && near(G.player.ink, 100), '返墨超过最大墨水或满墨限制失效');
+});
+
+test('夺地共享每秒 2 点返墨预算，预算回复后可再次返墨', () => {
+  fresh(); G.addHostileInk(0, 0, 30, 60, 104); G.addInkStain(0, 0, 30, 60, '#1a2b8f', false, false);
+  assert(near(G.player.ink, 52), '首次夺地返墨不是 2：' + (G.player.ink - 50));
+  G.addHostileInk(150, 0, 30, 60, 105); G.addInkStain(150, 0, 30, 60, '#1a2b8f', false, false);
+  assert(near(G.player.ink, 52), '同秒第二次夺地绕过了返墨预算');
+  G.regenInkResourceBudgets(1);
+  G.addHostileInk(-150, 0, 30, 60, 106); G.addInkStain(-150, 0, 30, 60, '#1a2b8f', false, false);
+  assert(near(G.player.ink, 54), '预算回复后夺地返墨不是 2：' + (G.player.ink - 52));
 });
 
 test('空白涂地、同色重复与移动／弹道路径均不返墨', () => {
@@ -66,5 +76,5 @@ test('来源怪物重新续墨不返墨', () => {
   assert(near(G.player.ink, 50), '重新续墨错误触发截墨返墨');
   assert(!G.floats.some(f => f.txt.startsWith('截墨 +')), '续墨产生了截墨返墨跳字');
 });
-console.log(failed ? 'INK_ECONOMY_TEST_FAILURES: ' + failed : 'INK_ECONOMY_TEST_OK (5/5)');
+console.log(failed ? 'INK_ECONOMY_TEST_FAILURES: ' + failed : 'INK_ECONOMY_TEST_OK (6/6)');
 process.exit(failed ? 1 : 0);

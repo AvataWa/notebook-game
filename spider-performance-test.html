@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>120 只蜘蛛 · 多足动作性能压测</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: #34343e; color: #1a2b8f; font-family: "KaiTi", "STKaiti", serif; }
+  body { display: flex; justify-content: center; }
+  main { width: min(480px, 100vw); background: #f5f1e6; padding: 17px 14px; user-select: none; -webkit-user-select: none; touch-action: none; }
+  h1 { margin: 0; font-size: 23px; }
+  .sub { margin: 5px 0 11px; color: #686868; font-size: 12px; line-height: 1.55; }
+  canvas { display: block; width: 100%; height: auto; border: 1px solid rgba(26,43,143,.2); background: #f5f1e6; }
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  button, select { min-height: 40px; border: 2px solid #1a2b8f; border-radius: 5px; background: #fffaf0; color: #1a2b8f; font: bold 14px "KaiTi", "STKaiti", serif; padding: 5px 8px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin-top: 12px; font-size: 13px; color: #555; }
+  .stat { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(26,43,143,.18); padding: 4px 0; }
+  .stat b { color: #1a2b8f; font-size: 15px; }
+  .lod { grid-column: 1 / -1; line-height: 1.8; }
+  .note { margin-top: 10px; color: #777; font-size: 11px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<main>
+  <h1>120 只蜘蛛 · 动作性能压测</h1>
+  <div class="sub">同一页面直接对比完整 IK 与动态降级。数据来自当前浏览器的真实逻辑更新和 Canvas 绘制。</div>
+  <canvas id="game" width="452" height="520"></canvas>
+  <div class="controls">
+    <select id="mode" aria-label="压测模式"><option value="lod">动态 LOD</option><option value="full">全部完整 IK</option></select>
+    <select id="layout" aria-label="蜘蛛分布"><option value="same">120 只同屏</option><option value="spread">120 只分散</option></select>
+    <button id="pause">暂停压测</button><button id="reset">重置数据</button>
+  </div>
+  <div class="stats">
+    <div class="stat">实际帧率<b id="fps">--</b></div>
+    <div class="stat">总帧耗时<b id="frame">--</b></div>
+    <div class="stat">逻辑更新<b id="update">--</b></div>
+    <div class="stat">Canvas 绘制<b id="draw">--</b></div>
+    <div class="stat">可见蜘蛛<b id="visible">--</b></div>
+    <div class="stat">远帧缓存<b id="cache">--</b></div>
+    <div class="lod" id="lods">近 0 / 中 0 / 远 0 / 屏外 0</div>
+  </div>
+  <div class="note">近处 ≤190：逐帧完整 IK；中距离 ≤360：30 Hz；远处：12 Hz＋方向帧缓存；屏外：8 Hz。压测只改变动画，不包含正式游戏的墨迹、技能和碰撞开销。</div>
+</main>
+<script>
+const nativeRaf = window.requestAnimationFrame.bind(window);
+window.requestAnimationFrame = () => 0;
+const previewAddEventListener = window.addEventListener.bind(window);
+window.addEventListener = (type, ...args) => { if (type !== 'resize') previewAddEventListener(type, ...args); };
+</script>
+<script src="battle-config.js"></script>
+<script src="enemy-config.js"></script>
+<script src="content-config.js"></script>
+<script src="procedural-locomotion.js?v=20261108-lod"></script>
+<script src="main.js?v=20261108-lod"></script>
+<script src="build-runtime.js"></script>
+<script>
+(() => {
+  resetGame(); applyOption(0); state = 'pause';
+  const canvas = document.getElementById('game');
+  canvas.width = 452; canvas.height = 520; canvas.style.width = '100%'; canvas.style.height = 'auto';
+  const modeInput = document.getElementById('mode'), layoutInput = document.getElementById('layout');
+  const pauseBtn = document.getElementById('pause');
+  const fields = Object.fromEntries(['fps','frame','update','draw','visible','cache','lods'].map(id => [id, document.getElementById(id)]));
+  let running = true, mode = 'lod', layout = 'same', time = 0, last = performance.now(), frames = 0;
+  let avgFps = 60, avgFrame = 16.7, avgUpdate = 0, avgDraw = 0, visibleCount = 0;
+  let lodCounts = [0, 0, 0, 0];
+
+  function rebuild() {
+    enemies = []; spiderFarSpriteCache.clear();
+    const cols = layout === 'same' ? 12 : 15, rows = 120 / cols;
+    for (let i = 0; i < 120; i++) {
+      const col = i % cols, row = Math.floor(i / cols);
+      const x = layout === 'same' ? -198 + col * 36 : -420 + col * 60;
+      const y = layout === 'same' ? -238 + row * 52 : -522 + row * 75;
+      spawnEnemy('spider', x, y);
+      const e = enemies[enemies.length - 1];
+      Object.assign(e, { baseX: x, baseY: y, walk: Math.random() * 6, swingT: 0,
+        flash: 0, squash: 0, ink: 0, dotT: 0, shotWindup: 0 });
+      ProceduralLocomotion.ensureSpiderRig(e);
+    }
+    player.x = 0; player.y = 0;
+    resetStats();
+  }
+  function resetStats() {
+    avgFps = 60; avgFrame = 16.7; avgUpdate = 0; avgDraw = 0; frames = 0;
+  }
+  pauseBtn.onclick = () => { running = !running; pauseBtn.textContent = running ? '暂停压测' : '继续压测'; };
+  modeInput.onchange = () => { mode = modeInput.value; resetStats(); };
+  layoutInput.onchange = () => { layout = layoutInput.value; rebuild(); };
+  document.getElementById('reset').onclick = resetStats;
+
+  function update(dt) {
+    const t0 = performance.now();
+    lodCounts = [0, 0, 0, 0]; visibleCount = 0;
+    for (const e of enemies) {
+      e.x = e.baseX + Math.sin(time * 0.85 + e.id * 0.7) * 18;
+      e.y = e.baseY + Math.cos(time * 0.65 + e.id * 0.53) * 12;
+      e.walk += dt * 10;
+      const onscreen = e.x >= -226 && e.x <= 226 && e.y >= -260 && e.y <= 260;
+      if (onscreen) visibleCount++;
+      if (mode === 'full') {
+        e.locomotionLod = 0; ProceduralLocomotion.updateSpiderLocomotion(e, dt);
+      } else {
+        const d = Math.hypot(e.x - player.x, e.y - player.y);
+        ProceduralLocomotion.updateSpiderLocomotionLOD(e, dt, d, onscreen);
+        lodCounts[e.locomotionLod]++;
+      }
+    }
+    return performance.now() - t0;
+  }
+
+  function draw() {
+    const t0 = performance.now();
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, 452, 520);
+    ctx.strokeStyle = 'rgba(105,145,185,0.15)'; ctx.lineWidth = 1;
+    for (let y = 24; y < 520; y += 24) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(452, y); ctx.stroke(); }
+    ctx.save(); ctx.translate(226, 260);
+    for (const e of enemies) {
+      if (e.x < -256 || e.x > 256 || e.y < -290 || e.y > 290) continue;
+      if (mode === 'full') drawEnemyFull(e); else drawEnemy(e);
+    }
+    ctx.restore();
+    ctx.fillStyle = 'rgba(26,43,143,0.65)'; ctx.textAlign = 'left'; ctx.font = '12px ' + FONT;
+    ctx.fillText(mode === 'full' ? '全部完整 IK' : '动态 LOD', 12, 22);
+    return performance.now() - t0;
+  }
+
+  function publish() {
+    fields.fps.textContent = avgFps.toFixed(1);
+    fields.frame.textContent = avgFrame.toFixed(2) + ' ms';
+    fields.update.textContent = avgUpdate.toFixed(2) + ' ms';
+    fields.draw.textContent = avgDraw.toFixed(2) + ' ms';
+    fields.visible.textContent = visibleCount + ' / 120';
+    fields.cache.textContent = spiderFarSpriteCache.size + ' / 32';
+    fields.lods.textContent = mode === 'full' ? '当前 120 只全部使用逐帧完整 IK' :
+      '近 ' + lodCounts[0] + ' / 中 ' + lodCounts[1] + ' / 远 ' + lodCounts[2] + ' / 屏外 ' + lodCounts[3];
+  }
+  window.requestAnimationFrame = nativeRaf;
+  function frame(now) {
+    const rawDt = Math.max(0.001, (now - last) / 1000), dt = Math.min(0.033, rawDt); last = now;
+    if (running) {
+      time += dt;
+      const u = update(dt), d = draw(), total = performance.now() - (now - 0);
+      const blend = frames < 30 ? 0.12 : 0.035;
+      avgFps += (1 / rawDt - avgFps) * blend;
+      avgUpdate += (u - avgUpdate) * blend; avgDraw += (d - avgDraw) * blend;
+      avgFrame += ((u + d) - avgFrame) * blend;
+      frames++; if (frames % 10 === 0) publish();
+    }
+    requestAnimationFrame(frame);
+  }
+  window.__SPIDER_STRESS__ = {
+    getStats: () => ({ mode, layout, fps: avgFps, frameMs: avgFrame, updateMs: avgUpdate,
+      drawMs: avgDraw, visible: visibleCount, counts: lodCounts.slice(), cache: spiderFarSpriteCache.size, frames }),
+    setMode: value => { modeInput.value = value; modeInput.onchange(); },
+    setLayout: value => { layoutInput.value = value; layoutInput.onchange(); },
+    reset: resetStats
+  };
+  rebuild(); window.__SPIDER_STRESS_READY__ = true; requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

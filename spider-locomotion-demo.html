@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>墨线蜘蛛 · 程序化多足动作打样</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: #34343e; color: #1a2b8f; font-family: "KaiTi", "STKaiti", serif; }
+  body { display: flex; justify-content: center; }
+  main { width: min(480px, 100vw); background: #f5f1e6; padding: 18px 14px 16px; user-select: none; -webkit-user-select: none; touch-action: none; }
+  h1 { margin: 0; font-size: 24px; letter-spacing: 1px; }
+  .sub { margin: 6px 0 12px; color: #686868; font-size: 12px; line-height: 1.6; }
+  canvas { display: block; width: 100%; height: auto; border: 1px solid rgba(26,43,143,.2); background: #f5f1e6; touch-action: none; }
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 12px; }
+  button, select { min-height: 42px; border: 2px solid #1a2b8f; border-radius: 5px; background: rgba(255,250,238,.8); color: #1a2b8f; font: bold 15px "KaiTi", "STKaiti", serif; padding: 6px 10px; }
+  button:active { transform: translateY(1px); background: rgba(26,43,143,.08); }
+  label { font-size: 13px; color: #4c4c4c; }
+  .speed { grid-column: 1 / -1; display: grid; grid-template-columns: 76px 1fr 42px; align-items: center; gap: 8px; }
+  input[type="range"] { width: 100%; accent-color: #1a2b8f; }
+  .feet { display: flex; align-items: center; gap: 7px; padding: 8px; }
+  .stats { display: flex; align-items: center; justify-content: center; font-size: 13px; color: #686868; }
+  .note { margin: 12px 2px 0; color: #686868; font-size: 12px; line-height: 1.7; }
+  .a { color: #1a2b8f; } .b { color: #a75b68; }
+</style>
+</head>
+<body>
+<main>
+  <h1>墨线蜘蛛 · 多足运动打样</h1>
+  <div class="sub">世界坐标落脚点 / 1→2→3→4 波动步态 / 双段骨骼 IK<br>移动身体才会迈步；支撑脚不会跟着身体滑动。</div>
+  <canvas id="game" width="452" height="580"></canvas>
+  <div class="controls">
+    <button id="pause">暂停动作</button>
+    <select id="path" aria-label="移动路径">
+      <option value="circle">绕圈移动</option>
+      <option value="line">直线往返</option>
+      <option value="eight">8 字移动</option>
+    </select>
+    <label class="speed">移动速度<input id="speed" type="range" min="0.4" max="2" value="1" step="0.1"><span id="speedText">1.0×</span></label>
+    <label class="feet"><input id="showFeet" type="checkbox" checked>显示脚部状态</label>
+    <div class="stats" id="stats">支撑 8 / 摆动 0</div>
+  </div>
+  <div class="note"><span class="a">蓝点：左侧足</span>　<span class="b">红点：右侧足</span><br>空心圈表示正在摆动；细线末端为当前 IK 脚底。页面仅演示动作，不修改怪物数值。</div>
+</main>
+<script>
+const nativeRaf = window.requestAnimationFrame.bind(window);
+window.requestAnimationFrame = () => 0;
+const previewAddEventListener = window.addEventListener.bind(window);
+window.addEventListener = (type, ...args) => { if (type !== 'resize') previewAddEventListener(type, ...args); };
+</script>
+<script src="battle-config.js"></script>
+<script src="enemy-config.js"></script>
+<script src="content-config.js"></script>
+<script src="procedural-locomotion.js?v=20261108-spider-lod"></script>
+<script src="main.js?v=20261108-spider-lod"></script>
+<script src="build-runtime.js"></script>
+<script>
+(() => {
+  resetGame(); applyOption(0); state = 'pause'; enemies = [];
+  const canvas = document.getElementById('game');
+  canvas.width = 452; canvas.height = 580;
+  canvas.style.width = '100%'; canvas.style.height = 'auto';
+  spawnEnemy('spider', 0, 0);
+  const spider = enemies.pop();
+  Object.assign(spider, { x: 0, y: 0, walk: 0, flash: 0, squash: 0, dotT: 0,
+    shotWindup: 0, swingT: 0, ink: 0, faceA: 0, shade: false });
+  const rig = ProceduralLocomotion.ensureSpiderRig(spider);
+  const pauseBtn = document.getElementById('pause'), pathInput = document.getElementById('path');
+  const speedInput = document.getElementById('speed'), speedText = document.getElementById('speedText');
+  const showFeet = document.getElementById('showFeet'), stats = document.getElementById('stats');
+  let running = true, path = 'circle', speed = 1, time = 0, last = performance.now();
+  pauseBtn.onclick = () => { running = !running; pauseBtn.textContent = running ? '暂停动作' : '继续动作'; };
+  pathInput.onchange = () => { path = pathInput.value; rig.reset(spider.x, spider.y, rig.angle); };
+  speedInput.oninput = () => { speed = +speedInput.value; speedText.textContent = speed.toFixed(1) + '×'; };
+
+  function update(dt) {
+    if (!running) return;
+    time += dt * speed;
+    if (path === 'circle') {
+      spider.x = Math.cos(time * 0.75) * 70;
+      spider.y = Math.sin(time * 0.75) * 55;
+    } else if (path === 'line') {
+      spider.x = Math.sin(time * 0.8) * 85;
+      spider.y = Math.sin(time * 0.4) * 12;
+    } else {
+      spider.x = Math.sin(time * 0.7) * 80;
+      spider.y = Math.sin(time * 1.4) * 48;
+    }
+    rig.update(spider, dt * speed);
+  }
+
+  function draw() {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1; ctx.fillStyle = PAPER; ctx.fillRect(0, 0, 452, 580);
+    ctx.strokeStyle = 'rgba(105,145,185,0.18)'; ctx.lineWidth = 1;
+    for (let y = 24; y < 580; y += 24) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(452, y); ctx.stroke(); }
+    ctx.strokeStyle = 'rgba(190,80,90,0.22)'; ctx.beginPath(); ctx.moveTo(48, 0); ctx.lineTo(48, 580); ctx.stroke();
+    ctx.fillStyle = '#777'; ctx.textAlign = 'left'; ctx.font = '12px ' + FONT;
+    ctx.fillText('脚固定在纸面，身体继续前进', 18, 27);
+
+    ctx.save(); ctx.translate(226, 275); ctx.scale(2.5, 2.5);
+    drawEnemyFull(spider);
+    ctx.restore();
+
+    if (showFeet.checked) {
+      const poses = rig.getPose(spider);
+      for (const pose of poses) {
+        const x = 226 + pose.groundX * 2.5, y = 275 + pose.groundY * 2.5;
+        const col = pose.leg.group === 0 ? '#1a2b8f' : '#a75b68';
+        ctx.save(); ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1.5;
+        ctx.globalAlpha = pose.leg.state === 'planted' ? 0.9 : 0.65;
+        ctx.beginPath(); ctx.arc(x, y, pose.leg.state === 'planted' ? 3 : 4.5, 0, Math.PI * 2);
+        pose.leg.state === 'planted' ? ctx.fill() : ctx.stroke();
+        ctx.restore();
+      }
+      const swinging = rig.legs.filter(l => l.state === 'stepping').length;
+      stats.textContent = '支撑 ' + (8 - swinging) + ' / 摆动 ' + swinging;
+    }
+    ctx.fillStyle = '#686868'; ctx.textAlign = 'center'; ctx.font = '12px ' + FONT;
+    ctx.fillText('每侧严格 1→2→3→4 · 左右交错迈步', 226, 548);
+  }
+
+  window.requestAnimationFrame = nativeRaf;
+  function frame(now) {
+    const dt = Math.min(0.033, (now - last) / 1000); last = now;
+    update(dt); draw(); requestAnimationFrame(frame);
+  }
+  window.__SPIDER_DEMO_READY__ = true;
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

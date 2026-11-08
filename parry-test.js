@@ -162,11 +162,20 @@ test('已造成伤害的挥击不能补报弹反成功', () => {
   assert(e.hp === ehp && e.swingT > 0 && G.player.hp === hitHp, '已命中挥击被补报为弹反');
   assert(!G.floats.some(f => f.txt === '弹反！'), '已命中挥击仍出现弹反成功反馈');
 });
-test('单次吸墨的子弹返墨最多为 12', () => {
+test('单次吸墨仅首次弹反回墨，后续收益保留且下次吸墨重置', () => {
   fresh(); G.player.ink = 50; const e = enemy('pencilthrower', 100, 0); G.castAbsorb();
-  for (let i = 0; i < 12; i++) G.reflectEnemyBullet({ x: 0, y: 0, vx: -100, vy: 0, dmg: 1, life: 2, sourceId: e.id });
-  assert(near(G.player.ink, 62), '单次吸墨返墨没有封顶 12：' + G.player.ink);
+  const bullet = () => ({ x: 0, y: 0, vx: -100, vy: 0, dmg: 1, life: 2, sourceId: e.id });
+  G.reflectEnemyBullet(bullet());
+  assert(near(G.player.ink, 53), '首次弹反没有回墨：' + G.player.ink);
+  const firstCharge = G.player.special;
+  G.reflectEnemyBullet(bullet());
+  assert(near(G.player.ink, 53), '同次吸墨第二次弹反仍重复回墨：' + G.player.ink);
+  assert(G.player.special > firstCharge, '第二次弹反的墨潮充能被错误移除：' + G.player.special);
+  for (let i = 0; i < 12; i++) G.reflectEnemyBullet(bullet());
+  assert(near(G.player.ink, 53), '同次吸墨连续弹反仍重复回墨：' + G.player.ink);
   assert(near(G.player.special, 100), '连续弹反的墨潮充能没有封顶 100%');
+  G.player.absorbT = 0; G.player.absorbCd = 0; G.castAbsorb(); G.reflectEnemyBullet(bullet());
+  assert(near(G.player.ink, 56), '下一次吸墨没有重置首次回墨机会：' + G.player.ink);
   G.render();
 });
 test('Boss 近身碰撞可以被弹反，玩家不掉血且 Boss 受反伤', () => {
