@@ -18,10 +18,17 @@ const BATTLE_CONFIG = {
   },
 
   melee: {
-    period: 1.5,            // 近战怪物挥击周期
     total: 0.55,            // 挥击总时长（含前摇与命中持续）
     active: 0.2,            // 红色命中圈持续时间
     triggerExtra: 32        // 进入攻击范围外多少像素时开始挥击
+  },
+
+  enemyAttack: {
+    earlyMin: 2.5,          // 第 1 关随机出招间隔下限
+    earlyMax: 3,            // 第 1 关随机出招间隔上限
+    lateMin: 1.5,           // 第 10 关随机出招间隔下限
+    lateMax: 2,             // 第 10 关随机出招间隔上限
+    maxStage: 10
   },
 
   spawning: {
@@ -36,8 +43,6 @@ const BATTLE_CONFIG = {
     enemyFriendlySpeed: 0.82,// 怪物站在己方（彩）墨迹上的移速倍率
     regenBase: 0.35,        // 非潜墨状态基础回墨/秒
     regenOwnBonus: 2.5,     // 非潜墨站己方墨迹额外回墨/秒
-    hostileTick: 0.55,      // 灰墨伤害间隔
-    hostileDamage: 2,       // 灰墨每次伤害
     trailFreshCharge: 0.003,// 移动／弹道轨迹每个新增格提供的墨潮充能%
     trailCoverCharge: 0.005,// 移动／弹道轨迹每个覆盖灰墨格提供的墨潮充能%
     trailChargePerSecond: 6,// 全部移动／弹道轨迹共享的墨潮充能预算/秒

@@ -56,7 +56,7 @@
     const r = rankInfo(index), i = Math.min(17, r.index), major = r.major;
     return { hp: 1 + i * 0.05 + (major >= 1 ? 0.1 : 0), dmg: 1 + i * 0.03 + (major >= 2 ? 0.15 : 0),
       bossHp: major >= 4 ? 1.3 : 1, attack: major >= 3 ? 0.9 : 1, cap: major >= 1 ? 5 : 0,
-      gray: major >= 3 ? 1 : 0, eliteEarly: major >= 2 ? 60 : 0, phaseAt: major >= 4 ? 0.65 : 0.5 };
+      eliteEarly: major >= 2 ? 60 : 0, phaseAt: major >= 4 ? 0.65 : 0.5 };
   }
   function inheritedDescription() {
     if (!meta.inherited) return '无';
@@ -72,12 +72,12 @@
     player.metaAbsorbMul = 1 + (meta.specs.absorb || 0) * 0.05;
     player.metaDiveMul = 1 + (meta.specs.dive || 0) * 0.05;
     player.speed = BATTLE.player.speed * (1 + (t.speed || 0) * 0.015);
-    player.metaEnemyAttackMul = 1; player.metaEliteEarly = 0; player.metaGrayDamageAdd = 0;
+    player.metaEnemyAttackMul = 1; player.metaEliteEarly = 0;
     player.metaBossPhaseAt = 0.5; player.metaRegenMul = 1; player.metaNoRevive = false;
     if (run && run.mode === 'ranked') {
       const m = rankMultipliers(run.rank);
       player.metaEnemyAttackMul = m.attack * (run.affixes.includes('急促铃') ? 0.9 : 1);
-      player.metaEliteEarly = m.eliteEarly; player.metaGrayDamageAdd = m.gray;
+      player.metaEliteEarly = m.eliteEarly;
       player.metaBossPhaseAt = m.phaseAt; player.metaRegenMul = run.affixes.includes('断墨') ? 0.7 : 1;
       player.metaNoRevive = run.affixes.includes('不许返工');
     }
@@ -96,6 +96,18 @@
     run = { mode: ranked ? 'ranked' : 'normal', rank: meta.rank, found: [], bossStages: [], affixes, settled: false, uid: 1 };
     settlement = null; resetGame(); applyPlayer(); state = 'start';
     if (ranked) toast('段位考核 · ' + rankInfo(run.rank).name + (affixes.length ? ' · ' + affixes.join(' / ') : ''));
+    return true;
+  }
+  function beginBossTest() {
+    beginRun(false);
+    run.mode = 'bossTest';
+    applyOption(0);   // 随机起手技能，跳过起手三选一，直接进入战斗。
+    player.level = 10; player.xp = 0; player.xpNext = xpForNextLevel(10);
+    curStage = 1; bossStageSpawned = 1;
+    spawnBoss(1);
+    player.goldT = 1;
+    state = 'play';
+    toast('Boss 测试关 · 不计入局外收益');
     return true;
   }
   function recordEquipment(dr) {
@@ -280,14 +292,15 @@
     button(rects.ranked, meta.rank >= 18 ? '大师考核' : '段位考核 · ' + rankInfo().name);
     button(rects.inventory, '文具盒 · 装备收藏 ' + meta.inventory.length);
     button(rects.talents, '天赋 · 墨点与技能专精');
-    text('完成 ' + meta.stats.runs + ' 局　通关 ' + meta.stats.wins + ' 次　最高第 ' + meta.stats.highestStage + ' 页', W / 2, 526, 12, DARK, 'center');
-    text('段位只升不降 · 失败也会结算墨点与装备', W / 2, 552, 11, GRAY, 'center');
+    button(rects.bossTest, 'Boss 测试关 · 乱线魔王');
+    text('完成 ' + meta.stats.runs + ' 局　通关 ' + meta.stats.wins + ' 次　最高第 ' + meta.stats.highestStage + ' 页', W / 2, 548, 12, DARK, 'center');
+    text('段位只升不降 · 失败也会结算墨点与装备', W / 2, 574, 11, GRAY, 'center');
     button(rects.reset, resetArmed ? '再次点击确认清空' : '清空本地存档', true, resetArmed);
   }
   function homeRects() {
     return { normal: { x: 58, y: 235, w: 259, h: 48 }, ranked: { x: 58, y: 299, w: 259, h: 48 },
       inventory: { x: 58, y: 363, w: 259, h: 48 }, talents: { x: 58, y: 427, w: 259, h: 48 },
-      reset: { x: 105, y: 594, w: 165, h: 34 } };
+      bossTest: { x: 58, y: 491, w: 259, h: 38 }, reset: { x: 105, y: 610, w: 165, h: 34 } };
   }
   function drawTalents() {
     panel('墨点天赋', '墨点 ' + meta.ink); button(backButton(), '返回');
@@ -410,20 +423,36 @@
     const pg = pager(settlement.found.length, per, 526); drawSettlement.pg = pg;
     button({ x: 62, y: 583, w: 251, h: 43 }, '完成结算并返回手账');
   }
+  function testEndRects() { return { retry: { x: 75, y: 305, w: 225, h: 44 }, home: { x: 75, y: 365, w: 225, h: 44 } }; }
+  function drawTestEnd() {
+    ctx.fillStyle = 'rgba(255,250,238,0.97)'; ctx.fillRect(45, 190, 285, 250);
+    jrect(45, 190, 285, 250, state === 'win' ? INK : RED, 2.5);
+    text(state === 'win' ? 'Boss 测试完成' : '测试失败', W / 2, 238, 23, state === 'win' ? INK : RED, 'center', true);
+    text('测试关不产生墨点、装备或段位收益', W / 2, 274, 11, GRAY, 'center');
+    const r = testEndRects(); button(r.retry, '再次挑战'); button(r.home, '返回局外手账');
+  }
   function drawMeta() {
     if (state === 'metaHome') drawHome();
     else if (state === 'metaTalents') drawTalents();
     else if (state === 'metaInventory') drawInventory();
     else if (state === 'metaRunSummary') drawSummary();
     else if (state === 'metaSettlement') drawSettlement();
+    else if ((state === 'over' || state === 'win') && run && run.mode === 'bossTest') drawTestEnd();
   }
   const baseRender = render;
   render = function() {
-    if ((state === 'over' || state === 'win') && run && !run.settled) settleRun(state === 'win');
+    if ((state === 'over' || state === 'win') && run && run.mode !== 'bossTest' && !run.settled) settleRun(state === 'win');
     baseRender(); drawMeta();
   };
   function hit(p, r) { return pointInRect(p, r); }
   canvas.addEventListener('pointerdown', e => {
+    if ((state === 'over' || state === 'win') && run && run.mode === 'bossTest') {
+      e.preventDefault(); e.stopImmediatePropagation();
+      const p = toLogical(e), r = testEndRects();
+      if (hit(p, r.retry)) beginBossTest();
+      else if (hit(p, r.home)) goHome();
+      return;
+    }
     if (!['metaHome', 'metaTalents', 'metaInventory', 'metaRunSummary', 'metaSettlement'].includes(state)) return;
     e.preventDefault(); e.stopImmediatePropagation(); const p = toLogical(e); uiMessage = '';
     if (state === 'metaHome') {
@@ -432,6 +461,7 @@
       else if (hit(p, r.ranked)) beginRun(true);
       else if (hit(p, r.inventory)) { state = 'metaInventory'; metaPage = 0; }
       else if (hit(p, r.talents)) { state = 'metaTalents'; metaPage = 0; }
+      else if (hit(p, r.bossTest)) beginBossTest();
       else if (hit(p, r.reset)) {
         if (resetArmed) { storage.remove(C.storageKey); meta = defaults(); save(); goHome(); }
         else resetArmed = true;
@@ -487,7 +517,7 @@
   }, true);
 
   window.__metaRuntime = {
-    beginRun, settleRun, recordEquipment, continueSettlement, finishSettlement, toggleSettlement, upgradeTalent, resetTalents,
+    beginRun, beginBossTest, settleRun, recordEquipment, continueSettlement, finishSettlement, toggleSettlement, upgradeTalent, resetTalents,
     setInherited, reforge, rankMultipliers, rankInfo, applyPlayer, save, goHome,
     get data() { return meta; }, get run() { return run; }, get settlement() { return settlement; },
     get tab() { return metaTab; }, set tab(v) { metaTab = v; metaPage = 0; },

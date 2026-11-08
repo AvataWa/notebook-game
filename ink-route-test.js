@@ -48,7 +48,14 @@ test('灰墨会反向覆盖彩色路线并同步网格归属', () => {
   fresh(); G.addPlayerTrail(0, 0, '#6b6b6b'); G.addHostileInk(0, 0, 3, 18);
   assert(G.inkCellAt(0, 0).owner === 2, '灰墨覆盖后网格归属没有更新');
 });
-test('灰墨仍减速，但潜墨免疫周期伤害且不会退出', () => {
+test('普通状态站灰墨不扣血且暂停自然回墨', () => {
+  fresh(); G.addHostileInk(0, 0, 10, 50); G.player.ink = 50;
+  const hp = G.player.hp, result = G.updatePlayerInk(0.65);
+  assert(result.hostile && G.playerOnHostileInk(), '未识别灰墨');
+  assert(G.player.hp === hp, '普通状态仍受到灰墨周期伤害');
+  assert(G.player.ink === 50, '灰墨中没有暂停自然回墨');
+});
+test('灰墨仍减速，潜墨不会被打断或退出', () => {
   fresh(); G.keys.d = true; G.update(0.1); const normal = G.player.x;
   fresh(); G.addHostileInk(10, 0, 10, 50); assert(G.playerOnHostileInk(), '未识别灰墨');
   G.player.ink = 50; assert(G.toggleDive(), '灰墨中无法开启潜墨');
@@ -79,5 +86,5 @@ test('长线段中点属于真实墨迹范围，远端不会误判', () => {
   fresh(); G.addPlayerTrail(30, 0, '#1a2b8f', { x: -30, y: 0 }); G.player.x = 0; G.player.y = 0;
   assert(G.playerOnOwnInk(), '线段中点没有识别为墨迹'); G.player.x = 90; assert(!G.playerOnOwnInk(), '墨迹范围被错误扩大');
 });
-console.log(failed ? 'INK_ROUTE_TEST_FAILURES: ' + failed : 'INK_ROUTE_TEST_OK (10/10)');
+console.log(failed ? 'INK_ROUTE_TEST_FAILURES: ' + failed : 'INK_ROUTE_TEST_OK (11/11)');
 process.exit(failed ? 1 : 0);

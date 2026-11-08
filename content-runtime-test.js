@@ -15,7 +15,8 @@ eval(src + `
 ;globalThis.G = {
   resetGame, update, updatePlayerInk, render, toggleDive, enterDive, exitDive, castAbsorb, reflectEnemyBullet,
   castInkSurge, buildOptions, rerollOptions, applyOption, recomputeEquip, itemV, itemDescription, makeEquipmentDrop, hurtPlayer, inkCellAt,
-  spawnEnemy, addInkStain, updateInkStains, killEnemy,
+  spawnEnemy, addInkStain, addHostileInk, updateInkStains, killEnemy,
+  get BATTLE() { return BATTLE; }, get keys() { return keys; },
   get gameTime() { return gameTime; }, set gameTime(v) { gameTime = v; },
   get toasts() { return toasts; },
   get RARITIES() { return RARITIES; }, get OPERATION_AFFIXES() { return OPERATION_AFFIXES; },
@@ -31,9 +32,9 @@ function assert(ok, msg) { if (!ok) throw new Error(msg); }
 function fresh() { G.resetGame(); G.state = 'play'; G.player.xpNext = 999999; G.player.hp = G.player.maxhp = 9999; G.player.actives = [{ id: 'cyclone', lvl: 1, supports: [], t: 999, uc: 0 }]; }
 function equip(key, rarity = 0) { const slot = G.EQUIPMENT_ITEM_DEFS[key].slot; G.player.equip[slot] = { key, rarity }; G.recomputeEquip(); }
 
-test('内容数量完整：11 被动、62 辅助、32 装备，潜墨 22 条', () => {
+test('内容数量完整：10 被动、62 辅助、32 装备，潜墨 22 条', () => {
   fresh();
-  assert(G.PASSIVES.length === 11, '通用被动数量错误');
+  assert(G.PASSIVES.length === 10, '通用被动数量错误');
   assert(G.OPERATION_AFFIXES.length === 62, '专属辅助数量错误');
   assert(new Set(G.OPERATION_AFFIXES.map(a => a.id)).size === 62, '辅助 ID 重复');
   for (const [skill, count] of [['dive', 22], ['surge', 20], ['absorb', 20]]) assert(G.OPERATION_AFFIXES.filter(a => a.skill === skill).length === count, skill + ' 数量错误');
@@ -173,5 +174,12 @@ test('装备运行层同样保留墨迹持续伤害弱跳字', () => {
   G.updateInkStains.dotT = 0; G.updateInkStains.poolT = 0; G.updateInkStains(0);
   assert(G.floats.length === 2 && G.floats.every(f => f.weak), '装备运行层覆盖了弱跳字标记');
 });
-console.log(failed ? 'CONTENT_RUNTIME_TEST_FAILURES: ' + failed : 'CONTENT_RUNTIME_TEST_OK (19/19)');
+test('普通吸墨纸甲将灰墨移速倍率由 0.58 提升至 0.832', () => {
+  fresh(); G.addHostileInk(10, 0, 10, 50); equip('blotarmor', 0);
+  assert(G.itemDescription('blotarmor', 0) === '灰墨减速惩罚 -60%', '装备说明未同步');
+  G.keys.d = true; G.update(0.1); G.keys.d = false;
+  const expected = G.BATTLE.player.speed * 0.832 * 0.1;
+  assert(Math.abs(G.player.x - expected) < 0.001, '灰墨抗减速效果错误：' + G.player.x + ' / ' + expected);
+});
+console.log(failed ? 'CONTENT_RUNTIME_TEST_FAILURES: ' + failed : 'CONTENT_RUNTIME_TEST_OK (20/20)');
 process.exit(failed ? 1 : 0);

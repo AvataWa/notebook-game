@@ -146,7 +146,7 @@ test('段位倍率与大段规则正确', () => {
   const a = M.rankMultipliers(0), b = M.rankMultipliers(3), c = M.rankMultipliers(12);
   assert(a.hp === 1 && a.dmg === 1 && a.cap === 0 && a.phaseAt === 0.5, '初始段位倍率错误');
   assert(near(b.hp, 1.25) && b.cap === 5 && near(b.dmg, 1.09), '第二大段强化错误');
-  assert(c.bossHp === 1.3 && c.phaseAt === 0.65 && c.attack === 0.9 && c.gray === 1, '高段 Boss 与攻击规则错误');
+  assert(c.bossHp === 1.3 && c.phaseAt === 0.65 && c.attack === 0.9 && !('gray' in c), '高段 Boss 与攻击规则错误');
 });
 
 test('存档写入合法 JSON，重置返回干净首页', () => {

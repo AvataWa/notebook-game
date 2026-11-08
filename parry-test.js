@@ -6,7 +6,7 @@ global.window = { addEventListener() {}, devicePixelRatio: 1, innerWidth: 375, i
 global.document = { getElementById: () => fakeCanvas }; global.requestAnimationFrame = () => {};
 eval(src + `
 ;globalThis.G = {
-  resetGame, spawnEnemy, spawnBoss, update, updateShooter, updateMeleeSwing, castAbsorb, castMeleeInkSurge, reflectEnemyBullet, reflectHazard, hurtPlayer, addInkStain, render, loop,
+  resetGame, spawnEnemy, spawnBoss, update, updateShooter, updateMeleeSwing, enemyAttackDelay, castAbsorb, castMeleeInkSurge, reflectEnemyBullet, reflectHazard, hurtPlayer, addInkStain, render, loop,
   get player() { return player; }, get enemies() { return enemies; }, get ebullets() { return ebullets; },
   get bullets() { return bullets; }, get floats() { return floats; }, get novas() { return novas; }, get hazards() { return hazards; },
   get hitStop() { return hitStopT; }, get time() { return gameTime; },
@@ -42,14 +42,30 @@ test('橡皮弩手在前摇后连续射出三轮', () => {
   G.updateShooter(e, 0.01); G.updateShooter(e, 0.19); G.updateShooter(e, 0.19);
   assert(G.ebullets.length === 3 && e.burstLeft === 0, '精英三轮连发数量错误');
 });
-test('近战挥击有前摇，并按 1.5 秒周期再次起手', () => {
+test('近战与所有远程类型使用随关卡变化的随机出招间隔', () => {
+  const random = Math.random;
+  try {
+    fresh(); G.player.level = 1;
+    Math.random = () => 0; assert(near(G.enemyAttackDelay(), 2.5), '第 1 关间隔下限不是 2.5 秒');
+    Math.random = () => 1; assert(near(G.enemyAttackDelay(), 3), '第 1 关间隔上限不是 3 秒');
+    G.player.level = 91;
+    Math.random = () => 0; assert(near(G.enemyAttackDelay(), 1.5), '第 10 关间隔下限不是 1.5 秒');
+    Math.random = () => 1; assert(near(G.enemyAttackDelay(), 2), '第 10 关间隔上限不是 2 秒');
+    for (const type of ['pencilthrower', 'forkpen', 'eliteCrossbow']) {
+      Math.random = () => 0.5;
+      fresh(); const e = enemy(type, 0, -260); e.shotWindup = 0.01;
+      G.updateShooter(e, 0.02); assert(near(e.shotCd, 2.75), type + ' 没有使用随机出招间隔');
+    }
+  } finally { Math.random = random; }
+});
+test('近战挥击有前摇，并按关卡随机间隔再次起手', () => {
   fresh(); const e = enemy('stick', 0, 0); const hp = G.player.hp; e.swingCd = 0;
   G.updateMeleeSwing(e, 0.01);
   assert(near(e.swingT, 0.55) && G.player.hp === hp, '挥击总时长错误、贴脸立即扣血或没有挥击前摇');
-  const firstCycle = e.swingCd; assert(near(firstCycle, 1.5), '挥击周期不是 1.5 秒');
+  const firstCycle = e.swingCd; assert(firstCycle >= 2.5 && firstCycle <= 3, '第 1 关挥击间隔不在 2.5～3 秒');
   G.updateMeleeSwing(e, 0.3); assert(G.player.hp === hp, '前摇期间提前结算伤害');
   G.updateMeleeSwing(e, 0.06); assert(G.player.hp < hp && e.swingHit, '有效挥击没有结算伤害');
-  G.updateMeleeSwing(e, 1.2); G.updateMeleeSwing(e, 0.01);
+  G.updateMeleeSwing(e, 3); G.updateMeleeSwing(e, 0.01);
   assert(e.swingT > 0 && !e.swingHit, '下一周期没有重新挥击');
 });
 test('近战命中圈保留 0.2 秒，且持续期间不重复扣血', () => {
@@ -230,5 +246,5 @@ test('子弹与近战弹反成功后吸墨冷却均为 0.5 秒', () => {
   assert(melee.swingT === 0, '近战弹反未成功');
   assert(near(G.player.absorbCd, 0.5) && !G.castAbsorb(), '近战弹反后的吸墨冷却不是 0.5 秒');
 });
-console.log(failed ? 'PARRY_TEST_FAILURES: ' + failed : 'PARRY_TEST_OK (23/23)');
+console.log(failed ? 'PARRY_TEST_FAILURES: ' + failed : 'PARRY_TEST_OK (24/24)');
 process.exit(failed ? 1 : 0);

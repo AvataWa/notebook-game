@@ -40,7 +40,10 @@ eval(src + `
 let failed = 0;
 function test(name, fn) { try { fn(); console.log('OK  ' + name); } catch (e) { failed++; console.log('ERR ' + name + ': ' + e.stack.split('\n')[0]); } }
 function assert(ok, msg) { if (!ok) throw new Error(msg); }
-function fresh() { G.resetGame(); G.applyOption(0); G.player.xpNext = 999999; G.player.hp = G.player.maxhp = 9999; }
+function fresh() {
+  G.resetGame(); G.applyOption(0); G.player.level = 61; // 第 7 关上限 80，允许构造 71 只怪物的性能场景
+  G.player.xpNext = 999999; G.player.hp = G.player.maxhp = 9999;
+}
 function farEnemy(type = 'stick') { G.spawnEnemy(type, 250, 250); const e = G.enemies[G.enemies.length - 1]; e.flash = e.squash = e.ink = e.dotT = e.shotWindup = 0; return e; }
 
 test('高分屏手机按画质档限制 DPR 为 1.5、1.25、1', () => {

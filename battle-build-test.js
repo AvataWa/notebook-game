@@ -29,8 +29,9 @@ test('战斗配置提供潜墨消耗与强化弹反回墨', () => {
   assert(G.BATTLE.absorb.bulletInk === 3 && G.BATTLE.absorb.meleeInk === 8, '弹反回墨参数未生效');
   assert(G.BATTLE.surge.chargeTime === 1.2 && G.BATTLE.surge.minScale === 0.6 && G.BATTLE.surge.maxScale === 1.2, '墨潮蓄力时间或范围倍率未生效');
 });
-test('大节点合并为 11 条通用被动，并有 62 条操作辅助', () => {
-  assert(G.PASSIVES.length === 11, '通用被动数量不是 11');
+test('通用池保留 10 条被动，并有 62 条操作辅助', () => {
+  assert(G.PASSIVES.length === 10, '通用被动数量不是 10');
+  assert(!G.PASSIVES.some(p => p.id === 'twin'), '双生画笔仍在通用池');
   assert(G.OPERATION_AFFIXES.length === 62, '操作辅助数量不是 62');
   assert(['inkarmor', 'inkpower'].every(id => G.PASSIVES.some(n => n.id === id)), '原墨迹大节点未合并');
   assert(['parrycharge', 'parrywell', 'divepaint', 'surgeecho'].every(id => G.OPERATION_AFFIXES.some(n => n.id === id)), '原操作大节点未合并');

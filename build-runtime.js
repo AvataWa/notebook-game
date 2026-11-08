@@ -92,13 +92,6 @@
       if (hostile) regen = 0;
       player.ink = Math.min(player.maxInk, player.ink + regen * (player.metaRegenMul || 1) * dt);
     }
-    if (hostile) {
-      player.grayTick += dt;
-      if (player.grayTick >= BATTLE.ink.hostileTick) {
-        player.grayTick -= BATTLE.ink.hostileTick;
-        hurtPlayer(BATTLE.ink.hostileDamage + (player.metaGrayDamageAdd || 0), 'gray');
-      }
-    } else player.grayTick = 0;
     return { own, hostile };
   };
 
@@ -109,7 +102,6 @@
     if (player.exitShieldT > 0) reduction += 0.25;
     if (player.parryShieldT > 0) reduction += 0.25;
     if (player.surgeCharging && hasAffix('surge', 'chargeshield')) reduction += 0.3;
-    if (kind === 'gray' && hasItem('blotarmor')) reduction += itemV('blotarmor', 'graydr') / 100;
     const adjusted = dmg * (1 - Math.min(0.85, reduction));
     const oldHp = player.hp;
     if (hasItem('tape') && adjusted >= player.hp && gameTime - player.lastRevive > itemV('tape', 'cd') && gameTime - player.lastRevive <= 30)
@@ -189,7 +181,10 @@
       player.itemAmbushT = 0; player.itemSurgeT = 0; player.itemParryT = 0;
       const baseCd = { cyclone: 0.45, volcanic: 2.2, tornado: 0.8, chainclip: 0.9, arc: 1.6, spark: 1.8, ballista: 5,
         boomerang: 2.2, vortex: 1.5, candle: 0.25, icespear: 1.1, inkrain: 2.8, ruler: 2, chalk: 2.4,
-        pinburst: 1.3, absolve: 2, brand: 2.5, cola: 1.8 }[a.id];
+        pinburst: 1.3, absolve: 2, brand: 2.5, cola: 1.8,
+        bloodcore: 1.2, weakmark: 6, doommark: 4,
+        pageslash: 3.2, piercerush: 4.5, spinlance: 6, shieldrush: 5, ricoshield: 4.5,
+        perfectarrow: 3.8, arrowfocus: 5, magfist: 4, inkgrenade: 4.8, heatrail: 6.5 }[a.id];
       a.t = baseCd * c.cd;
       if (a.id === 'cyclone' && a.lvl >= 5) a.t *= 0.72;
       if (a.id === 'candle') a.t /= 1 + (c.retick || 0);
@@ -309,6 +304,9 @@
     if (hasItem('trackshoes')) BATTLE.ink.ownSpeed = 1 + itemV('trackshoes', 'speed') / 100;
     if (hasItem('blankshoes')) BATTLE.ink.ownSpeed = 1;
     if (player.diving && hasAffix('dive', 'grayboat')) BATTLE.ink.hostileSpeed = 1;
+    if (hostile && hasItem('blotarmor')) {
+      BATTLE.ink.hostileSpeed = 1 - (1 - BATTLE.ink.hostileSpeed) * (1 - itemV('blotarmor', 'graydr') / 100);
+    }
     player.eqSpd *= speedFactor;
     baseUpdate(dt);
     player.eqSpd /= speedFactor;

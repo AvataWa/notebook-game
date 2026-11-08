@@ -43,7 +43,7 @@ const ENEMY_DEFS = {
   sprayer:  { name: '喷墨涂鸦',   hp: 30,  dmg: 12, sp: 64, r: 12, xp: 3, after: 45 },
   inksac:   { name: '墨囊怪',     hp: 90,  dmg: 14, sp: 38, r: 17, xp: 5, after: 100 },
 
-  // 远程怪：attack=shoot；shotCd 射击间隔，shotWindup 瞄准前摇，keepDist 理想射程
+  // 远程怪：attack=shoot；shotCd 旧值不再参与结算，统一使用随关卡变化的随机出招间隔；shotWindup 瞄准前摇，keepDist 理想射程
   pencilthrower: { name: '铅笔投手', hp: 38, dmg: 16, sp: 62, r: 12, xp: 3, after: 45,
     attack: 'shoot', shotCd: 2.4, shotWindup: 0.4, bulletSpeed: 220, bulletCount: 1, keepDist: 240 },
   forkpen: { name: '分叉笔头', hp: 68, dmg: 18, sp: 56, r: 14, xp: 4, after: 100,
