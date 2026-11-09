@@ -297,13 +297,21 @@
     button(rects.bossChallenge, 'Boss 挑战 · 选择讨伐目标');
     text('完成 ' + meta.stats.runs + ' 局　通关 ' + meta.stats.wins + ' 次　最高第 ' + meta.stats.highestStage + ' 页', W / 2, 548, 12, DARK, 'center');
     text('段位只升不降 · 失败也会结算墨点与装备', W / 2, 574, 11, GRAY, 'center');
-    button(rects.reset, resetArmed ? '再次点击确认清空' : '清空本地存档', true, resetArmed);
+    jcircle(25, 73, 14, GRAY, 1.6); text('删', 25, 78, 12, GRAY, 'center', true);
+    if (resetArmed) {
+      ctx.fillStyle = 'rgba(16,16,16,0.48)'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = PAPER; ctx.fillRect(38, 230, 299, 190); jrect(38, 230, 299, 190, RED, 2.2);
+      text('确认删除本地存档？', W / 2, 272, 18, RED, 'center', true);
+      text('墨点、装备、天赋与段位都会被清除', W / 2, 306, 12, DARK, 'center');
+      text('此操作无法撤销', W / 2, 330, 11, GRAY, 'center');
+      button(rects.resetCancel, '取消'); button(rects.resetConfirm, '确认删除', true, true);
+    }
   }
   function homeRects() {
     return { normal: { x: 58, y: 235, w: 259, h: 48 }, ranked: { x: 58, y: 299, w: 259, h: 48 },
       inventory: { x: 58, y: 363, w: 259, h: 48 }, talents: { x: 58, y: 427, w: 259, h: 48 },
-      bossChallenge: { x: 58, y: 491, w: 259, h: 38 },
-      reset: { x: 105, y: 610, w: 165, h: 34 } };
+      bossChallenge: { x: 58, y: 491, w: 259, h: 38 }, reset: { x: 11, y: 59, w: 28, h: 28 },
+      resetCancel: { x: 58, y: 360, w: 118, h: 38 }, resetConfirm: { x: 199, y: 360, w: 118, h: 38 } };
   }
   function bossChallengeRects() {
     return BOSS_DEFS.map((def, i) => ({ x: i % 2 ? 193 : 24, y: 116 + Math.floor(i / 2) * 84, w: 158, h: 72 }));
@@ -500,15 +508,17 @@
     e.preventDefault(); e.stopImmediatePropagation(); const p = toLogical(e); uiMessage = '';
     if (state === 'metaHome') {
       const r = homeRects();
-      if (hit(p, r.normal)) beginRun(false);
+      if (resetArmed) {
+        if (hit(p, r.resetConfirm)) { storage.remove(C.storageKey); meta = defaults(); save(); goHome(); }
+        else resetArmed = false;   // 取消或点击遮罩均关闭确认框，不误删存档
+        return;
+      }
+      if (hit(p, r.reset)) resetArmed = true;
+      else if (hit(p, r.normal)) beginRun(false);
       else if (hit(p, r.ranked)) beginRun(true);
       else if (hit(p, r.inventory)) { state = 'metaInventory'; metaPage = 0; }
       else if (hit(p, r.talents)) { state = 'metaTalents'; metaPage = 0; }
       else if (hit(p, r.bossChallenge)) openBossChallenge();
-      else if (hit(p, r.reset)) {
-        if (resetArmed) { storage.remove(C.storageKey); meta = defaults(); save(); goHome(); }
-        else resetArmed = true;
-      }
       return;
     }
     if (state === 'metaBossChallenge') {
