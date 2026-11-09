@@ -16,7 +16,7 @@ const WORLD_L = -WORLD_W / 2, WORLD_R = WORLD_W / 2, WORLD_T = -WORLD_H / 2, WOR
 function clampW(v, m) { return Math.max(WORLD_L + m, Math.min(WORLD_R - m, v)); }
 function clampH(v, m) { return Math.max(WORLD_T + m, Math.min(WORLD_B - m, v)); }
 const INK = '#1a2b8f', ALLY = '#6b6b6b', PICKUP = '#7a9e01';
-const DARK = '#2b2b2b', RED = '#c0392b', PURPLE = '#6c3483';
+const DARK = '#101010', RED = '#c0392b', PURPLE = '#6c3483', WARN_YELLOW = '#f2c94c';
 const ENEMY_AIM = '#e56b3f'; // 狙击预警使用橘红色，与红色实际伤害区域区分
 const ARC = '#4d9fff';
 const FLASH = '#b9b9ae';
@@ -680,11 +680,11 @@ const buildRect = { x: W / 2 - 42, y: H - 62, w: 84, h: 36 };
 const keys = {};
 const joy = { active: false, id: -1, bx: JOY_HOME.x, by: JOY_HOME.y, dx: 0, dy: 0 };
 
-let pendingEquipment = null, diveDecoys = [];
+let pendingEquipment = null, diveDecoys = [], absorbShatters = [];
 function resetGame() {
   state = 'start'; gameTime = 0; kills = 0; shakeT = 0; cycAng = 0; crumpleT = 0; hitStopT = 0; levelupDelayT = -1;
   joy.active = false; joy.id = -1; joy.dx = 0; joy.dy = 0;
-  camX = 0; camY = 0; spawnAcc = 0; nextId = 1; pendingEquipment = null; diveDecoys = [];
+  camX = 0; camY = 0; spawnAcc = 0; nextId = 1; pendingEquipment = null; diveDecoys = []; absorbShatters = [];
   bossStageSpawned = 0; curStage = 0; nextHordeT = 12; hordeIndex = 0; killChain = 0; killChainT = 0; enemyTrailT = 0.1;
   gestureDraw = null; pendingGesture = null; redrawOutlines = []; gestureNoticeT = 0; drawMode = false; drawModeT = 0;
   resetInkField(); inkSurgePainting = false;
@@ -847,18 +847,20 @@ function enemyAttackDelay() {
 function initEnemyCombat(e, d0) {
   e.swingCd = enemyAttackDelay(); e.swingT = 0; e.swingHit = false; e.swingDamage = false; e.swingA = 0;
   e.shotCd = enemyAttackDelay(); e.shotWindup = 0; e.burstLeft = 0; e.burstT = 0;
+  e.attackCount = 0; e.shotCount = 0; e.swingUnparryable = false; e.heavyBurst = false;
   e.aimA = 0; e.faceA = 0;
   if (d0.attack === 'shoot') e.swingCd = 999999;
 }
-function fireEnemyShot(e, aimA) {
+function fireEnemyShot(e, aimA, unparryable = false) {
   const d0 = ENEMY_DEFS[e.type], count = d0.bulletCount || 1, spread = d0.spread || 0;
   for (let i = 0; i < count; i++) {
     const a = aimA + (i - (count - 1) / 2) * spread;
     ebullets.push({ x: e.x + Math.cos(a) * (e.r + 5), y: e.y + Math.sin(a) * (e.r + 5),
       vx: Math.cos(a) * d0.bulletSpeed, vy: Math.sin(a) * d0.bulletSpeed,
-      dmg: Math.max(1, Math.round(e.dmg * 0.65)), life: 3.2, sourceId: e.id, reflectable: true });
+      dmg: Math.max(1, Math.round(e.dmg * 0.65)), life: 3.2, sourceId: e.id,
+      reflectable: !unparryable, kind: unparryable ? 'heavy' : undefined });
   }
-  sparks.push({ x: e.x, y: e.y, t: 0.16, color: RED });
+  sparks.push({ x: e.x, y: e.y, t: 0.16, color: unparryable ? DARK : RED });
 }
 function updateShooter(e, dt) {
   const d0 = ENEMY_DEFS[e.type];
@@ -876,7 +878,7 @@ function updateShooter(e, dt) {
   if (e.burstLeft > 0) {
     e.burstT -= dt;
     if (e.burstT <= 0) {
-      fireEnemyShot(e, Math.atan2(ty - e.y, tx - e.x));
+      fireEnemyShot(e, Math.atan2(ty - e.y, tx - e.x), e.heavyBurst && e.burstLeft === d0.burst);
       e.burstLeft--; e.burstT = d0.burstGap || 0.18;
     }
   } else if (e.shotWindup > 0) {
@@ -884,14 +886,24 @@ function updateShooter(e, dt) {
     if (e.shotWindup <= 0) {
       e.shotCd = enemyAttackDelay();
       if (d0.burst) { e.burstLeft = d0.burst; e.burstT = 0; }
-      else fireEnemyShot(e, e.aimA);
+      else fireEnemyShot(e, e.aimA, e.heavyBurst);
     }
   } else {
     e.shotCd -= dt;
     if (e.shotCd <= 0 && d < 540) {
+      e.shotCount++; e.heavyBurst = e.type === 'eliteCrossbow' && e.shotCount % 3 === 0;
       e.aimA = Math.atan2(dy, dx); e.shotWindup = d0.shotWindup;
     }
   }
+}
+function crossSwingHit(e, target, pad = 0) {
+  const range = enemySwingRange(e), dx = target.x - e.x, dy = target.y - e.y;
+  for (const side of [-1, 1]) {
+    const a = e.swingA + side * Math.PI / 4, ca = Math.cos(a), sa = Math.sin(a);
+    const along = dx * ca + dy * sa, across = Math.abs(-dx * sa + dy * ca);
+    if (Math.abs(along) < range && across < 14 + pad) return true;
+  }
+  return false;
 }
 function updateMeleeSwing(e, dt) {
   const range = enemySwingRange(e);
@@ -906,13 +918,19 @@ function updateMeleeSwing(e, dt) {
       }
       // 命中圈持续期间逐帧检测，后按吸墨也能弹反；每次挥击仍只伤害一次
       const parried = reflectMeleeSwing(e);
-      if (!parried && !e.swingDamage && d < range + player.r) {
+      const hit = e.swingUnparryable ? crossSwingHit(e, player, player.r) : d < range + player.r;
+      if (!parried && !e.swingDamage && hit) {
         e.swingDamage = true;
+        if (e.swingUnparryable && player.absorbT > 0) unparryableFeedback(player.x, player.y);
         hurtPlayer(e.dmg, 'enemy', e);
       }
     }
   } else if (e.swingCd <= 0 && d < range + player.r + BATTLE.melee.triggerExtra) {
     e.swingCd = enemyAttackDelay(); e.swingT = BATTLE.melee.total; e.swingHit = false; e.swingDamage = false;
+    e.attackCount++;
+    const heavyCount = enemies.filter(other => other.swingUnparryable && other.swingT > 0).length;
+    e.swingUnparryable = e.type === 'scissors' && e.attackCount % 3 === 0 && heavyCount < 2;
+    e.swingUnparryNoticed = false;
     e.swingA = Math.atan2(player.y - e.y, player.x - e.x);
   }
 }
@@ -1000,6 +1018,7 @@ function spawnBoss(st) {
   };
   e.maxhp = e.hp; e.baseMaxHp = e.maxhp; e.baseR = e.r; e.baseDmg = e.dmg; e.ink = 0;
   if (e.stage === 1 && typeof BossHuntRuntime !== 'undefined') BossHuntRuntime.init(e);
+  else if (e.stage === 2 && typeof BossTapeRuntime !== 'undefined') BossTapeRuntime.init(e);
   enemies.push(e);
   crumpleT = 0.7; shakeT = 0.5;
   toast('纸面被揉皱了…… ' + def.name + ' 爬了出来！');
@@ -1045,8 +1064,14 @@ function updateInkShade(e, dt) {
       dmg: Math.round(e.dmg * 0.9), t: 0.35, done: false });
   }
 }
+function controlledBossRuntime(e) {
+  if (!e.huntBoss) return null;
+  if (e.bossAI === 'tape') return typeof BossTapeRuntime !== 'undefined' ? BossTapeRuntime : null;
+  return typeof BossHuntRuntime !== 'undefined' ? BossHuntRuntime : null;
+}
 function updateBoss(e, dt) {
-  if (e.huntBoss && typeof BossHuntRuntime !== 'undefined') { BossHuntRuntime.update(e, dt); return; }
+  const controlled = controlledBossRuntime(e);
+  if (controlled) { controlled.update(e, dt); return; }
   const pa = Math.atan2(player.y - e.y, player.x - e.x);
   if (e.phase === 1 && e.hp < e.maxhp * (player.metaBossPhaseAt || 0.5)) {
     e.phase = 2; e.sp *= 1.35; crumpleT = 0.7; shakeT = 0.5;
@@ -1187,7 +1212,8 @@ function hurtEnemy(e, dmg, dotDps, sx, sy, vuln, critAdd, bossMul, hitCol, weakF
   if (dotDps) { e.dotDps = Math.max(e.dotDps, dotDps); e.dotT = 3; }
   sparks.push({ x: e.x + (Math.random() - 0.5) * e.r, y: e.y + (Math.random() - 0.5) * e.r, t: 0.18, color: hitCol || INK });
   floats.push({ x: e.x + (Math.random() - 0.5) * 40, y: e.y - e.r - 8 - Math.random() * 18, txt: Math.round(dmg) + (crit ? '!' : ''), t: 0.7, color: hitCol || INK, crit, weak: !!weakFloat });
-  if (e.huntBoss && e.hp > 0 && typeof BossHuntRuntime !== 'undefined') BossHuntRuntime.onDamage(e, sx, sy, dmg);
+  const controlled = controlledBossRuntime(e);
+  if (controlled && e.hp > 0 && controlled.onDamage) controlled.onDamage(e, sx, sy, dmg);
   if (e.hp <= 0) killEnemy(e);
 }
 // 范围/打击统一命中结算；双标签技能可同时获得两系辅助，纯范围技能不吃打击加成
@@ -1530,6 +1556,12 @@ function reflectMeleeSwing(e) {
   // 已实际命中的挥击不能补报弹反；未造成伤害、仅双圈相交时仍可后按弹反
   if (player.absorbT <= 0 || e.dead || e.swingDamage) return false;
   const d = Math.hypot(player.x - e.x, player.y - e.y);
+  if (e.swingUnparryable) {
+    if (!e.swingUnparryNoticed && d < enemySwingRange(e) + player.absorbRadius) {
+      e.swingUnparryNoticed = true; unparryableFeedback(player.x, player.y);
+    }
+    return false;
+  }
   if (d >= enemySwingRange(e) + player.absorbRadius) return false;
   hitStopT = Math.max(hitStopT, ABSORB_RULE.hitStop);
   hurtEnemy(e, e.dmg * 1.5 * (player.metaAbsorbMul || 1), 0, player.x, player.y, 0, 0, 0, inkFriendlyColor);
@@ -1596,6 +1628,65 @@ function updateInkStains(dt) {
       sparks.push({ x: e.x, y: e.y, t: 0.18, color: inkFriendlyColor });
     }
   }
+}
+function unparryableFeedback(x, y) {
+  if (gameTime < (player.unparryBreakT || 0)) return;
+  player.unparryBreakT = gameTime + 0.3;
+  player.absorbT = 0;
+  floats.push({ x, y: y - 48, txt: '弹反破碎！', t: 0.7, color: DARK, crit: true });
+  novas.push({ x, y, t: 0.2, max: 35, col: DARK });
+  sparks.push({ x, y, t: 0.24, color: WARN_YELLOW });
+  for (let i = 0; i < 12; i++) {
+    const a = i / 12 * Math.PI * 2;
+    absorbShatters.push({ x, y, a, speed: 75 + (i % 3) * 22, t: 0.48, maxT: 0.48, len: 7 + (i % 2) * 3 });
+  }
+}
+function drawUnparryableMark(x, y, size = 9) {
+  jline(x - size, y - size, x + size, y + size, WARN_YELLOW, 5);
+  jline(x + size, y - size, x - size, y + size, WARN_YELLOW, 5);
+  jline(x - size, y - size, x + size, y + size, DARK, 2.8);
+  jline(x + size, y - size, x - size, y + size, DARK, 2.8);
+}
+function drawUnparryableCircleArea(x, y, r, active) {
+  ctx.save(); ctx.globalAlpha = active ? 0.72 : 0.58;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
+  for (let d = -r * 2; d <= r * 2; d += 28) {
+    jline(x - r, y + d - r, x + r, y + d + r, DARK, 1.45);
+    jline(x - r, y + d + r, x + r, y + d - r, DARK, 1.45);
+  }
+  ctx.restore();
+  ctx.save(); ctx.globalAlpha = active ? 0.96 : 0.82;
+  jcircle(x, y, r + 6, WARN_YELLOW, 3.2); jcircle(x, y, r + 2, DARK, 1.6); ctx.restore();
+}
+function drawUnparryableSegmentArea(start, end, width, active) {
+  const a = Math.atan2(end.y - start.y, end.x - start.x), len = Math.hypot(end.x - start.x, end.y - start.y);
+  ctx.save(); ctx.translate(start.x, start.y); ctx.rotate(a); ctx.globalAlpha = active ? 0.7 : 0.58;
+  ctx.beginPath(); ctx.rect(0, -width, len, width * 2); ctx.clip();
+  for (let d = -width * 2; d < len + width * 2; d += 28) {
+    jline(d, -width, d + width * 2, width, DARK, 1.45);
+    jline(d, width, d + width * 2, -width, DARK, 1.45);
+  }
+  ctx.restore();
+  ctx.save(); ctx.globalAlpha = active ? 0.96 : 0.82;
+  const nx = -Math.sin(a), ny = Math.cos(a);
+  for (const side of [-1, 1]) {
+    jline(start.x + nx * (width + 5) * side, start.y + ny * (width + 5) * side,
+      end.x + nx * (width + 5) * side, end.y + ny * (width + 5) * side, WARN_YELLOW, 3.1);
+    jline(start.x + nx * (width + 2) * side, start.y + ny * (width + 2) * side,
+      end.x + nx * (width + 2) * side, end.y + ny * (width + 2) * side, DARK, 1.6);
+  }
+  ctx.restore();
+}
+function drawDiveOnlyLabel(e) {
+  const x = e.x, y = e.y - e.r - 42;
+  ctx.save(); ctx.globalAlpha = 0.98; ctx.fillStyle = PAPER; ctx.fillRect(x - 50, y - 14, 100, 24);
+  jrect(x - 50, y - 14, 100, 24, WARN_YELLOW, 3.2); jrect(x - 50, y - 14, 100, 24, DARK, 1.2);
+  ctx.strokeStyle = WARN_YELLOW; ctx.lineWidth = 2.2;
+  for (const arc of [[0.15, 1.75], [2.05, 3.5], [3.9, 5.7]]) {
+    ctx.beginPath(); ctx.arc(x - 36, y - 2, 7, arc[0], arc[1]); ctx.stroke();
+  }
+  ctx.fillStyle = DARK; ctx.textAlign = 'center'; ctx.font = 'bold 12px ' + FONT; ctx.fillText('潜墨规避', x + 10, y + 3);
+  ctx.restore();
 }
 function hurtPlayer(dmg, kind, source) {
   // 潜墨、弹反慢放、选词金色保护与受击保护均免疫伤害；红闪只表示真实受击
@@ -2599,10 +2690,13 @@ function update(dt) {
   for (const eb of ebullets) {
     if (eb.inkX === undefined) { eb.inkX = eb.x; eb.inkY = eb.y; }
     eb.x += eb.vx * dt; eb.y += eb.vy * dt; eb.life -= dt;
-    const trailCol = eb.inkConverted ? (player.actives.length ? trailColorOf(player.actives[0].id) : INK) : HOSTILE_INK;
+    const trailCol = eb.inkConverted ? (player.actives.length ? trailColorOf(player.actives[0].id) : INK) : (eb.reflectable === false ? DARK : HOSTILE_INK);
     addLinkedTrail(eb, eb.x, eb.y, trailCol, !eb.inkConverted, 11, 0.8, 16, 'inkX', 'inkY', 'inkS');
     if (eb.life <= 0 && eb.sourceId && !eb.inkConverted) inkCutChecks.add(eb.sourceId);
     const playerDist = Math.hypot(player.x - eb.x, player.y - eb.y);
+    if (eb.life > 0 && eb.reflectable === false && player.absorbT > 0 && playerDist < player.absorbRadius && !eb.unparryNoticed) {
+      eb.unparryNoticed = true; unparryableFeedback(player.x, player.y);
+    }
     if (eb.life > 0 && player.absorbT > 0 && playerDist < player.absorbRadius && reflectEnemyBullet(eb)) continue;
     if (eb.life > 0 && playerDist < 16) {
       eb.life = 0;
@@ -2758,9 +2852,15 @@ function update(dt) {
   }
   brands = brands.filter(b => b.t > 0);
 
-  // 冰可乐新星扩散圈
+  // 冰可乐新星扩散圈；精准潜墨保留最后一帧，由反击模块完成最外圈结算
   for (const nv of novas) nv.t -= dt;
-  novas = novas.filter(n => n.t > 0);
+  novas = novas.filter(n => n.t > 0 || (n.preciseDive && !n.done));
+  for (const s of absorbShatters) {
+    s.t -= dt;
+    s.x += Math.cos(s.a) * s.speed * dt;
+    s.y += Math.sin(s.a) * s.speed * dt;
+  }
+  absorbShatters = absorbShatters.filter(s => s.t > 0);
 
   for (const l of lightnings) {
     if (l.delay > 0) { l.delay -= dt; continue; }
@@ -3139,7 +3239,8 @@ function drawEnemyHorns(x, y, size, c) {
 function drawEnemyFull(e) {
   setSeed(e.id);
   // 预警使用世界坐标，必须在身体受击缩放之前绘制，避免判定提示跟着抖动。
-  if (e.huntBoss && typeof BossHuntRuntime !== 'undefined') BossHuntRuntime.drawTelegraph(e);
+  const controlled = controlledBossRuntime(e);
+  if (controlled) controlled.drawTelegraph(e);
   const c = e.flash > 0 ? FLASH : DARK;
   const p = 1 - e.squash / SQUASH_T;
   const k = Math.pow(Math.max(0, 1 - p), 0.6);
@@ -3149,6 +3250,8 @@ function drawEnemyFull(e) {
     ctx.scale(1 + 0.5 * k, 1 - 0.42 * k);
     ctx.translate(-e.x, -e.y);
   }
+  // 飞扑只抬高 Boss 身体，地面预警与真实落点保持不动。
+  if (e.huntBoss) ctx.translate(0, -(e.pounceHeight || 0));
   if (typeof CreatureGameRuntime !== 'undefined' && CreatureGameRuntime.drawEnemyBody(ctx, e, c)) {
     // 新程序化身体只替换外观；下方射击、精英、墨债与 DOT 公共层保持不变
   } else if (e.type === 'stick' || e.type === 'doodle') {
@@ -3346,12 +3449,19 @@ function drawEnemyFull(e) {
             e.x + Math.cos(a) * r * 1.28, e.y + Math.sin(a) * r * 0.95, RED, 1.8);
     }
   } else if (e.boss) drawBoss(e, c);
+  if (controlled) controlled.drawAttachments(e, c);
   if (isShooter(e) && e.shotWindup > 0) {
-    const d0 = ENEMY_DEFS[e.type], charge = 1 - e.shotWindup / d0.shotWindup;
+    const d0 = ENEMY_DEFS[e.type], charge = 1 - e.shotWindup / d0.shotWindup, aimCol = e.heavyBurst ? DARK : ENEMY_AIM;
     ctx.globalAlpha = 0.2 + charge * 0.65;
     setSeed(e.id + 120);
-    jline(e.x, e.y, e.x + Math.cos(e.aimA) * 210, e.y + Math.sin(e.aimA) * 210, ENEMY_AIM, 1.2 + charge);
-    jcircle(e.x + Math.cos(e.aimA) * (e.r + 9), e.y + Math.sin(e.aimA) * (e.r + 9), 3 + charge * 3, ENEMY_AIM, 1.8);
+    jline(e.x, e.y, e.x + Math.cos(e.aimA) * 210, e.y + Math.sin(e.aimA) * 210, aimCol, 1.2 + charge);
+    jcircle(e.x + Math.cos(e.aimA) * (e.r + 9), e.y + Math.sin(e.aimA) * (e.r + 9), 3 + charge * 3, aimCol, 1.8);
+    if (e.heavyBurst) {
+      const mx = e.x + Math.cos(e.aimA) * 150, my = e.y + Math.sin(e.aimA) * 150;
+      jline(e.x, e.y, mx, my, WARN_YELLOW, 3 + charge);
+      jline(e.x, e.y, mx, my, DARK, 1.4 + charge * 0.6);
+      drawUnparryableMark(mx, my, 7 + charge * 2);
+    }
     ctx.globalAlpha = 1;
   }
   if (e.elite && e.type !== 'eliteCrossbow') {   // 弩手保留干净的人形与弩轮廓
@@ -3475,34 +3585,42 @@ function drawEnemy(e) {
 
 function drawMeleeTelegraph(e) {
   if (e.boss || e.shade || isShooter(e) || e.swingT <= 0) return;
-  const active = e.swingT <= BATTLE.melee.active, range = enemySwingRange(e);
+  const active = e.swingT <= BATTLE.melee.active, range = enemySwingRange(e), col = e.swingUnparryable ? DARK : RED;
   setSeed(e.id + 160);
   if (!active) {
     // 外圈始终是真实判定范围；内圈从怪物脚下扩张，两圈重合时结算
     const charge = Math.max(0, Math.min(1, (BATTLE.melee.total - e.swingT) / (BATTLE.melee.total - BATTLE.melee.active)));
     const chargeR = e.r + (range - e.r) * charge;
-    ctx.globalAlpha = 0.035 + charge * 0.055; ctx.fillStyle = RED;
+    ctx.globalAlpha = 0.035 + charge * 0.055; ctx.fillStyle = col;
     ctx.beginPath(); ctx.arc(e.x, e.y, range, 0, Math.PI * 2); ctx.fill();
     // 未进入打击判定时外圈保持低透明度；内圈仍清晰显示收缩时机
     ctx.globalAlpha = 0.22 + charge * 0.16;
-    jcircle(e.x, e.y, range, RED, 1.8);
+    jcircle(e.x, e.y, range, col, 1.8);
     ctx.globalAlpha = 0.25 + charge * 0.65;
-    jcircle(e.x, e.y, chargeR, RED, 1.5 + charge * 1.3);
+    jcircle(e.x, e.y, chargeR, col, 1.5 + charge * 1.3);
     if (charge > 0.45) {
       const warningY = e.y - e.r - 22;
       ctx.globalAlpha = Math.min(1, 0.65 + charge * 0.35);
       ctx.fillStyle = PAPER; ctx.beginPath(); ctx.arc(e.x, warningY, 8, 0, Math.PI * 2); ctx.fill();
-      jcircle(e.x, warningY, 8, RED, 1.8);
-      jline(e.x, warningY - 4, e.x, warningY + 1.5, RED, 2.2);
-      ctx.fillStyle = RED; ctx.beginPath(); ctx.arc(e.x, warningY + 4.5, 1.2, 0, Math.PI * 2); ctx.fill();
+      jcircle(e.x, warningY, 8, col, 1.8);
+      jline(e.x, warningY - 4, e.x, warningY + 1.5, col, 2.2);
+      ctx.fillStyle = col; ctx.beginPath(); ctx.arc(e.x, warningY + 4.5, 1.2, 0, Math.PI * 2); ctx.fill();
     }
   } else {
     // 两圈已经重合：固定命中圈保留配置的持续时间，随后淡出
     const swingP = Math.max(0, Math.min(1, 1 - e.swingT / BATTLE.melee.active));
-    ctx.globalAlpha = 0.16 * (1 - swingP * 0.55); ctx.fillStyle = RED;
+    ctx.globalAlpha = 0.16 * (1 - swingP * 0.55); ctx.fillStyle = col;
     ctx.beginPath(); ctx.arc(e.x, e.y, range, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1 - swingP * 0.4;
-    jcircle(e.x, e.y, range, RED, 3.4 - swingP * 0.8);
+    jcircle(e.x, e.y, range, col, 3.4 - swingP * 0.8);
+  }
+  if (e.swingUnparryable) {
+    for (const side of [-1, 1]) {
+      const a = e.swingA + side * Math.PI / 4, ca = Math.cos(a), sa = Math.sin(a);
+      jline(e.x - ca * range, e.y - sa * range, e.x + ca * range, e.y + sa * range, WARN_YELLOW, active ? 8 : 5);
+      jline(e.x - ca * range, e.y - sa * range, e.x + ca * range, e.y + sa * range, DARK, active ? 4.5 : 2.8);
+    }
+    drawUnparryableMark(e.x, e.y, 9);
   }
   ctx.globalAlpha = 1;
 }
@@ -3758,10 +3876,19 @@ function render() {
     if (nv.outerDamage) drawOuterSurgeDamageZone(nv.x, nv.y, nv.max, Math.max(0, nv.t / BATTLE.surge.visual));
     setSeed(7950);
     ctx.globalAlpha = 1 - k;
-    jcircle(nv.x, nv.y, nv.max * (0.3 + 0.7 * k), nv.col || ARC, 3);
-    jcircle(nv.x, nv.y, nv.max * (0.2 + 0.6 * k), nv.col || INK, 1.5);
+    const radius = nv.preciseDive ? 24 + (nv.max - 24) * k : nv.max * (0.3 + 0.7 * k);
+    jcircle(nv.x, nv.y, radius, nv.col || ARC, nv.preciseDive ? 4 : 3);
+    jcircle(nv.x, nv.y, nv.preciseDive ? Math.max(0, radius - 9) : nv.max * (0.2 + 0.6 * k), nv.col || INK, 1.5);
     ctx.globalAlpha = 1;
   }
+  // 不可弹反攻击击碎吸墨圆环：蓝色手绘线段径向飞散并淡出
+  for (const s of absorbShatters) {
+    const a = s.a + s.t * 4, c = Math.cos(a), sn = Math.sin(a), half = s.len * 0.5;
+    ctx.globalAlpha = Math.max(0, s.t / s.maxT);
+    jline(s.x - c * half, s.y - sn * half, s.x + c * half, s.y + sn * half, inkFriendlyColor, 2.8);
+    jline(s.x - c * half - sn * 2, s.y - sn * half + c * 2, s.x + c * half - sn * 2, s.y + sn * half + c * 2, inkFriendlyColor, 1.1);
+  }
+  ctx.globalAlpha = 1;
   if (getActive('cyclone') && !player.diving) {
     const ca = getActive('cyclone'), cc = skillCalc(ca), baseRad = BATTLE.skills.closeRadius * cc.rad * (1 + cc.sweep);
     const rings = ca.lvl >= 5 ? [1, 1.32, 1.64] : (ca.lvl >= 3 ? [1, 1.35] : [1]);
@@ -3811,10 +3938,36 @@ function render() {
     }
     ctx.restore();
   }
-  for (const eb of ebullets) {  // 敌方墨弹：红笔点
+  for (const eb of ebullets) {  // 敌方墨弹：普通红笔点；尾棘使用有飞行方向的笔尖
     setSeed(6500 + Math.floor(eb.x + eb.y));
-    jcircle(eb.x, eb.y, 4.5, RED, 2);
-    jcircle(eb.x, eb.y, 1.8, RED, 1);
+    if (eb.kind === 'quill') {
+      const a = Math.atan2(eb.vy, eb.vx), ca = Math.cos(a), sa = Math.sin(a);
+      const nx = -sa, ny = ca;
+      jline(eb.x - ca * 10, eb.y - sa * 10, eb.x + ca * 11, eb.y + sa * 11, RED, 2.4);
+      jline(eb.x + ca * 11, eb.y + sa * 11, eb.x + ca * 5 + nx * 4, eb.y + sa * 5 + ny * 4, RED, 2);
+      jline(eb.x + ca * 11, eb.y + sa * 11, eb.x + ca * 5 - nx * 4, eb.y + sa * 5 - ny * 4, RED, 2);
+      for (const side of [-1, 1]) {
+        jline(eb.x - ca * 6 + nx * side * 4, eb.y - sa * 6 + ny * side * 4,
+          eb.x - ca * 1, eb.y - sa * 1, RED, 1.8);
+      }
+    } else if (eb.kind === 'tape') {
+      const a = Math.atan2(eb.vy, eb.vx), ca = Math.cos(a), sa = Math.sin(a), nx = -sa, ny = ca;
+      for (const side of [-1, 1]) {
+        jline(eb.x - ca * 12 + nx * side * 5, eb.y - sa * 12 + ny * side * 5,
+          eb.x + ca * 12 + nx * side * 5, eb.y + sa * 12 + ny * side * 5, RED, 2);
+      }
+      jline(eb.x - ca * 12, eb.y - sa * 12, eb.x + ca * 12, eb.y + sa * 12, ENEMY_AIM, 2.2);
+      jline(eb.x + ca * 12 - nx * 5, eb.y + sa * 12 - ny * 5,
+        eb.x + ca * 12 + nx * 5, eb.y + sa * 12 + ny * 5, RED, 2);
+    } else if (eb.kind === 'heavy') {
+      const a = Math.atan2(eb.vy, eb.vx), ca = Math.cos(a), sa = Math.sin(a);
+      jline(eb.x - ca * 12, eb.y - sa * 12, eb.x + ca * 9, eb.y + sa * 9, WARN_YELLOW, 7);
+      jline(eb.x - ca * 12, eb.y - sa * 12, eb.x + ca * 9, eb.y + sa * 9, DARK, 4);
+      drawUnparryableMark(eb.x, eb.y, 4);
+    } else {
+      jcircle(eb.x, eb.y, 4.5, RED, 2);
+      jcircle(eb.x, eb.y, 1.8, RED, 1);
+    }
   }
   for (const l of lightnings) {
     if (l.delay > 0) continue;   // 还没轮到这段
@@ -3895,6 +4048,16 @@ function render() {
       else drawStick(player.x, player.y, 30, player.walk, playerColor);
       ctx.restore();
     }
+  }
+  // 入潜后的真实时间精准窗口：圆环收缩完毕即判定结束，不再依赖世界慢放计时。
+  if (player.diving && !player.preciseDiveUsed && (player.preciseDiveWindowT || 0) > 0) {
+    const windowLength = typeof DiveCounterRuntime !== 'undefined' ? DiveCounterRuntime.WINDOW : 0.18;
+    const progress = 1 - player.preciseDiveWindowT / windowLength;
+    ctx.save(); ctx.globalAlpha = 0.55 + progress * 0.35; setSeed(8921);
+    jcircle(player.x, player.y, 54 - progress * 26, inkFriendlyColor, 2.2);
+    ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.font = 'bold 12px ' + FONT;
+    ctx.fillText('精准窗口', player.x, player.y - 59);
+    ctx.restore();
   }
   if (goldenGuard) {
     ctx.save(); ctx.globalAlpha = 0.74 + Math.sin(boilT * 10) * 0.16;
@@ -4002,7 +4165,8 @@ function drawHUD() {
     }
     ctx.fillStyle = RED; ctx.textAlign = 'center'; ctx.font = 'bold 12px ' + FONT;
     ctx.fillText(boss.name + (boss.phase === 2 ? '·暴走' : ''), W / 2, by - 4);
-    if (boss.huntBoss && typeof BossHuntRuntime !== 'undefined') BossHuntRuntime.drawHUD(boss, bx, by, bw);
+    const controlled = controlledBossRuntime(boss);
+    if (controlled) controlled.drawHUD(boss, bx, by, bw);
   }
   ctx.save();
   ctx.shadowColor = 'rgba(255,250,238,0.96)'; ctx.shadowBlur = 4;
@@ -4134,10 +4298,13 @@ function loop(now) {
   last = now;
   boilT = Math.floor(now / ([120, 200, 300][renderQuality]));
   if (state === 'play') {
+    // 精准潜墨窗口与成功缓速使用真实帧时间；与弹反慢放叠加时取更强倍率。
+    let timeScale = typeof DiveCounterRuntime !== 'undefined' ? DiveCounterRuntime.advance(dt) : 1;
     if (hitStopT > 0) {
       hitStopT = Math.max(0, hitStopT - dt);
-      update(dt * ABSORB_RULE.slowScale);
-    } else update(dt);
+      timeScale = Math.min(timeScale, ABSORB_RULE.slowScale);
+    }
+    update(dt * timeScale);
   }
   updateAdaptiveQuality(rawDt); renderFrame++;
   if (!(state === 'play' && renderQuality === 2 && rawDt < 0.024 && renderFrame % 2)) render();

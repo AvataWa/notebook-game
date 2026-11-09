@@ -98,16 +98,17 @@
     if (ranked) toast('段位考核 · ' + rankInfo(run.rank).name + (affixes.length ? ' · ' + affixes.join(' / ') : ''));
     return true;
   }
-  function beginBossTest() {
+  function beginBossTest(stage = 1) {
+    const bossStage = stage === 2 ? 2 : 1;
     beginRun(false);
-    run.mode = 'bossTest';
+    run.mode = 'bossTest'; run.bossTestStage = bossStage;
     applyOption(0);   // 随机起手技能，跳过起手三选一，直接进入战斗。
     player.level = 10; player.xp = 0; player.xpNext = xpForNextLevel(10);
-    curStage = 1; bossStageSpawned = 1;
-    spawnBoss(1);
+    curStage = bossStage; bossStageSpawned = bossStage;
+    spawnBoss(bossStage);
     player.goldT = 1;
     state = 'play';
-    toast('Boss 测试关 · 不计入局外收益');
+    toast('Boss 测试关 · ' + (bossStage === 2 ? '涂改巨灵' : '乱线魔王') + ' · 不计入局外收益');
     return true;
   }
   function recordEquipment(dr) {
@@ -292,7 +293,8 @@
     button(rects.ranked, meta.rank >= 18 ? '大师考核' : '段位考核 · ' + rankInfo().name);
     button(rects.inventory, '文具盒 · 装备收藏 ' + meta.inventory.length);
     button(rects.talents, '天赋 · 墨点与技能专精');
-    button(rects.bossTest, 'Boss 测试关 · 乱线魔王');
+    button(rects.bossTest1, '测试 · 乱线魔王');
+    button(rects.bossTest2, '测试 · 涂改巨灵');
     text('完成 ' + meta.stats.runs + ' 局　通关 ' + meta.stats.wins + ' 次　最高第 ' + meta.stats.highestStage + ' 页', W / 2, 548, 12, DARK, 'center');
     text('段位只升不降 · 失败也会结算墨点与装备', W / 2, 574, 11, GRAY, 'center');
     button(rects.reset, resetArmed ? '再次点击确认清空' : '清空本地存档', true, resetArmed);
@@ -300,7 +302,8 @@
   function homeRects() {
     return { normal: { x: 58, y: 235, w: 259, h: 48 }, ranked: { x: 58, y: 299, w: 259, h: 48 },
       inventory: { x: 58, y: 363, w: 259, h: 48 }, talents: { x: 58, y: 427, w: 259, h: 48 },
-      bossTest: { x: 58, y: 491, w: 259, h: 38 }, reset: { x: 105, y: 610, w: 165, h: 34 } };
+      bossTest1: { x: 58, y: 491, w: 124, h: 38 }, bossTest2: { x: 193, y: 491, w: 124, h: 38 },
+      reset: { x: 105, y: 610, w: 165, h: 34 } };
   }
   function drawTalents() {
     panel('墨点天赋', '墨点 ' + meta.ink); button(backButton(), '返回');
@@ -449,7 +452,7 @@
     if ((state === 'over' || state === 'win') && run && run.mode === 'bossTest') {
       e.preventDefault(); e.stopImmediatePropagation();
       const p = toLogical(e), r = testEndRects();
-      if (hit(p, r.retry)) beginBossTest();
+      if (hit(p, r.retry)) beginBossTest(run.bossTestStage || 1);
       else if (hit(p, r.home)) goHome();
       return;
     }
@@ -461,7 +464,8 @@
       else if (hit(p, r.ranked)) beginRun(true);
       else if (hit(p, r.inventory)) { state = 'metaInventory'; metaPage = 0; }
       else if (hit(p, r.talents)) { state = 'metaTalents'; metaPage = 0; }
-      else if (hit(p, r.bossTest)) beginBossTest();
+      else if (hit(p, r.bossTest1)) beginBossTest(1);
+      else if (hit(p, r.bossTest2)) beginBossTest(2);
       else if (hit(p, r.reset)) {
         if (resetArmed) { storage.remove(C.storageKey); meta = defaults(); save(); goHome(); }
         else resetArmed = true;
