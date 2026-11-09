@@ -99,7 +99,7 @@
     return true;
   }
   function beginBossTest(stage = 1) {
-    const bossStage = stage === 2 ? 2 : 1;
+    const bossStage = clampInt(stage, 1, 10, 1);
     beginRun(false);
     run.mode = 'bossTest'; run.bossTestStage = bossStage;
     applyOption(0);   // 随机起手技能，跳过起手三选一，直接进入战斗。
@@ -108,9 +108,10 @@
     spawnBoss(bossStage);
     player.goldT = 1;
     state = 'play';
-    toast('Boss 测试关 · ' + (bossStage === 2 ? '涂改巨灵' : '乱线魔王') + ' · 不计入局外收益');
+    toast('Boss 挑战 · ' + BOSS_DEFS[bossStage - 1].name + ' · 不计入局外收益');
     return true;
   }
+  function openBossChallenge() { state = 'metaBossChallenge'; uiMessage = ''; }
   function recordEquipment(dr) {
     if (!run || run.settled || !dr || !ITEM_DEFS[dr.item]) return false;
     run.found.push({ uid: run.uid++, key: dr.item, rarity: rarityIndex(dr) });
@@ -293,8 +294,7 @@
     button(rects.ranked, meta.rank >= 18 ? '大师考核' : '段位考核 · ' + rankInfo().name);
     button(rects.inventory, '文具盒 · 装备收藏 ' + meta.inventory.length);
     button(rects.talents, '天赋 · 墨点与技能专精');
-    button(rects.bossTest1, '测试 · 乱线魔王');
-    button(rects.bossTest2, '测试 · 涂改巨灵');
+    button(rects.bossChallenge, 'Boss 挑战 · 选择讨伐目标');
     text('完成 ' + meta.stats.runs + ' 局　通关 ' + meta.stats.wins + ' 次　最高第 ' + meta.stats.highestStage + ' 页', W / 2, 548, 12, DARK, 'center');
     text('段位只升不降 · 失败也会结算墨点与装备', W / 2, 574, 11, GRAY, 'center');
     button(rects.reset, resetArmed ? '再次点击确认清空' : '清空本地存档', true, resetArmed);
@@ -302,8 +302,27 @@
   function homeRects() {
     return { normal: { x: 58, y: 235, w: 259, h: 48 }, ranked: { x: 58, y: 299, w: 259, h: 48 },
       inventory: { x: 58, y: 363, w: 259, h: 48 }, talents: { x: 58, y: 427, w: 259, h: 48 },
-      bossTest1: { x: 58, y: 491, w: 124, h: 38 }, bossTest2: { x: 193, y: 491, w: 124, h: 38 },
+      bossChallenge: { x: 58, y: 491, w: 259, h: 38 },
       reset: { x: 105, y: 610, w: 165, h: 34 } };
+  }
+  function bossChallengeRects() {
+    return BOSS_DEFS.map((def, i) => ({ x: i % 2 ? 193 : 24, y: 116 + Math.floor(i / 2) * 84, w: 158, h: 72 }));
+  }
+  function drawBossChallenge() {
+    panel('Boss 挑战', '10 名 Boss'); button(backButton(), '返回');
+    text('选择讨伐目标，开局自带随机主动技能', W / 2, 79, 12, INK, 'center');
+    text('挑战不产生墨点、装备或段位收益', W / 2, 99, 10, GRAY, 'center');
+    const rects = bossChallengeRects(), archNames = { charger: '近战突袭', caster: '远程术式', blob: '区域压制' };
+    BOSS_DEFS.forEach((def, i) => {
+      const r = rects[i], cleared = meta.firstBosses.includes(i + 1);
+      ctx.fillStyle = 'rgba(255,250,238,0.96)'; ctx.fillRect(r.x, r.y, r.w, r.h);
+      jrect(r.x, r.y, r.w, r.h, cleared ? INK : DARK, cleared ? 2.3 : 1.5);
+      text('第 ' + String(i + 1).padStart(2, '0') + ' 页', r.x + 12, r.y + 18, 9, GRAY);
+      text(def.name, r.x + r.w / 2, r.y + 40, 13, INK, 'center', true);
+      text(archNames[def.arch] + (cleared ? ' · 已讨伐' : ''), r.x + r.w / 2, r.y + 59, 9, cleared ? PURPLE : GRAY, 'center');
+    });
+    text('所有 Boss 均使用完整招式 AI 与独立挑战结算', W / 2, 552, 10, GRAY, 'center');
+    button({ x: 103, y: 583, w: 169, h: 40 }, '返回局外手账');
   }
   function drawTalents() {
     panel('墨点天赋', '墨点 ' + meta.ink); button(backButton(), '返回');
@@ -426,16 +445,17 @@
     const pg = pager(settlement.found.length, per, 526); drawSettlement.pg = pg;
     button({ x: 62, y: 583, w: 251, h: 43 }, '完成结算并返回手账');
   }
-  function testEndRects() { return { retry: { x: 75, y: 305, w: 225, h: 44 }, home: { x: 75, y: 365, w: 225, h: 44 } }; }
+  function testEndRects() { return { retry: { x: 75, y: 292, w: 225, h: 40 }, select: { x: 75, y: 344, w: 225, h: 40 }, home: { x: 75, y: 396, w: 225, h: 40 } }; }
   function drawTestEnd() {
-    ctx.fillStyle = 'rgba(255,250,238,0.97)'; ctx.fillRect(45, 190, 285, 250);
-    jrect(45, 190, 285, 250, state === 'win' ? INK : RED, 2.5);
-    text(state === 'win' ? 'Boss 测试完成' : '测试失败', W / 2, 238, 23, state === 'win' ? INK : RED, 'center', true);
-    text('测试关不产生墨点、装备或段位收益', W / 2, 274, 11, GRAY, 'center');
-    const r = testEndRects(); button(r.retry, '再次挑战'); button(r.home, '返回局外手账');
+    ctx.fillStyle = 'rgba(255,250,238,0.97)'; ctx.fillRect(45, 170, 285, 292);
+    jrect(45, 170, 285, 292, state === 'win' ? INK : RED, 2.5);
+    text(state === 'win' ? 'Boss 挑战完成' : 'Boss 挑战失败', W / 2, 218, 23, state === 'win' ? INK : RED, 'center', true);
+    text(BOSS_DEFS[(run.bossTestStage || 1) - 1].name + ' · 不计入局外收益', W / 2, 254, 11, GRAY, 'center');
+    const r = testEndRects(); button(r.retry, '再次挑战'); button(r.select, '选择其他 Boss'); button(r.home, '返回局外手账');
   }
   function drawMeta() {
     if (state === 'metaHome') drawHome();
+    else if (state === 'metaBossChallenge') drawBossChallenge();
     else if (state === 'metaTalents') drawTalents();
     else if (state === 'metaInventory') drawInventory();
     else if (state === 'metaRunSummary') drawSummary();
@@ -453,10 +473,11 @@
       e.preventDefault(); e.stopImmediatePropagation();
       const p = toLogical(e), r = testEndRects();
       if (hit(p, r.retry)) beginBossTest(run.bossTestStage || 1);
+      else if (hit(p, r.select)) openBossChallenge();
       else if (hit(p, r.home)) goHome();
       return;
     }
-    if (!['metaHome', 'metaTalents', 'metaInventory', 'metaRunSummary', 'metaSettlement'].includes(state)) return;
+    if (!['metaHome', 'metaBossChallenge', 'metaTalents', 'metaInventory', 'metaRunSummary', 'metaSettlement'].includes(state)) return;
     e.preventDefault(); e.stopImmediatePropagation(); const p = toLogical(e); uiMessage = '';
     if (state === 'metaHome') {
       const r = homeRects();
@@ -464,12 +485,17 @@
       else if (hit(p, r.ranked)) beginRun(true);
       else if (hit(p, r.inventory)) { state = 'metaInventory'; metaPage = 0; }
       else if (hit(p, r.talents)) { state = 'metaTalents'; metaPage = 0; }
-      else if (hit(p, r.bossTest1)) beginBossTest(1);
-      else if (hit(p, r.bossTest2)) beginBossTest(2);
+      else if (hit(p, r.bossChallenge)) openBossChallenge();
       else if (hit(p, r.reset)) {
         if (resetArmed) { storage.remove(C.storageKey); meta = defaults(); save(); goHome(); }
         else resetArmed = true;
       }
+      return;
+    }
+    if (state === 'metaBossChallenge') {
+      if (hit(p, backButton()) || hit(p, { x: 103, y: 583, w: 169, h: 40 })) { goHome(); return; }
+      const rects = bossChallengeRects();
+      for (let i = 0; i < rects.length; i++) if (hit(p, rects[i])) { beginBossTest(i + 1); return; }
       return;
     }
     if ((state === 'metaTalents' || state === 'metaInventory') && hit(p, backButton())) { goHome(); return; }
@@ -517,11 +543,11 @@
     }
   }, true);
   window.addEventListener('keydown', e => {
-    if (state === 'metaTalents' || state === 'metaInventory') { if (e.key === 'Escape') { e.preventDefault(); goHome(); } }
+    if (state === 'metaBossChallenge' || state === 'metaTalents' || state === 'metaInventory') { if (e.key === 'Escape') { e.preventDefault(); goHome(); } }
   }, true);
 
   window.__metaRuntime = {
-    beginRun, beginBossTest, settleRun, recordEquipment, continueSettlement, finishSettlement, toggleSettlement, upgradeTalent, resetTalents,
+    beginRun, beginBossTest, openBossChallenge, settleRun, recordEquipment, continueSettlement, finishSettlement, toggleSettlement, upgradeTalent, resetTalents,
     setInherited, reforge, rankMultipliers, rankInfo, applyPlayer, save, goHome,
     get data() { return meta; }, get run() { return run; }, get settlement() { return settlement; },
     get tab() { return metaTab; }, set tab(v) { metaTab = v; metaPage = 0; },

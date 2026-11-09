@@ -1019,6 +1019,7 @@ function spawnBoss(st) {
   e.maxhp = e.hp; e.baseMaxHp = e.maxhp; e.baseR = e.r; e.baseDmg = e.dmg; e.ink = 0;
   if (e.stage === 1 && typeof BossHuntRuntime !== 'undefined') BossHuntRuntime.init(e);
   else if (e.stage === 2 && typeof BossTapeRuntime !== 'undefined') BossTapeRuntime.init(e);
+  else if (typeof BossStandardRuntime !== 'undefined') BossStandardRuntime.init(e);
   enemies.push(e);
   crumpleT = 0.7; shakeT = 0.5;
   toast('纸面被揉皱了…… ' + def.name + ' 爬了出来！');
@@ -1067,6 +1068,7 @@ function updateInkShade(e, dt) {
 function controlledBossRuntime(e) {
   if (!e.huntBoss) return null;
   if (e.bossAI === 'tape') return typeof BossTapeRuntime !== 'undefined' ? BossTapeRuntime : null;
+  if (e.bossAI === 'standard') return typeof BossStandardRuntime !== 'undefined' ? BossStandardRuntime : null;
   return typeof BossHuntRuntime !== 'undefined' ? BossHuntRuntime : null;
 }
 function updateBoss(e, dt) {
