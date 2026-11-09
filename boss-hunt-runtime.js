@@ -88,7 +88,7 @@
   function parry(e, range) {
     if (player.absorbT <= 0 || distance(e, player) > range + player.absorbRadius) return false;
     hitStopT = Math.max(hitStopT, ABSORB_RULE.hitStop);
-    hurtEnemy(e, e.dmg * 1.5 * (player.metaAbsorbMul || 1), 0, player.x, player.y, 0, 0, 0, inkFriendlyColor);
+    hurtEnemy(e, e.dmg * 1.5 * (player.metaAbsorbMul || 1), 0, player.x, player.y, 0, 0, 0, inkFriendlyColor, false, 'absorb');
     addPartDamage(e, 55);
     rewardAbsorb(ABSORB_RULE.meleeInk); chargeParry();
     floats.push({ x: player.x, y: player.y - 45, txt: '弹反！', t: 0.7, color: inkFriendlyColor, crit: true });

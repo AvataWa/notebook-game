@@ -18,6 +18,7 @@ eval(src + `
   resetGame, render, skillCalc, hurtEnemy, spawnEnemy, killEnemy, recomputeEquip,
   get BATTLE() { return BATTLE; }, get SKILL_DEFS() { return SKILL_DEFS; }, get ITEM_DEFS() { return ITEM_DEFS; },
   get player() { return player; }, get enemies() { return enemies; }, get drops() { return drops; },
+  get damageStats() { return damageStats; },
   get state() { return state; }, set state(v) { state = v; }, get meta() { return window.__metaRuntime; }
 };`);
 const M = G.meta;
@@ -92,6 +93,21 @@ test('构筑回顾保存主动辅助、三选一词条和当前装备', () => {
   M.summaryTab = 'affixes'; drawTexts.length = 0; G.render(); assert(drawTexts.some(t => t.includes('×2')) && drawTexts.includes('潜墨'), '三选一词条回顾缺失');
   M.summaryTab = 'equipment'; drawTexts.length = 0; G.render(); assert(drawTexts.includes(G.ITEM_DEFS.glove.name) && drawTexts.some(t => t.includes('攻击 +')), '装备回顾缺失');
   M.continueSettlement(); M.finishSettlement();
+});
+
+test('伤害统计按实际扣血记录来源、排序占比并随新局清空', () => {
+  M.resetAll(); M.beginRun(false); G.state = 'play';
+  G.spawnEnemy('stick', 100, 0); const first = G.enemies[G.enemies.length - 1]; first.hp = first.maxhp = 40;
+  G.hurtEnemy(first, 100, 0, 0, 0, 0, 0, 0, '#000', false, 'cyclone');
+  G.spawnEnemy('stick', -100, 0); const second = G.enemies[G.enemies.length - 1]; second.hp = second.maxhp = 100;
+  G.hurtEnemy(second, 25, 0, 0, 0, 0, 0, 0, '#000', false, 'surge');
+  assert(near(G.damageStats.cyclone, 40) && near(G.damageStats.surge, 25), '伤害来源或过量伤害截断错误');
+  M.settleRun(false);
+  assert(near(M.settlement.damage.cyclone, 40) && near(M.settlement.damage.surge, 25), '结算没有保存伤害快照');
+  M.summaryTab = 'damage'; drawTexts.length = 0; G.render();
+  assert(drawTexts.includes('伤害统计') && drawTexts.some(t => t.includes('1. 旋转蜡笔')) && drawTexts.includes('61.5%'), '伤害统计页排序或占比错误');
+  M.continueSettlement(); M.finishSettlement(); M.beginRun(false);
+  assert(Object.keys(G.damageStats).length === 0, '新局没有清空伤害统计');
 });
 
 test('段位考核第 1 关 Boss 即通关，免装订且装备自动化碎纸', () => {

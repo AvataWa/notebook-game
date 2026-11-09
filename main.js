@@ -683,6 +683,7 @@ const joy = { active: false, id: -1, bx: JOY_HOME.x, by: JOY_HOME.y, dx: 0, dy: 
 let pendingEquipment = null, diveDecoys = [], absorbShatters = [];
 function resetGame() {
   state = 'start'; gameTime = 0; kills = 0; shakeT = 0; cycAng = 0; crumpleT = 0; hitStopT = 0; levelupDelayT = -1;
+  damageStats = Object.create(null);
   joy.active = false; joy.id = -1; joy.dx = 0; joy.dy = 0;
   camX = 0; camY = 0; spawnAcc = 0; nextId = 1; pendingEquipment = null; diveDecoys = []; absorbShatters = [];
   bossStageSpawned = 0; curStage = 0; nextHordeT = 12; hordeIndex = 0; killChain = 0; killChainT = 0; enemyTrailT = 0.1;
@@ -1191,6 +1192,12 @@ function killEnemy(e) {
     drops.push(makeEquipmentDrop(e.x, e.y));
   }
 }
+let damageStats = Object.create(null);
+function recordSkillDamage(skillId, amount) {
+  if (!(amount > 0)) return;
+  const id = skillId || 'other';
+  damageStats[id] = (damageStats[id] || 0) + amount;
+}
 function hurtEnemy(e, dmg, dotDps, sx, sy, vuln, critAdd, bossMul, hitCol, weakFloat, skillId) {
   if (e.dead) return;
   if (player.taken.inkpower && playerOnOwnInk()) dmg *= BATTLE.traits.inkDamageMul;
@@ -1203,6 +1210,7 @@ function hurtEnemy(e, dmg, dotDps, sx, sy, vuln, critAdd, bossMul, hitCol, weakF
   const critChance = player.crit + player.eqCrit + (critAdd || 0);
   const critMul = hasItem('glove') ? 2.5 : 2;
   if (critChance > 0 && Math.random() < critChance) { dmg *= critMul; crit = true; }
+  recordSkillDamage(skillId, Math.min(Math.max(0, e.hp), dmg));
   e.hp -= dmg; e.flash = 0.12; e.squash = SQUASH_T;
   const kx = e.x - (sx === undefined ? player.x : sx);
   const ky = e.y - (sy === undefined ? player.y : sy);
@@ -1211,7 +1219,7 @@ function hurtEnemy(e, dmg, dotDps, sx, sy, vuln, critAdd, bossMul, hitCol, weakF
   if (!(e.parryKbT > 0)) {
     e.kbx = kx / kd * KNOCK_V * kbMul; e.kby = ky / kd * KNOCK_V * kbMul;
   }
-  if (dotDps) { e.dotDps = Math.max(e.dotDps, dotDps); e.dotT = 3; }
+  if (dotDps) { e.dotDps = Math.max(e.dotDps, dotDps); e.dotT = 3; e.dotSkill = skillId || 'other'; }
   sparks.push({ x: e.x + (Math.random() - 0.5) * e.r, y: e.y + (Math.random() - 0.5) * e.r, t: 0.18, color: hitCol || INK });
   floats.push({ x: e.x + (Math.random() - 0.5) * 40, y: e.y - e.r - 8 - Math.random() * 18, txt: Math.round(dmg) + (crit ? '!' : ''), t: 0.7, color: hitCol || INK, crit, weak: !!weakFloat });
   const controlled = controlledBossRuntime(e);
@@ -1235,7 +1243,7 @@ function areaHit(e, dmg, c, sx, sy, zoneR, dist) {
     }
   }
   if (c.soak) { e.areaVuln = c.soak; e.areaVulnT = 0.6; }
-  if (c.stain) { e.stainDps = dmg * 0.6; e.stainT = 1 + c.stain; }
+  if (c.stain) { e.stainDps = dmg * 0.6; e.stainT = 1 + c.stain; e.stainSkill = c.hadesSkill || 'other'; }
   if (c.strike && c.followup) {
     followups.push({ e, t: 0.4, dmg: rawDmg * c.followup, c: Object.assign({}, c, { followup: 0 }), sx, sy });
   }
@@ -1337,7 +1345,7 @@ function exitDive() {
     novas.push({ x: player.x, y: player.y, t: 0.25, max: burstRadius, col: inkFriendlyColor });
     for (const e of enemies) {
       if (e.dead || Math.hypot(e.x - player.x, e.y - player.y) >= burstRadius + e.r) continue;
-      hurtEnemy(e, 30 * player.dmgMul * (1 + player.eqAtk / 100) * (player.metaDiveMul || 1), 0, player.x, player.y, 0, 0, 0, inkFriendlyColor);
+      hurtEnemy(e, 30 * player.dmgMul * (1 + player.eqAtk / 100) * (player.metaDiveMul || 1), 0, player.x, player.y, 0, 0, 0, inkFriendlyColor, false, 'dive');
       if (!e.dead) { e.kbx *= 2.5; e.kby *= 2.5; e.stunT = Math.max(e.stunT || 0, e.boss ? 0.1 : 0.3); }
     }
   }
@@ -1434,7 +1442,7 @@ function castInkSurge(radius = BATTLE.surge.radius, full = false) {
     let hitDamage = damage;
     if (hasAffix('surge', 'outerdamage') && d >= radius * 0.7) hitDamage *= 1.5;
     if (hasAffix('surge', 'surgeseed')) e.surgeSeedT = 0.2;
-    hurtEnemy(e, hitDamage, 0, player.x, player.y, 0, 0, 0, col);
+    hurtEnemy(e, hitDamage, 0, player.x, player.y, 0, 0, 0, col, false, 'surge');
     if (!e.dead) {
       e.surgeSeedT = 0;
       const kb = hasAffix('surge', 'surgeknock') ? 3.52 : 2.2;
@@ -1479,7 +1487,7 @@ function castMeleeInkSurge() {
   novas.push({ x: player.x, y: player.y, t: BATTLE.surge.visual, max: radius, col });
   for (const e of enemies) {
     if (e.dead || Math.hypot(e.x - player.x, e.y - player.y) >= radius + e.r) continue;
-    hurtEnemy(e, damage, 0, player.x, player.y, 0, 0, 0, col);
+    hurtEnemy(e, damage, 0, player.x, player.y, 0, 0, 0, col, false, 'absorb');
     if (!e.dead) {
       const kb = hasAffix('absorb', 'meleeradius') ? 4.5 : 3.6;
       e.kbx *= kb; e.kby *= kb; e.parryKbT = 0.25;
@@ -1566,7 +1574,7 @@ function reflectMeleeSwing(e) {
   }
   if (d >= enemySwingRange(e) + player.absorbRadius) return false;
   hitStopT = Math.max(hitStopT, ABSORB_RULE.hitStop);
-  hurtEnemy(e, e.dmg * 1.5 * (player.metaAbsorbMul || 1), 0, player.x, player.y, 0, 0, 0, inkFriendlyColor);
+  hurtEnemy(e, e.dmg * 1.5 * (player.metaAbsorbMul || 1), 0, player.x, player.y, 0, 0, 0, inkFriendlyColor, false, 'absorb');
   if (!e.dead) {
     e.stunT = Math.max(e.stunT || 0, e.elite ? 0.2 : 0.5);
     e.swingT = 0;
@@ -1594,7 +1602,7 @@ function reflectHazard(hz) {
   if (!source || !source.boss) return false;
   hz.done = true; hz.t = 0;
   hitStopT = Math.max(hitStopT, ABSORB_RULE.hitStop);
-  hurtEnemy(source, hz.dmg * 1.5 * (player.metaAbsorbMul || 1), 0, player.x, player.y, 0, 0, 0, inkFriendlyColor);
+  hurtEnemy(source, hz.dmg * 1.5 * (player.metaAbsorbMul || 1), 0, player.x, player.y, 0, 0, 0, inkFriendlyColor, false, 'absorb');
   rewardAbsorb(ABSORB_RULE.meleeInk);
   chargeParry();
   floats.push({ x: player.x, y: player.y - 45, txt: '弹反！', t: 0.7, color: inkFriendlyColor, crit: true });
@@ -1721,6 +1729,7 @@ function fireBullet(x, y, ang, spd, dmg, kind, extra) {
   bullets.push(Object.assign({
     x, y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
     dmg, dot: 0, kind: kind || 'nib', hits: 1, chainLeft: 0, life: 1.4, split: false, extra: 0, proj: 1,
+    hadesSkill: kind === 'surge' ? 'surge' : (kind === 'reflect' ? 'absorb' : undefined),
     size: BATTLE.skills.projectileSize, inkX: x, inkY: y
   }, extra || {}));
 }
@@ -1729,7 +1738,7 @@ function projOpts(c, life) {
   return {
     dot: c.dot, proj: c.proj, rad: c.rad * (1 + c.brad), vuln: c.vuln,
     life: life * (1 + c.lifeMul), critAdd: c.bcrit, homing: c.homing,
-    blast: c.blast, chainN: c.chain, col: c.col
+    blast: c.blast, chainN: c.chain, col: c.col, hadesSkill: c.hadesSkill
   };
 }
 function fireSkill(a, c) {
@@ -2484,7 +2493,9 @@ function update(dt) {
     e.comboT = Math.max(0, (e.comboT || 0) - dt);
     if (e.comboT <= 0) e.comboN = 0;
     if (e.stainT > 0) {   // 墨渍残留：离开范围后仍受余伤
-      e.stainT -= dt; e.hp -= e.stainDps * dt;
+      const dealt = Math.min(Math.max(0, e.hp), e.stainDps * dt);
+      recordSkillDamage(e.stainSkill, dealt);
+      e.stainT -= dt; e.hp -= dealt;
       if (e.hp <= 0) { killEnemy(e); continue; }
     }
     if (e.type === 'sprayer') {
@@ -2494,7 +2505,9 @@ function update(dt) {
     const inkFactor = enemyInkFactor(e);
     const sf = (e.slowT > 0 ? 0.5 : 1) * inkFactor;   // 彩墨阻碍怪物，灰墨帮助怪物
     if (e.dotT > 0) {
-      e.dotT -= dt; e.hp -= e.dotDps * dt;
+      const dealt = Math.min(Math.max(0, e.hp), e.dotDps * dt);
+      recordSkillDamage(e.dotSkill, dealt);
+      e.dotT -= dt; e.hp -= dealt;
       if (e.hp <= 0) { killEnemy(e); continue; }
     }
     if (e.stunT <= 0) {   // 震荡僵直：停止移动和 AI，但保留击退位移
@@ -2577,7 +2590,7 @@ function update(dt) {
             const ang = (i / n) * Math.PI * 2 + Math.random() * 0.4;
             fireBullet(b.x, b.y, ang, 300 * b.proj, b.dmg * 0.6, nextGen > 0 ? 'torn' : 'nib',
               { hits: 1, dot: b.dot, rad: b.rad, vuln: b.vuln, life: 0.8, critAdd: b.critAdd, col: b.col,
-                gen: nextGen - 1, extra: Math.max(0, (b.extra || 0) - 1), arm: nextGen > 0 ? 0.12 : 0 });
+                hadesSkill: b.hadesSkill, gen: nextGen - 1, extra: Math.max(0, (b.extra || 0) - 1), arm: nextGen > 0 ? 0.12 : 0 });
           }
           break;
         }
@@ -2603,14 +2616,14 @@ function update(dt) {
         if (b.blast) {   // 爆裂笔尖：命中溅射墨花
           for (const e2 of enemies) {
             if (!e2.dead && e2 !== e && Math.hypot(e2.x - b.x, e2.y - b.y) < 60 + e2.r)
-              hurtEnemy(e2, b.dmg * b.blast, 0, b.x, b.y, undefined, 0, 0, b.col);
+              hurtEnemy(e2, b.dmg * b.blast, 0, b.x, b.y, undefined, 0, 0, b.col, false, b.hadesSkill);
           }
           sparks.push({ x: b.x, y: b.y, t: 0.18, color: b.col });
         }
         if (b.kind === 'pin' && b.aoe) {   // 大头钉命中小爆裂
           for (const e2 of enemies) {
             if (!e2.dead && e2 !== e && Math.hypot(e2.x - b.x, e2.y - b.y) < b.aoeR + e2.r)
-              hurtEnemy(e2, b.aoe, 0, b.x, b.y, b.vuln, 0, 0, b.col);
+              hurtEnemy(e2, b.aoe, 0, b.x, b.y, b.vuln, 0, 0, b.col, false, b.hadesSkill);
           }
           sparks.push({ x: b.x, y: b.y, t: 0.18, color: b.col });
           if (b.chainN > 0) {   // 爆裂后仍可弹射

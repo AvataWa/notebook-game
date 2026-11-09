@@ -118,7 +118,7 @@
     }
   };
 
-  hurtEnemy = function(e, dmg, dotDps, sx, sy, vuln, critAdd, bossMul, hitCol, weakFloat) {
+  hurtEnemy = function(e, dmg, dotDps, sx, sy, vuln, critAdd, bossMul, hitCol, weakFloat, skillId) {
     if (e.dead) return;
     if (player.taken.inkpower && playerOnOwnInk()) dmg *= BATTLE.traits.inkDamageMul;
     if (e.vulnT > 0) dmg *= 1 + e.vuln;
@@ -131,11 +131,12 @@
     const critChance = player.crit + player.eqCrit + highscore + (critAdd || 0);
     const critMul = hasItem('glove') ? itemV('glove', 'mul') : 2;
     if (critChance > 0 && Math.random() < critChance) { dmg *= critMul; crit = true; }
+    recordSkillDamage(skillId, Math.min(Math.max(0, e.hp), dmg));
     e.hp -= dmg; e.flash = 0.12; e.squash = SQUASH_T;
     const kx = e.x - (sx === undefined ? player.x : sx), ky = e.y - (sy === undefined ? player.y : sy);
     const kd = Math.hypot(kx, ky) || 1, kbMul = e.boss ? 0.1 : (e.elite ? 0.35 : 1);
     if (!(e.parryKbT > 0)) { e.kbx = kx / kd * KNOCK_V * kbMul; e.kby = ky / kd * KNOCK_V * kbMul; }
-    if (dotDps) { e.dotDps = Math.max(e.dotDps, dotDps); e.dotT = 3; }
+    if (dotDps) { e.dotDps = Math.max(e.dotDps, dotDps); e.dotT = 3; e.dotSkill = skillId || 'other'; }
     sparks.push({ x: e.x + (Math.random() - 0.5) * e.r, y: e.y + (Math.random() - 0.5) * e.r, t: 0.18, color: hitCol || INK });
     floats.push({ x: e.x + (Math.random() - 0.5) * 40, y: e.y - e.r - 8 - Math.random() * 18, txt: Math.round(dmg) + (crit ? '!' : ''), t: 0.7, color: hitCol || INK, crit, weak: !!weakFloat });
     if (crit && hasItem('burstglove') && player.itemBurstN < 6) {

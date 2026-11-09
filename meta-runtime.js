@@ -141,7 +141,7 @@
       affixes: clone(player.affixes), taken: clone(player.taken), equip: clone(player.equip)
     };
     settlement = { win, mode: run.mode, earned, base, firstBonus, found: clone(run.found), selected: [], build,
-      stage: curSt(), level: player.level, kills, time: gameTime,
+      stage: curSt(), level: player.level, kills, time: gameTime, damage: clone(damageStats),
       slots: run.mode === 'ranked' ? 0 : 1 + (run.bossStages.some(st => st >= 5) ? 1 : 0) + (win ? 1 : 0),
       promoted, oldRank, newRank: meta.rank, page: 0 };
     metaPage = 0; summaryTab = 'skills'; state = 'metaRunSummary'; save(); return true;
@@ -377,9 +377,14 @@
       for (const a of OPERATION_AFFIX_LIST) if ((build.affixes[a.skill] && build.affixes[a.skill][a.id]) || build.taken[a.id]) entries.push({ kind: 'operation', def: a });
       return entries;
     }
+    if (summaryTab === 'damage') {
+      const stats = settlement.damage || {}, total = Object.values(stats).reduce((sum, value) => sum + value, 0);
+      return Object.entries(stats).filter(([, value]) => value > 0).map(([id, value]) => ({ id, value, total }))
+        .sort((a, b) => b.value - a.value);
+    }
     return SLOTS.filter(slot => build.equip[slot]).map(slot => ({ slot, eq: build.equip[slot] }));
   }
-  function summaryPerPage() { return summaryTab === 'skills' ? 1 : (summaryTab === 'affixes' ? 5 : 4); }
+  function summaryPerPage() { return summaryTab === 'skills' ? 1 : (summaryTab === 'equipment' ? 4 : 5); }
   function drawSummary() {
     if (!settlement) return;
     panel('本关构筑回顾', settlement.mode === 'ranked' ? '段位考核' : '普通模式');
@@ -388,8 +393,8 @@
     const resultText = settlement.win ? '挑战成功' : '挑战失败';
     const headline = settlement.promoted ? resultText + ' · ' + rankInfo(settlement.oldRank).name + ' → ' + rankInfo(settlement.newRank).name : resultText + '，构筑已记录';
     text(headline, W / 2, 99, 14, settlement.win ? (settlement.promoted ? PURPLE : INK) : RED, 'center', true);
-    const tabs = [{ id: 'skills', name: '主动与辅助' }, { id: 'affixes', name: '三选一词条' }, { id: 'equipment', name: '当前装备' }];
-    tabs.forEach((t, i) => button({ x: 24 + i * 111, y: 113, w: 105, h: 32 }, t.name, true, summaryTab === t.id));
+    const tabs = [{ id: 'skills', name: '主动与辅助' }, { id: 'affixes', name: '三选一词条' }, { id: 'equipment', name: '当前装备' }, { id: 'damage', name: '伤害统计' }];
+    tabs.forEach((t, i) => button({ x: 24 + i * 82, y: 113, w: 78, h: 32 }, t.name, true, summaryTab === t.id));
     const entries = summaryEntries(), per = summaryPerPage(), shown = entries.slice(metaPage * per, metaPage * per + per);
     if (summaryTab === 'skills') shown.forEach((a, i) => {
       const y = 158 + i * 374, def = SKILL_DEFS[a.id];
@@ -420,7 +425,21 @@
       text('攻击 +' + Math.round(def.atk * rarity.mul) + '%　生命 +' + Math.round(def.hp * rarity.mul), 36, y + 40, 10, DARK);
       ctx.font = '10px ' + FONT; ctx.fillStyle = DARK; ctx.textAlign = 'left'; wrap(itemDescription(eq.key, rarityIndex(eq)), 36, y + 59, 299, 14, 2);
     });
-    if (!shown.length) text(summaryTab === 'skills' ? '本局没有主动技能' : (summaryTab === 'affixes' ? '本局没有选择词条' : '本局没有装备'), W / 2, 310, 12, GRAY, 'center');
+    if (summaryTab === 'damage') {
+      if (shown.length) text('本局实际伤害 ' + Math.round(shown[0].total).toLocaleString() + ' · 按来源从高到低', W / 2, 161, 11, DARK, 'center');
+      const names = { surge: '墨潮', absorb: '吸墨／弹反', dive: '潜墨', other: '其他／墨迹' };
+      shown.forEach((entry, i) => {
+        const y = 177 + i * 68, name = (SKILL_DEFS[entry.id] && SKILL_DEFS[entry.id].name) || names[entry.id] || entry.id;
+        const share = entry.total > 0 ? entry.value / entry.total : 0, color = entry.id === 'other' ? GRAY : attrOf(entry.id);
+        ctx.fillStyle = 'rgba(255,250,238,0.94)'; ctx.fillRect(24, y, 327, 61); jrect(24, y, 327, 61, color, 1.4);
+        text((metaPage * per + i + 1) + '. ' + name, 36, y + 20, 12, color, 'left', true);
+        text(Math.round(entry.value).toLocaleString() + ' 伤害', 339, y + 20, 11, DARK, 'right');
+        ctx.fillStyle = '#e4dfd3'; ctx.fillRect(36, y + 35, 238, 10);
+        ctx.fillStyle = color; ctx.fillRect(36, y + 35, Math.max(1, 238 * share), 10);
+        text((share * 100).toFixed(1) + '%', 339, y + 45, 11, color, 'right', true);
+      });
+    }
+    if (!shown.length) text(summaryTab === 'skills' ? '本局没有主动技能' : (summaryTab === 'affixes' ? '本局没有选择词条' : (summaryTab === 'damage' ? '本局尚未造成伤害' : '本局没有装备')), W / 2, 310, 12, GRAY, 'center');
     const pg = pager(entries.length, per, 538); drawSummary.pg = pg;
     if (settlement.mode === 'ranked') text('试炼装备无需装订，将自动转化为碎纸', W / 2, 585, 10, GRAY, 'center');
     button({ x: 62, y: 602, w: 251, h: 40 }, settlement.mode === 'ranked' ? '领取奖励并返回手账' : '下一步 · 查看拾取并装订');
@@ -525,8 +544,8 @@
       return;
     }
     if (state === 'metaRunSummary') {
-      const tabs = ['skills', 'affixes', 'equipment'];
-      for (let i = 0; i < 3; i++) if (hit(p, { x: 24 + i * 111, y: 113, w: 105, h: 32 })) { summaryTab = tabs[i]; metaPage = 0; return; }
+      const tabs = ['skills', 'affixes', 'equipment', 'damage'];
+      for (let i = 0; i < 4; i++) if (hit(p, { x: 24 + i * 82, y: 113, w: 78, h: 32 })) { summaryTab = tabs[i]; metaPage = 0; return; }
       const pg = drawSummary.pg;
       if (pg && hit(p, pg.prev)) { metaPage = Math.max(0, metaPage - 1); return; }
       if (pg && hit(p, pg.next)) { metaPage = Math.min(pg.pages - 1, metaPage + 1); return; }

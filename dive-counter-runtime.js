@@ -53,7 +53,7 @@
       for (const e of enemies) {
         if (e.dead || nv.hit.has(e.id) || Math.hypot(e.x - nv.x, e.y - nv.y) >= radius + e.r) continue;
         nv.hit.add(e.id);
-        hurtEnemy(e, nv.damage, 0, nv.x, nv.y, 0, 0, 0, INK);
+        hurtEnemy(e, nv.damage, 0, nv.x, nv.y, 0, 0, 0, INK, false, 'dive');
         if (!e.dead && !e.boss) {
           const d = Math.hypot(e.x - nv.x, e.y - nv.y) || 1;
           e.kbx += (e.x - nv.x) / d * 55; e.kby += (e.y - nv.y) / d * 55;
