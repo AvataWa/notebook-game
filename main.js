@@ -337,6 +337,7 @@ function makeEquipmentDrop(x, y) {
 
 /* ---------- 游戏状态 ---------- */
 let state, gameTime, kills, camX, camY, shakeT, cycAng, crumpleT, hitStopT, levelupDelayT;
+let levelupPickAfter = 0;   // 三选一出现后的 0.5 秒输入锁，避免升级瞬间误触
 let player, enemies, bullets, ebullets, drops, floats, lightnings, erupts, minions, totems, sparks, toasts, cards, cardRects, hazards, blades, clouds, brands, novas, followups, fields, erases;
 let spawnAcc, nextId, bossStageSpawned, curStage, nextHordeT, hordeIndex, killChain, killChainT, enemyTrailT;
 let gestureDraw, pendingGesture, redrawOutlines, gestureNoticeT, drawMode, drawModeT;
@@ -683,7 +684,7 @@ const joy = { active: false, id: -1, bx: JOY_HOME.x, by: JOY_HOME.y, dx: 0, dy: 
 let pendingEquipment = null, diveDecoys = [], absorbShatters = [];
 function resetGame() {
   state = 'start'; gameTime = 0; kills = 0; shakeT = 0; cycAng = 0; crumpleT = 0; hitStopT = 0; levelupDelayT = -1;
-  damageStats = Object.create(null);
+  levelupPickAfter = 0; damageStats = Object.create(null);
   joy.active = false; joy.id = -1; joy.dx = 0; joy.dy = 0;
   camX = 0; camY = 0; spawnAcc = 0; nextId = 1; pendingEquipment = null; diveDecoys = []; absorbShatters = [];
   bossStageSpawned = 0; curStage = 0; nextHordeT = 12; hordeIndex = 0; killChain = 0; killChainT = 0; enemyTrailT = 0.1;
@@ -2016,14 +2017,7 @@ function updateSkills(dt) {
       continue;
     }
     const c = skillCalc(a);
-    let baseCd = {
-      cyclone: 0.45, volcanic: 2.2, tornado: 0.8, chainclip: 0.9, arc: 1.6, spark: 1.8, ballista: 5,
-      boomerang: 2.2, vortex: 1.5, candle: 0.25, icespear: 1.1, inkrain: 2.8, ruler: 2.0, chalk: 2.4,
-      pinburst: 1.3, absolve: 2.0, brand: 2.5, cola: 1.8,
-      bloodcore: 1.2, weakmark: 6, doommark: 4,
-      pageslash: 3.2, piercerush: 4.5, spinlance: 6, shieldrush: 5, ricoshield: 4.5,
-      perfectarrow: 3.8, arrowfocus: 5, magfist: 4, inkgrenade: 4.8, heatrail: 6.5
-    }[a.id];
+    const baseCd = BATTLE.activeCooldowns[a.id];
     a.t = baseCd * c.cd;
     if (a.id === 'cyclone' && a.lvl >= 5) a.t *= 0.72;
     if (a.id === 'candle') a.t /= 1 + (c.retick || 0);   // 反复涂抹：灼烧更频繁
@@ -2124,10 +2118,11 @@ function buildOptions() {
   layoutCards(cards.length);
 }
 function rerollOptions() {
-  if (state !== 'levelup' || player.itemRerolls <= 0) return false;
+  if (state !== 'levelup' || Date.now() < levelupPickAfter || player.itemRerolls <= 0) return false;
   player.itemRerolls--; buildOptions(); return true;
 }
 function applyOption(i) {
+  if (state === 'levelup' && Date.now() < levelupPickAfter) return false;
   const c = cards[i]; if (!c) return;
   const starting = c.kind === 'start';
   if (c.kind === 'active' || c.kind === 'start') player.actives.push({ id: c.id, lvl: 1, supports: [], t: 0.3, uc: 0 });
@@ -2470,7 +2465,7 @@ function update(dt) {
       levelupDelayT = -1;
       player.xp -= player.xpNext; player.level++;
       player.xpNext = xpForNextLevel(player.level);
-      buildOptions(); state = 'levelup';
+      buildOptions(); state = 'levelup'; levelupPickAfter = Date.now() + 500;
       return;
     }
   }
@@ -2489,6 +2484,7 @@ function update(dt) {
     e.vorCd = Math.max(0, (e.vorCd || 0) - dt);
     e.areaVulnT = Math.max(0, (e.areaVulnT || 0) - dt);
     e.stunT = Math.max(0, (e.stunT || 0) - dt);
+    e.impactFreezeT = Math.max(0, (e.impactFreezeT || 0) - dt);
     e.parryKbT = Math.max(0, (e.parryKbT || 0) - dt);
     e.comboT = Math.max(0, (e.comboT || 0) - dt);
     if (e.comboT <= 0) e.comboN = 0;
@@ -2510,7 +2506,7 @@ function update(dt) {
       e.dotT -= dt; e.hp -= dealt;
       if (e.hp <= 0) { killEnemy(e); continue; }
     }
-    if (e.stunT <= 0) {   // 震荡僵直：停止移动和 AI，但保留击退位移
+    if (e.stunT <= 0 && !(e.impactFreezeT > 0)) {   // 重击局部顿帧：只停当前怪物，不冻结整场战斗
       if (e.shade) updateInkShade(e, dt * sf);
       else if (e.boss) updateBoss(e, dt * (e.slowT > 0 ? 0.55 : 1) * inkFactor);
       else if (isShooter(e)) updateShooter(e, dt * sf);
@@ -2532,10 +2528,10 @@ function update(dt) {
     const onscreen = e.x >= camX - 70 && e.x <= camX + VIEW_W + 70 && e.y >= camY - 70 && e.y <= camY + VIEW_H + 70;
     if (e.type === 'spider') ProceduralLocomotion.updateSpiderLocomotionLOD(e, dt, d, onscreen);
     else if (typeof CreatureGameRuntime !== 'undefined') CreatureGameRuntime.updateEnemy(e, dt, d, onscreen);
-    if (e.stunT <= 0 && !e.boss && !e.shade && !isShooter(e)) {
+    if (e.stunT <= 0 && !(e.impactFreezeT > 0) && !e.boss && !e.shade && !isShooter(e)) {
       updateMeleeSwing(e, dt);
       if (state === 'over') return;
-    } else if (e.stunT <= 0 && !e.huntBoss && (e.boss || e.shade) && d < e.r + 10 && e.hitCd <= 0) {
+    } else if (e.stunT <= 0 && !(e.impactFreezeT > 0) && !e.huntBoss && (e.boss || e.shade) && d < e.r + 10 && e.hitCd <= 0) {
       if (player.absorbT > 0 && reflectMeleeSwing(e)) continue;
       e.hitCd = 0.9;
       addHostileInk(e.x, e.y, 3, 18, e.id);
@@ -3262,7 +3258,12 @@ function drawEnemyFull(e) {
   ctx.save();
   if (k > 0.01) {
     ctx.translate(e.x + (srand() - 0.5) * 3 * k, e.y + (srand() - 0.5) * 2.5 * k);
-    ctx.scale(1 + 0.5 * k, 1 - 0.42 * k);
+    if (e.impactT > 0 && Number.isFinite(e.impactAngle)) {
+      // 沿来招方向压短、垂直方向撑开；预警在上方已画完，不会跟随身体变形。
+      ctx.translate(e.x, e.y); ctx.rotate(e.impactAngle);
+      ctx.scale(1 - 0.25 * k, 1 + 0.28 * k);
+      ctx.rotate(-e.impactAngle); ctx.translate(-e.x, -e.y);
+    } else ctx.scale(1 + 0.5 * k, 1 - 0.42 * k);
     ctx.translate(-e.x, -e.y);
   }
   // 飞扑只抬高 Boss 身体，地面预警与真实落点保持不动。
@@ -3708,7 +3709,13 @@ function render() {
   ctx.setTransform(viewScale, 0, 0, viewScale, 0, 0);
   ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
   ctx.save();
-  if (shakeT > 0) ctx.translate((Math.random() - 0.5) * 5, (Math.random() - 0.5) * 5);
+  const feelCam = globalThis.CombatFeelRuntime ? CombatFeelRuntime.cameraOffset() : { x: 0, y: 0, shake: 0, zoom: 1 };
+  const shakeSize = 5 + feelCam.shake;
+  if (shakeT > 0 || feelCam.shake > 0) ctx.translate((Math.random() - 0.5) * shakeSize, (Math.random() - 0.5) * shakeSize);
+  ctx.translate(feelCam.x, feelCam.y);
+  if (feelCam.zoom !== 1) {
+    ctx.translate(W / 2, H / 2); ctx.scale(feelCam.zoom, feelCam.zoom); ctx.translate(-W / 2, -H / 2);
+  }
   // camX/camY 已经是缩放后视野的世界左上角，直接平移即可让玩家保持屏幕居中
   ctx.scale(ZOOM, ZOOM);
   ctx.translate(-camX, -camY);
@@ -4253,6 +4260,7 @@ function drawCards(title) {
   const titleY = cardRects.length ? Math.min(100, cardRects[0].y - 22) : 100;
   ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.font = 'bold 22px ' + FONT;
   ctx.fillText(title, W / 2, titleY);
+  const inputLocked = state === 'levelup' && Date.now() < levelupPickAfter;
   cards.forEach((cd, i) => {
     const r = cardRects[i];
     setSeed(1000 + i);
@@ -4268,7 +4276,7 @@ function drawCards(title) {
     const lines = cd.descLines || wrapCardDescription(cd.desc, r.w - 32);
     lines.forEach((line, row) => ctx.fillText(line, r.x + 16, r.y + 58 + row * 15));
     ctx.fillStyle = GRAY; ctx.font = '11px ' + FONT;
-    ctx.fillText('点按选择  [按 ' + (i + 1) + ']', r.x + 16, r.y + r.h - 10);
+    ctx.fillText(inputLocked ? '0.5 秒后可选择' : ('点按选择  [按 ' + (i + 1) + ']'), r.x + 16, r.y + r.h - 10);
   });
 }
 

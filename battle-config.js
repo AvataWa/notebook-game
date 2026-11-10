@@ -17,6 +17,19 @@ const BATTLE_CONFIG = {
     levelupDelay: 0.5       // 经验满后到三选一弹窗的延迟
   },
 
+  feel: {
+    heavyFreeze: 0.045,     // 重击只暂停受击怪物，不冻结整场战斗
+    critFreeze: 0.055,      // 暴击局部顿帧时间
+    impactTime: 0.18,       // 普通方向化笔尖爆点时长
+    deathTime: 0.42,        // 普通怪物纸屑飞散时长
+    maxImpacts: 90,         // 命中与核心操作特效同屏上限
+    maxDeaths: 50,          // 纸屑死亡事件同屏上限
+    maxCameraKicks: 4,      // 镜头冲击最多合成数量
+    heavyShake: 1.1,        // 重击附加震动幅度（逻辑像素）
+    eliteShake: 1.8,        // 精英死亡震动幅度
+    bossShake: 3.5          // Boss 死亡震动幅度
+  },
+
   melee: {
     total: 0.55,            // 挥击总时长（含前摇与命中持续）
     active: 0.2,            // 红色命中圈持续时间
@@ -84,6 +97,46 @@ const BATTLE_CONFIG = {
     visual: 0.35            // 墨潮扩散动画时间
   },
 
+  // 全部三选一主动技能的基础冷却（秒）；实际冷却 = 本表数值 × skillCalc 的 cd 倍率
+  activeCooldowns: {
+    // 基础文具技能
+    cyclone: 0.45,      // 旋转蜡笔
+    volcanic: 2.2,      // 火山压痕
+    tornado: 0.8,       // 分叉纸飞机
+    chainclip: 0.9,     // 链条回形针
+    arc: 1.6,           // 电弧荧光笔
+    spark: 1.8,         // 慢速墨滴
+    ballista: 5,        // 图钉炮台
+    boomerang: 2.2,     // 回力橡皮擦
+    vortex: 1.5,        // 涂改带刀阵
+    candle: 0.25,       // 蜡烛头
+    icespear: 1.1,      // 冰锥图钉
+    inkrain: 2.8,       // 毒墨雨
+    ruler: 2,           // 裂地直尺
+    chalk: 2.4,         // 流星粉笔头
+    pinburst: 1.3,      // 蜂群大头钉
+    absolve: 2,         // 赦免粉笔
+    brand: 2.5,         // 橡皮筋烙印
+    cola: 1.8,          // 冰可乐新星
+
+    // 哈迪斯机制技能
+    bloodcore: 1.2,     // 红芯投枪
+    weakmark: 4,        // 红笔减分
+    doommark: 3,        // 死线红勾
+
+    // 哈迪斯武器启发技能
+    pageslash: 3.2,     // 断页斩
+    piercerush: 3.5,    // 交叉贯枪
+    spinlance: 4,       // 钉页旋枪
+    shieldrush: 3,      // 三层盾印
+    ricoshield: 3.5,    // 折跃飞盾
+    perfectarrow: 2.5,  // 完美一箭
+    arrowfocus: 4,      // 群箭批注
+    magfist: 3,         // 磁墨升拳
+    inkgrenade: 3.5,    // 墨榴弹
+    heatrail: 4.5       // 过热扫射
+  },
+
   skills: {
     closeRadius: 125,       // 旋转蜡笔／刀阵／蜡烛头基础半径，覆盖近战攻击圈
     colaRadius: 150,        // 冰可乐新星基础半径
@@ -91,7 +144,7 @@ const BATTLE_CONFIG = {
     vortexPerCast: 2,       // 刀阵每次施放新增碎片数
     vortexDuration: 5,      // 刀阵基础持续时间
     projectileSize: 1.2,    // 全部玩家子弹视觉与命中尺寸倍率，不影响敌弹
-    ballistaBulletSpeed: 620// 图钉炮台基础弹速
+    ballistaBulletSpeed: 820// 图钉炮台基础弹速
   },
 
   // 大节点词条强度；是否拥有词条由 player.taken 决定

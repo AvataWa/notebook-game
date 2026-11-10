@@ -17,12 +17,12 @@
   }
   passive('slash_charge', '斩弹蓄锋', '断页斩每斩断 1 枚敌弹，下一斩伤害 +6%，最多 +30%；释放后清空', 'pageslash');
   passive('slash_crack', '裂口封路', '断页斩留下 2 秒斩痕，经过的敌人每 0.6 秒受到 25% 伤害', 'pageslash');
-  passive('pierce_ramp', '串页', '千线贯枪每贯穿 1 个目标，对后续目标伤害 +8%，本次最多 +40%', 'piercerush');
-  passive('pierce_pin', '钉足红圈', '贯枪终点普通怪定身 0.6 秒，精英/Boss 减速 35%，持续 1 秒', 'piercerush');
+  passive('pierce_ramp', '串页', '交叉贯枪每道枪影各自累计贯穿，对后续目标伤害 +8%，每道最多 +40%', 'piercerush');
+  passive('pierce_pin', '钉足红圈', '双枪终点普通怪定身 0.6 秒，精英/Boss 减速 35%，持续 1 秒', 'piercerush');
   passive('spin_spear', '旋枪飞刺', '钉页旋枪每 0.8 秒发射一枚 40% 伤害飞刺', 'spinlance');
   passive('spin_blast', '钉点爆页', '旋枪开始返回时，原钉点爆炸并造成 60% 伤害', 'spinlance');
-  passive('shield_ink', '格挡回墨', '墨盾每格挡 1 枚敌弹回复 2 墨，每次举盾最多回复 12', 'shieldrush');
-  passive('shield_charge', '守势蓄击', '墨盾每格挡 1 弹，结束盾击伤害 +8%，最多 +48%', 'shieldrush');
+  passive('shield_ink', '格挡回墨', '盾印每格挡 1 枚敌弹回复 2 墨，每次施放最多回复 12', 'shieldrush');
+  passive('shield_charge', '守势蓄击', '盾印每格挡 1 弹，结束盾震伤害 +8%，最多 +48%', 'shieldrush');
   passive('ricoshield_ramp', '弹射增幅', '折跃飞盾每次弹射后下一击伤害 +12%，返回后重置', 'ricoshield');
   passive('ricoshield_orbit', '旋盾护体', '接盾后绕身 2 秒，每 0.4 秒造成 35% 接触伤害', 'ricoshield');
   passive('perfect_mark', '主靶批注', '完美一箭首个命中目标被标记 4 秒，其他主动对其伤害 +20%', 'perfectarrow');
@@ -167,17 +167,15 @@
   function updateFists() {
     const runtime = W(); if (!runtime) return;
     for (const f of runtime.state.fists) {
-      const target = byId(f.targetId);
       if (f.pull && !f.expGuardCounted) {
         f.expGuardCounted = true;
-        if (has('fist_guard') && target) {
-          const count = enemies.filter(e => !e.dead && Math.hypot(e.x - target.x, e.y - target.y) < 120).length;
-          player.magGuardN = Math.min(6, count); player.magGuardT = 2;
+        if (has('fist_guard')) {
+          player.magGuardN = Math.min(6, f.pullCount || 0); player.magGuardT = 2;
         }
       }
-      if (f.slam && !f.expField && target) {
+      if (f.slam && !f.expField) {
         f.expField = true;
-        if (has('fist_field')) cap(S.zones, { kind: 'fist', x: target.x, y: target.y, r: 100 * f.c.rad,
+        if (has('fist_field')) cap(S.zones, { kind: 'fist', x: f.slamX, y: f.slamY, r: 110 * f.c.rad,
           t: 2.5, tick: 0, c: f.c, damage: 43 * f.c.dmg * 0.2 }, 24);
       }
     }

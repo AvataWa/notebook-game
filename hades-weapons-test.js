@@ -13,6 +13,7 @@ eval(src + `
 ;globalThis.G = {
   resetGame, update, fireSkill, skillCalc, spawnEnemy, hurtEnemy, hurtPlayer, updateSkills, render, applyOption, supportUsable,
   get SKILL_DEFS() { return SKILL_DEFS; }, get PASSIVES() { return PASSIVES; }, get SUPPORTS() { return SUPPORTS; }, get player() { return player; },
+  get BATTLE() { return BATTLE; },
   get enemies() { return enemies; }, get ebullets() { return ebullets; }, get bullets() { return bullets; },
   get floats() { return floats; }, get state() { return state; }, set state(v) { state = v; },
   get cards() { return cards; }, set cards(v) { cards = v; }, get W() { return window.__weaponRuntime; },
@@ -49,6 +50,19 @@ test('内容池达到三十一主动、五十六被动和五十六辅助，四�
   }
 });
 
+test('三十一主动共用唯一基础冷却表，修改表值会直接改变实际间隔', () => {
+  const table = G.BATTLE.activeCooldowns, ids = Object.keys(G.SKILL_DEFS);
+  assert(Object.keys(table).length === 31, '基础冷却表不是 31 项');
+  for (const id of ids) assert(Number.isFinite(table[id]) && table[id] > 0, id + ' 缺少有效基础冷却');
+  fresh('piercerush'); target(100, 0);
+  const a = G.player.actives[0], previous = table.piercerush;
+  try {
+    table.piercerush = 3.217; a.t = 0; G.updateSkills(0.01);
+    const expected = 3.217 * G.skillCalc(a).cd;
+    assert(Math.abs(a.t - expected) < 0.0001, '实际施放间隔没有读取统一冷却表：' + a.t + ' != ' + expected);
+  } finally { table.piercerush = previous; }
+});
+
 test('新技能只提供实际接入的通用辅助', () => {
   for (const id of G.W.ids) {
     assert(!G.supportUsable('unleash', id), id + ' 仍提供重复施放');
@@ -67,12 +81,17 @@ test('断页斩具有前摇、斩弹、回锋牵引与余锋爆裂', () => {
   G.W.updateSlashes(0.5); assert(G.W.state.fx.filter(f => f.type === 'blast').length > blasts, '余锋没有二次爆裂');
 });
 
-test('千线贯枪完成瞄准、长距突进、终点冲击和返程', () => {
-  fresh('piercerush'); take('pierce_long'); take('pierce_return'); const e = target(180, 0); cast();
-  G.W.updateDashes(0.18); assert(G.W.state.dashes[0].phase === 'out', '贯枪未完成瞄准');
-  G.W.updateDashes(0.24); assert(G.player.x > 380 && e.hp < e.maxhp, '长距突进未命中或距离不足');
-  assert(G.W.state.dashes[0].phase === 'back' && G.W.state.fx.some(f => f.type === 'blast'), '未进入返程或终点未冲击');
-  G.W.updateDashes(0.24); assert(Math.abs(G.player.x) < 0.001 && !G.W.state.dashes.length, '返程没有回到起点');
+test('交叉贯枪双枪交叉爆发，往返全程不移动角色', () => {
+  fresh('piercerush'); take('pierce_long'); take('pierce_return'); const e = target(180, 0);
+  const px = G.player.x, py = G.player.y; cast();
+  assert(G.W.state.dashes.length === 2, '没有生成两道交叉枪影');
+  G.W.updateDashes(0.18); assert(G.W.state.dashes.every(d => d.phase === 'out'), '贯枪未完成瞄准');
+  G.W.updateDashes(0.24);
+  assert(G.player.x === px && G.player.y === py && e.hp < e.maxhp, '交叉贯枪移动了角色或未命中');
+  assert(G.W.state.dashes.every(d => d.phase === 'back'), '双枪未进入返程');
+  assert(G.W.state.fx.some(f => f.type === 'crosscut') && G.W.state.fx.some(f => f.type === 'blast'), '交叉剪切或终点冲击未生效');
+  G.W.updateDashes(0.24);
+  assert(G.player.x === px && G.player.y === py && !G.W.state.dashes.length, '枪影返程移动了角色或未回收');
 });
 
 test('双枪钉页持续切割，返回时拖拽并追加碰撞伤害', () => {
@@ -84,14 +103,19 @@ test('双枪钉页持续切割，返回时拖拽并追加碰撞伤害', () => {
   assert(l.returning && e.hp < hp2 && e.x !== before, '回枪没有拖拽或碰撞伤害');
 });
 
-test('墨盾举盾减伤、反弹敌弹，冲锋结束追加盾击', () => {
-  fresh('shieldrush'); take('shield_reflect'); take('shield_bash'); target(120, 0); cast();
-  G.player.hurtT = 0; G.player.goldT = 0; const hp = G.player.hp; G.hurtPlayer(20, 'enemy', G.enemies[0]);
-  assert(Math.round(hp - G.player.hp) === 6, '举盾没有减伤到 30%，实际扣血 ' + (hp - G.player.hp));
+test('三层盾印真实受击消耗并反击，免疫不误耗，结束按剩余层数盾震', () => {
+  fresh('shieldrush'); take('shield_reflect'); take('shield_bash'); const e = target(60, 0);
+  const px = G.player.x, py = G.player.y; cast();
+  assert(G.W.state.shieldRush.layers === 3, '施放后不是三层盾印');
+  G.player.hurtT = 0; G.player.goldT = 0; const hp = G.player.hp; G.hurtPlayer(20, 'enemy', e);
+  assert(Math.round(hp - G.player.hp) === 5 && G.W.state.shieldRush.layers === 2, '盾印没有减伤 75% 或消耗一层');
+  assert(e.hp < e.maxhp && G.W.state.shieldRush.counters === 1, '受击没有触发盾片反击');
+  G.hurtPlayer(20, 'enemy', e); assert(G.W.state.shieldRush.layers === 2, '受击保护期间错误消耗盾印');
   G.ebullets.push({ x: 40, y: 0, life: 2 }); G.W.updateShieldRush(0.01);
-  assert(G.ebullets[0].life === 0 && G.W.state.bolts.length === 1, '敌弹没有原路反弹');
-  G.W.updateShieldRush(0.5); G.W.updateShieldRush(0.31);
-  assert(!G.W.state.shieldRush && G.W.state.fx.some(f => f.type === 'blast'), '冲锋盾击没有结算');
+  assert(G.ebullets[0].life === 0 && G.W.state.bolts.length === 1 && G.W.state.shieldRush.layers === 2, '格挡反弹或免耗层规则失效');
+  G.W.updateShieldRush(3.6);
+  assert(!G.W.state.shieldRush && G.W.state.fx.some(f => f.type === 'blast'), '剩余盾印没有结算盾震');
+  assert(G.player.x === px && G.player.y === py, '盾印施放或结算移动了角色');
 });
 
 test('双盾弹射并返回，接盾冲击且重置主动冷却', () => {
@@ -120,13 +144,16 @@ test('群箭扩编为十二支，逐支集火并触发六次红叉爆裂', () =>
   assert(e.hp < e.maxhp && G.W.state.fx.some(f => f.type === 'blast'), '集火或红叉爆裂没有结算');
 });
 
-test('磁墨升拳完成聚怪、浮空、下砸、余震和再次弹起', () => {
-  fresh('magfist'); take('fist_aftershock'); take('fist_juggle'); const e = target(100, 0), near = target(180, 0); cast();
-  G.W.updateFists(0.13); assert(near.x < 180, '磁墨没有聚拢附近怪物');
-  G.W.updateFists(0.16); assert(e.weaponAirT > 0, '上勾没有造成浮空');
+test('磁墨升拳在远程目标点聚怪，浮空下砸且角色原地不动', () => {
+  fresh('magfist'); take('fist_aftershock'); take('fist_juggle'); const e = target(260, 0), near = target(330, 0);
+  const px = G.player.x, py = G.player.y; cast();
+  G.W.updateFists(0.13);
+  assert(near.x < 330 && Math.abs(near.x - 260) < 70, '磁墨没有把附近怪物拉向远程目标点');
+  assert(G.player.x === px && G.player.y === py, '磁墨聚怪移动了角色');
+  G.W.updateFists(0.16); assert(e.weaponAirT > 0 && G.player.x === px, '上勾没有造成浮空或移动了角色');
   G.W.updateFists(0.36); assert(G.W.state.fx.some(f => f.type === 'blast') && e.weaponAirT > 0, '下砸或再次弹起未生效');
   const count = G.W.state.fx.filter(f => f.type === 'blast').length; G.W.updateFists(0.45);
-  assert(G.W.state.fx.filter(f => f.type === 'blast').length > count, '坠地余震没有二次结算');
+  assert(G.W.state.fx.filter(f => f.type === 'blast').length > count && G.player.y === py, '坠地余震没有二次结算或移动了角色');
 });
 
 test('黏纸雷壳扩大主爆炸，子母弹生成五枚并依次爆炸', () => {

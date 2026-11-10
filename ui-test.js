@@ -30,6 +30,7 @@ eval(src + `
   get cardRects() { return cardRects; }, get erupts() { return erupts; }, get novas() { return novas; }, get floats() { return floats; },
   set hitStop(v) { hitStopT = v; },
   get joy() { return joy; }, get levelupDelay() { return levelupDelayT; },
+  get levelupPickAfter() { return levelupPickAfter; }, set levelupPickAfter(v) { levelupPickAfter = v; },
   get joyHome() { return JOY_HOME; }, get absorbRect() { return absorbRect; },
   get diveRect() { return diveRect; }, get specialRect() { return specialRect; },
   get cam() { return { x: camX, y: camY }; }, get view() { return { w: VIEW_W, h: VIEW_H }; },
@@ -50,6 +51,12 @@ test('经验满后等待 0.5 秒才弹出升级三选一', () => {
   assert(G.state === 'play' && G.player.level === 1 && G.cards.length === 0, '0.5 秒未到就弹出选项');
   G.update(0.02);
   assert(G.state === 'levelup' && G.player.level === 2 && G.cards.length === 3, '等待结束后没有升级三选一');
+  assert(G.levelupPickAfter - Date.now() > 400 && G.levelupPickAfter - Date.now() <= 500, '三选一没有设置 0.5 秒输入锁');
+  assert(G.applyOption(0) === false && G.state === 'levelup' && G.cards.length === 3, '输入锁期间仍能选卡');
+  drawTexts.length = 0; G.render();
+  assert(drawTexts.some(t => t.txt === '0.5 秒后可选择'), '输入锁期间缺少不可选提示');
+  G.levelupPickAfter = 0; G.applyOption(0);
+  assert(G.state === 'play' && G.cards.length === 0, '输入锁结束后无法正常选卡');
 });
 test('左下固定摇杆只在左侧启动并决定方向', () => {
   fresh(); const home = G.joyHome;

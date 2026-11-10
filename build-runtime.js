@@ -180,12 +180,7 @@
       }
       const c = skillCalc(a);
       player.itemAmbushT = 0; player.itemSurgeT = 0; player.itemParryT = 0;
-      const baseCd = { cyclone: 0.45, volcanic: 2.2, tornado: 0.8, chainclip: 0.9, arc: 1.6, spark: 1.8, ballista: 5,
-        boomerang: 2.2, vortex: 1.5, candle: 0.25, icespear: 1.1, inkrain: 2.8, ruler: 2, chalk: 2.4,
-        pinburst: 1.3, absolve: 2, brand: 2.5, cola: 1.8,
-        bloodcore: 1.2, weakmark: 6, doommark: 4,
-        pageslash: 3.2, piercerush: 4.5, spinlance: 6, shieldrush: 5, ricoshield: 4.5,
-        perfectarrow: 3.8, arrowfocus: 5, magfist: 4, inkgrenade: 4.8, heatrail: 6.5 }[a.id];
+      const baseCd = BATTLE.activeCooldowns[a.id];
       a.t = baseCd * c.cd;
       if (a.id === 'cyclone' && a.lvl >= 5) a.t *= 0.72;
       if (a.id === 'candle') a.t /= 1 + (c.retick || 0);

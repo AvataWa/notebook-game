@@ -12,13 +12,13 @@
 
   Object.assign(SKILL_DEFS, {
     pageslash: { name: '断页斩', desc: '短暂蓄力后斩出 240° 大刀光，高伤并斩断敌弹，纸面留下裂痕' },
-    piercerush: { name: '千线贯枪', desc: '红线瞄准后向前突进，贯穿并带走沿途小怪' },
+    piercerush: { name: '交叉贯枪', desc: '双枪影交叉贯穿，交叉点产生剪切爆发，角色原地施放' },
     spinlance: { name: '钉页旋枪', desc: '投出长枪钉在远处持续旋转，到期后飞回并切割沿途敌人' },
-    shieldrush: { name: '墨盾猛冲', desc: '举盾期间大幅减伤并阻挡正面敌弹，随后向前冲撞' },
+    shieldrush: { name: '三层盾印', desc: '获得三层盾印，受击消耗一层并减伤反击，结束时按剩余层数盾震' },
     ricoshield: { name: '折跃飞盾', desc: '大盾在敌人之间弹射，最后返回；接住盾牌可立即再投' },
     perfectarrow: { name: '完美一箭', desc: '自动完成蓄力，在完美区间释放高伤贯穿箭' },
     arrowfocus: { name: '群箭批注', desc: '标记目标并悬停箭阵，随后依次转向集火同一目标' },
-    magfist: { name: '磁墨升拳', desc: '冲近目标并聚怪，上勾浮空后追加下砸冲击' },
+    magfist: { name: '磁墨升拳', desc: '在远程目标点聚怪并浮空，随后上勾下砸，角色原地施放' },
     inkgrenade: { name: '墨榴弹', desc: '向远处抛出大墨弹，落地延迟后重爆炸并留下焦黑纸洞' },
     heatrail: { name: '过热扫射', desc: '自动进行短连射并积热，结束时发射一枚高伤终末弹' }
   });
@@ -40,12 +40,12 @@
   }
   passive('slash_echo', '余锋裂纸', '断页斩的斩痕二次爆裂，造成 60% 伤害', 'pageslash');
   passive('slash_pull', '回锋收页', '断页斩回卷，将外圈小怪拖近并追加反向斩', 'pageslash');
-  passive('pierce_long', '一线到底', '贯枪距离与宽度 +30%，终点产生范围冲击', 'piercerush');
-  passive('pierce_return', '去而复返', '贯枪到达终点后沿原路冲回，造成 60% 伤害', 'piercerush');
+  passive('pierce_long', '一线到底', '双枪距离与宽度 +30%，两个终点产生范围冲击', 'piercerush');
+  passive('pierce_return', '去而复返', '双枪到达终点后沿原路返回，造成 60% 伤害', 'piercerush');
   passive('spin_double', '双枪钉页', '额外投出一柄旋枪，单柄伤害 -25%', 'spinlance');
   passive('spin_pull', '收枪聚纸', '旋枪返回时拖拽敌人，聚拢时追加碰撞伤害', 'spinlance');
-  passive('shield_reflect', '盾面反批', '举盾格挡敌弹时将其原路弹回', 'shieldrush');
-  passive('shield_bash', '碎页冲城', '冲锋结束追加盾击与冲击波', 'shieldrush');
+  passive('shield_reflect', '盾面反批', '盾印格挡敌弹时将其原路弹回', 'shieldrush');
+  passive('shield_bash', '碎页守城', '盾印结算时强化盾震，剩余层数提高范围与伤害', 'shieldrush');
   passive('ricoshield_double', '双盾轮转', '同时掷出第二面盾牌，单盾伤害 -20%', 'ricoshield');
   passive('ricoshield_catch', '接盾震页', '接住盾牌时释放近身冲击并重置投掷', 'ricoshield');
   passive('perfect_tail', '裂帛箭尾', '完美射击穿过目标后追加红色剑气', 'perfectarrow');
@@ -157,21 +157,28 @@
 
   function firePiercerush(a, c) {
     const target = nearest(player.x, player.y, 470);
-    if (!target || S.dashes.length >= 4) return false;
-    const angle = Math.atan2(target.y - player.y, target.x - player.x), length = 300 * (has('pierce_long') ? 1.3 : 1);
-    S.dashes.push({ id: S.nextId++, x0: player.x, y0: player.y, x1: player.x + Math.cos(angle) * length,
-      y1: player.y + Math.sin(angle) * length, angle, phase: 'aim', t: 0, c, hits: Object.create(null), backHits: Object.create(null) });
+    if (!target || S.dashes.length > 2) return false;
+    const angle = Math.atan2(target.y - player.y, target.x - player.x);
+    const extension = 155 * (has('pierce_long') ? 1.3 : 1), group = { burst: false };
+    for (const side of [-1, 1]) {
+      const x0 = player.x - Math.sin(angle) * side * 62, y0 = player.y + Math.cos(angle) * side * 62;
+      const spearAngle = Math.atan2(target.y - y0, target.x - x0);
+      const x1 = target.x + Math.cos(spearAngle) * extension, y1 = target.y + Math.sin(spearAngle) * extension;
+      S.dashes.push({ id: S.nextId++, group, side, x0, y0, x1, y1, crossX: target.x, crossY: target.y,
+        hx: x0, hy: y0, angle: spearAngle, phase: 'aim', t: 0, c,
+        hits: Object.create(null), backHits: Object.create(null) });
+    }
     return true;
   }
   function dashHits(d, x1, y1, x2, y2, multiplier, table) {
-    const width = 30 * d.c.rad * (has('pierce_long') ? 1.3 : 1);
+    const width = 24 * d.c.rad * (has('pierce_long') ? 1.3 : 1);
     const hooks = window.__weaponPassives;
     for (const e of enemies) {
       if (e.dead || table[e.id] || segmentDistance(e.x, e.y, x1, y1, x2, y2) > width + e.r) continue;
       table[e.id] = true;
-      const raw = 42 * d.c.dmg * multiplier, damage = hooks ? hooks.modifyDashHit(d, e, raw) : raw;
+      const raw = 42 * d.c.dmg * 0.55 * multiplier, damage = hooks ? hooks.modifyDashHit(d, e, raw) : raw;
       areaDamage(e, damage, d.c, 'piercerush', x1, y1);
-      if (!e.boss) { e.kbx += Math.cos(d.angle) * 180; e.kby += Math.sin(d.angle) * 180; }
+      if (!e.boss) { e.kbx += Math.cos(d.angle) * 150; e.kby += Math.sin(d.angle) * 150; }
     }
   }
   function updateDashes(dt) {
@@ -183,12 +190,17 @@
       }
       const back = d.phase === 'back', duration = 0.24, p = Math.min(1, d.t / duration);
       const sx = back ? d.x1 : d.x0, sy = back ? d.y1 : d.y0, ex = back ? d.x0 : d.x1, ey = back ? d.y0 : d.y1;
-      const oldX = player.x, oldY = player.y;
-      player.x = sx + (ex - sx) * p; player.y = sy + (ey - sy) * p;
-      dashHits(d, oldX, oldY, player.x, player.y, back ? 0.6 : 1, back ? d.backHits : d.hits);
-      fx('ghost', player.x, player.y, 18, back ? PURPLE : RED, 0.18, { angle: d.angle + (back ? Math.PI : 0) });
+      const oldX = d.hx, oldY = d.hy;
+      d.hx = sx + (ex - sx) * p; d.hy = sy + (ey - sy) * p;
+      dashHits(d, oldX, oldY, d.hx, d.hy, back ? 0.6 : 1, back ? d.backHits : d.hits);
+      fx('spear', d.hx, d.hy, 25, back ? PURPLE : RED, 0.18, { angle: d.angle + (back ? Math.PI : 0) });
       if (p >= 1) {
-        if (!back && has('pierce_long')) blast(d.x1, d.y1, 76 * d.c.rad, 18 * d.c.dmg, d.c, 'piercerush', RED);
+        if (!back && !d.group.burst) {
+          d.group.burst = true;
+          blast(d.crossX, d.crossY, 82 * d.c.rad, 16 * d.c.dmg, d.c, 'piercerush', RED);
+          fx('crosscut', d.crossX, d.crossY, 64 * d.c.rad, RED, 0.38, { angle: d.angle });
+        }
+        if (!back && has('pierce_long')) blast(d.x1, d.y1, 76 * d.c.rad, 14 * d.c.dmg, d.c, 'piercerush', RED);
         if (window.__weaponPassives) window.__weaponPassives.onDashEnd(d, back);
         if (!back && has('pierce_return')) { d.phase = 'back'; d.t = 0; }
         else d.done = true;
@@ -242,46 +254,45 @@
   }
 
   function fireShieldrush(a, c) {
+    if (S.shieldRush) return false;
     const target = nearest(player.x, player.y, 380);
-    if (!target || S.shieldRush) return false;
-    const angle = Math.atan2(target.y - player.y, target.x - player.x);
-    S.shieldRush = { x0: player.x, y0: player.y, angle, phase: 'guard', t: 0, c, hits: Object.create(null) };
+    const angle = target ? Math.atan2(target.y - player.y, target.x - player.x) : player.faceA;
+    S.shieldRush = { angle, t: 0, duration: 3.6, layers: 3, c, counters: 0, done: false };
+    fx('ring', player.x, player.y, 58, BLUE, 0.35);
     return true;
+  }
+  function finishShieldRush(d) {
+    if (!d || d.done) return;
+    d.done = true;
+    const hooks = window.__weaponPassives;
+    let raw = (14 + d.layers * 8) * d.c.dmg;
+    if (has('shield_bash')) raw += (24 + d.layers * 6) * d.c.dmg;
+    const damage = hooks ? hooks.modifyShieldBash(d, raw) : raw;
+    blast(player.x, player.y, (82 + d.layers * 18) * d.c.rad, damage, d.c, 'shieldrush', BLUE);
+    S.shieldRush = null;
+  }
+  function consumeShieldRush(d) {
+    if (!d || d.done || d.layers <= 0) return;
+    d.layers--; d.counters++;
+    blast(player.x, player.y, 76 * d.c.rad, 18 * d.c.dmg, d.c, 'shieldrush', BLUE);
+    fx('shieldbreak', player.x, player.y, 54, BLUE, 0.32, { layer: d.layers });
+    if (d.layers <= 0) finishShieldRush(d);
   }
   function updateShieldRush(dt) {
     const d = S.shieldRush; if (!d) return;
     const hooks = window.__weaponPassives;
     d.t += dt;
-    if (d.phase === 'guard') {
-      for (const eb of ebullets) {
-        if (eb.life <= 0) continue;
-        const dx = eb.x - player.x, dy = eb.y - player.y, dist = Math.hypot(dx, dy);
-        if (dist > 72 || Math.cos(angleDiff(Math.atan2(dy, dx), d.angle)) < 0.15) continue;
-        eb.life = 0; fx('ring', eb.x, eb.y, 28, BLUE, 0.2);
-        if (hooks) hooks.onShieldBlock(d, eb);
-        if (has('shield_reflect')) spawnBolt({ kind: 'rail', skill: 'shieldrush', x: eb.x, y: eb.y,
+    for (const eb of ebullets) {
+      if (eb.life <= 0 || Math.hypot(eb.x - player.x, eb.y - player.y) > 76 + (eb.r || 0)) continue;
+      eb.life = 0; fx('ring', eb.x, eb.y, 28, BLUE, 0.2);
+      if (hooks) hooks.onShieldBlock(d, eb);
+      if (has('shield_reflect')) {
+        const dx = eb.x - player.x, dy = eb.y - player.y;
+        spawnBolt({ kind: 'rail', skill: 'shieldrush', x: eb.x, y: eb.y,
           angle: Math.atan2(-dy, -dx), speed: 640, damage: 34 * d.c.dmg, c: d.c, radius: 5, life: 0.8 });
       }
-      if (d.t >= 0.48) { d.phase = 'rush'; d.t = 0; }
-    } else {
-      const p = Math.min(1, d.t / 0.3), oldX = player.x, oldY = player.y;
-      player.x = d.x0 + Math.cos(d.angle) * 205 * p; player.y = d.y0 + Math.sin(d.angle) * 205 * p;
-      fx('ghost', player.x, player.y, 22, BLUE, 0.2, { angle: d.angle, shield: true });
-      for (const e of enemies) {
-        if (e.dead || d.hits[e.id] || segmentDistance(e.x, e.y, oldX, oldY, player.x, player.y) > 38 + e.r) continue;
-        d.hits[e.id] = true; areaDamage(e, 38 * d.c.dmg, d.c, 'shieldrush', oldX, oldY);
-        e.kbx += Math.cos(d.angle) * (e.boss ? 70 : 330); e.kby += Math.sin(d.angle) * (e.boss ? 70 : 330);
-      }
-      if (p >= 1) {
-        if (has('shield_bash')) {
-          const raw = 42 * d.c.dmg, damage = hooks ? hooks.modifyShieldBash(d, raw) : raw;
-          blast(player.x + Math.cos(d.angle) * 25, player.y + Math.sin(d.angle) * 25,
-            112 * d.c.rad, damage, d.c, 'shieldrush', BLUE);
-        }
-        d.done = true;
-      }
     }
-    if (d.done) S.shieldRush = null;
+    if (d.t >= d.duration) finishShieldRush(d);
   }
 
   function fireRicoshield(a, c) {
@@ -368,38 +379,47 @@
   }
 
   function fireMagfist(a, c) {
-    const target = nearest(player.x, player.y, 210 * c.rad);
+    const target = nearest(player.x, player.y, 430 * c.rad);
     if (!target) return false;
-    cap(S.fists, { id: S.nextId++, targetId: target.id, age: 0, c, pull: false, upper: false, slam: false, after: false }, 3);
+    cap(S.fists, { id: S.nextId++, targetId: target.id, x: target.x, y: target.y, age: 0, c,
+      pull: false, pullCount: 0, upper: false, slam: false, after: false }, 3);
     return true;
   }
   function updateFists(dt) {
     for (const fist of S.fists) {
       fist.age += dt;
-      let target = byId(fist.targetId) || nearest(player.x, player.y, 240);
+      let target = byId(fist.targetId) || nearest(fist.x, fist.y, 150 * fist.c.rad);
       if (target) fist.targetId = target.id;
-      if (!fist.pull && fist.age >= 0.12 && target) {
+      if (!fist.pull && fist.age >= 0.12) {
         fist.pull = true;
-        const angle = Math.atan2(target.y - player.y, target.x - player.x);
-        player.x = target.x - Math.cos(angle) * 30; player.y = target.y - Math.sin(angle) * 30;
         for (const e of enemies) {
-          const d = Math.hypot(e.x - target.x, e.y - target.y);
-          if (!e.dead && !e.boss && e !== target && d < 115 && d > 5) { e.x -= (e.x - target.x) / d * 30; e.y -= (e.y - target.y) / d * 30; }
+          const dx = fist.x - e.x, dy = fist.y - e.y, d = Math.hypot(dx, dy);
+          if (e.dead || d >= 150 * fist.c.rad) continue;
+          fist.pullCount++;
+          if (!e.boss && d > 5) {
+            const pull = Math.min(72, d * 0.72, d - 5);
+            e.x += dx / d * pull; e.y += dy / d * pull;
+          }
         }
-        fx('ghost', player.x, player.y, 28, PURPLE, 0.24, { angle, fist: true });
+        fx('magnet', fist.x, fist.y, 150 * fist.c.rad, PURPLE, 0.42);
       }
       if (!fist.upper && fist.age >= 0.28 && target) {
-        fist.upper = true; areaDamage(target, 32 * fist.c.dmg, fist.c, 'magfist', player.x, player.y);
-        target.weaponAirT = target.weaponAirTotal = 0.82; target.weaponAirLift = 38;
-        fx('upper', target.x, target.y, 55, PURPLE, 0.32);
+        fist.upper = true;
+        areaDamage(target, 32 * fist.c.dmg * (target.boss ? 1.35 : 1), fist.c, 'magfist', fist.x, fist.y);
+        if (!target.boss) { target.weaponAirT = target.weaponAirTotal = 0.82; target.weaponAirLift = 38; }
+        fx('upper', target.x, target.y, 64, PURPLE, 0.36);
       }
-      if (!fist.slam && fist.age >= 0.64 && target) {
-        fist.slam = true; target.weaponAirT = 0;
-        blast(target.x, target.y, 100 * fist.c.rad, 43 * fist.c.dmg, fist.c, 'magfist', PURPLE);
-        if (has('fist_juggle') && !target.dead) { target.weaponAirT = target.weaponAirTotal = 0.48; target.weaponAirLift = 22; }
+      if (!fist.slam && fist.age >= 0.64) {
+        fist.slam = true;
+        fist.slamX = target ? target.x : fist.x; fist.slamY = target ? target.y : fist.y;
+        if (target) target.weaponAirT = 0;
+        blast(fist.slamX, fist.slamY, 110 * fist.c.rad, 43 * fist.c.dmg, fist.c, 'magfist', PURPLE);
+        if (target && has('fist_juggle') && !target.dead && !target.boss) {
+          target.weaponAirT = target.weaponAirTotal = 0.48; target.weaponAirLift = 22;
+        }
       }
-      if (fist.slam && !fist.after && has('fist_aftershock') && fist.age >= 1.05 && target) {
-        fist.after = true; blast(target.x, target.y, 125 * fist.c.rad, 21.5 * fist.c.dmg, fist.c, 'magfist', PURPLE);
+      if (fist.slam && !fist.after && has('fist_aftershock') && fist.age >= 1.05) {
+        fist.after = true; blast(fist.slamX, fist.slamY, 135 * fist.c.rad, 21.5 * fist.c.dmg, fist.c, 'magfist', PURPLE);
       }
       if (fist.age > 1.25) fist.done = true;
     }
@@ -554,7 +574,14 @@
   };
   const baseHurtPlayer = hurtPlayer;
   hurtPlayer = function(dmg, kind, source) {
-    if (S.shieldRush && S.shieldRush.phase === 'guard') dmg *= 0.3;
+    // 与基础受伤入口共用免疫条件：潜墨、弹反慢放和受击保护不会白耗盾印。
+    if (player.diving || hitStopT > 0 || player.goldT > 0 || player.hurtT > 0) return baseHurtPlayer(dmg, kind, source);
+    const shield = S.shieldRush;
+    if (shield && shield.layers > 0) {
+      const result = baseHurtPlayer(dmg * 0.25, kind, source);
+      consumeShieldRush(shield);
+      return result;
+    }
     return baseHurtPlayer(dmg, kind, source);
   };
   const baseUpdate = update;
@@ -584,7 +611,24 @@
             f.angle + Math.PI * 2 / 3 + p * 0.5); ctx.strokeStyle = f.col; ctx.lineWidth = 7 - i * 1.8; ctx.stroke();
         }
       } else if (f.type === 'line') line(f.x, f.y, f.x2, f.y2, f.col, 5 * (1 - p) + 1);
-      else if (f.type === 'ghost') {
+      else if (f.type === 'spear') {
+        const c = Math.cos(f.angle), s = Math.sin(f.angle), nx = -s, ny = c;
+        line(f.x - c * 42, f.y - s * 42, f.x + c * 22, f.y + s * 22, f.col, 6);
+        line(f.x + c * 22, f.y + s * 22, f.x + c * 8 + nx * 9, f.y + s * 8 + ny * 9, f.col, 4);
+        line(f.x + c * 22, f.y + s * 22, f.x + c * 8 - nx * 9, f.y + s * 8 - ny * 9, f.col, 4);
+      } else if (f.type === 'crosscut') {
+        const r = f.r * (0.35 + p * 0.65);
+        line(f.x - r, f.y - r, f.x + r, f.y + r, f.col, 9 * (1 - p) + 2);
+        line(f.x + r, f.y - r, f.x - r, f.y + r, f.col, 9 * (1 - p) + 2);
+      } else if (f.type === 'magnet') {
+        jcircle(f.x, f.y, f.r * (1 - p * 0.65), f.col, 4);
+        jcircle(f.x, f.y, f.r * (0.72 - p * 0.45), f.col, 2);
+        for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; line(f.x + Math.cos(a) * f.r,
+          f.y + Math.sin(a) * f.r, f.x + Math.cos(a) * f.r * 0.55, f.y + Math.sin(a) * f.r * 0.55, f.col, 2); }
+      } else if (f.type === 'shieldbreak') {
+        for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI * 2, r = f.r * (0.35 + p); line(f.x + Math.cos(a) * r * 0.55,
+          f.y + Math.sin(a) * r * 0.55, f.x + Math.cos(a) * r, f.y + Math.sin(a) * r, f.col, 4); }
+      } else if (f.type === 'ghost') {
         const c = Math.cos(f.angle), s = Math.sin(f.angle); jcircle(f.x, f.y - 18, 9, f.col, 2.5);
         line(f.x, f.y - 9, f.x - c * 9, f.y + 15, f.col, 4); line(f.x - c * 9, f.y + 15, f.x - c * 18 - s * 8, f.y + 26, f.col, 3);
         if (f.shield) { ctx.beginPath(); ctx.arc(f.x + c * 16, f.y + s * 16, 25, f.angle - 1.2, f.angle + 1.2); ctx.strokeStyle = f.col; ctx.lineWidth = 6; ctx.stroke(); }
@@ -608,7 +652,11 @@
       if (d.phase === 'aim') {
         ctx.globalAlpha = 0.4 + Math.min(0.5, d.t * 3); line(d.x0, d.y0, d.x1, d.y1, RED, 2 + d.t * 12);
         line(d.x0, d.y0, d.x0 + (d.x1 - d.x0) * Math.min(1, d.t / 0.18), d.y0 + (d.y1 - d.y0) * Math.min(1, d.t / 0.18), RED, 5);
-      } else line(d.x0, d.y0, d.x1, d.y1, d.phase === 'back' ? PURPLE : RED, 4);
+        if (d.side < 0) { const r = 13 + d.t * 25; line(d.crossX - r, d.crossY - r, d.crossX + r, d.crossY + r, RED, 3); line(d.crossX + r, d.crossY - r, d.crossX - r, d.crossY + r, RED, 3); }
+      } else {
+        const sx = d.phase === 'back' ? d.x1 : d.x0, sy = d.phase === 'back' ? d.y1 : d.y0;
+        ctx.globalAlpha = 0.55; line(sx, sy, d.hx, d.hy, d.phase === 'back' ? PURPLE : RED, 5);
+      }
     }
     ctx.globalAlpha = 1;
   }
@@ -624,9 +672,17 @@
   }
   function drawShieldRush() {
     const d = S.shieldRush; if (!d) return;
-    const radius = d.phase === 'guard' ? 47 : 34;
-    ctx.beginPath(); ctx.arc(player.x, player.y, radius, d.angle - 1.15, d.angle + 1.15); ctx.strokeStyle = BLUE; ctx.lineWidth = d.phase === 'guard' ? 10 : 6; ctx.stroke();
-    if (d.phase === 'guard') { ctx.globalAlpha = 0.22; ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.arc(player.x, player.y, 72, d.angle - 1.15, d.angle + 1.15); ctx.closePath(); ctx.fillStyle = BLUE; ctx.fill(); ctx.globalAlpha = 1; }
+    ctx.globalAlpha = d.t > d.duration - 0.6 ? 0.5 + Math.sin(d.t * 28) * 0.3 : 0.9;
+    ctx.beginPath(); ctx.arc(player.x, player.y, 52, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - d.t / d.duration));
+    ctx.strokeStyle = BLUE; ctx.lineWidth = 2; ctx.stroke();
+    for (let i = 0; i < d.layers; i++) {
+      const a = d.angle + d.t * 0.55 + (i - (d.layers - 1) / 2) * 0.9;
+      const x = player.x + Math.cos(a) * 48, y = player.y + Math.sin(a) * 48;
+      const c = Math.cos(a), s = Math.sin(a), nx = -s, ny = c;
+      polygon([[x + c * 13, y + s * 13], [x + nx * 11, y + ny * 11], [x - c * 15, y - s * 15], [x - nx * 11, y - ny * 11]], BLUE, 5);
+      line(x - c * 7, y - s * 7, x + c * 7, y + s * 7, BLUE, 2);
+    }
+    ctx.globalAlpha = 1;
   }
   function drawShields() {
     for (const s of S.shields) {
@@ -662,9 +718,13 @@
   }
   function drawFists() {
     for (const f of S.fists) {
-      const target = byId(f.targetId); if (!target) continue;
-      if (f.age < 0.28) { ctx.globalAlpha = 0.45; jcircle(target.x, target.y, 105 * (1 - f.age / 0.28), PURPLE, 3); }
-      if (f.upper && !f.slam) { ctx.globalAlpha = 0.8; jcircle(target.x, target.y - 28, 18, PURPLE, 6); }
+      const target = byId(f.targetId);
+      if (f.age < 0.28) {
+        ctx.globalAlpha = 0.45; jcircle(f.x, f.y, 150 * f.c.rad * (1 - f.age / 0.34), PURPLE, 3);
+        for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2 + f.age * 4; line(f.x + Math.cos(a) * 95,
+          f.y + Math.sin(a) * 95, f.x + Math.cos(a) * 42, f.y + Math.sin(a) * 42, PURPLE, 3); }
+      }
+      if (target && f.upper && !f.slam) { ctx.globalAlpha = 0.8; jcircle(target.x, target.y - 28, 22, PURPLE, 6); }
     }
     ctx.globalAlpha = 1;
   }

@@ -44,12 +44,15 @@ test('斩弹蓄锋提高下一斩并在释放后清空，裂口封路持续伤�
   const hp = e.hp; G.P.updateZones(0); assert(near(hp - e.hp, 46 * 0.25), '斩痕没有造成 25% 持续伤害：' + (hp - e.hp));
 });
 
-test('串页按贯穿顺序递增，钉足红圈区分定身与精英减速', () => {
+test('双枪各自串页递增并叠加交叉爆发，终点定身且角色不动', () => {
   fresh('piercerush'); take('pierce_ramp'); take('pierce_pin');
-  const a = target(100, 0), b = target(170, 0), normal = target(260, 0), elite = target(280, 0);
-  normal.stunT = 0; elite.elite = true; cast(); G.W.updateDashes(0.18); G.W.updateDashes(0.24);
-  assert(near(9999 - a.hp, 42) && near(9999 - b.hp, 42 * 1.08), '贯穿后续目标没有递增 8%');
+  const a = target(100, 0), b = target(140, 24.8), normal = target(180, 49.6), elite = target(210, 68.2);
+  const px = G.player.x, py = G.player.y; normal.stunT = 0; elite.elite = true;
+  cast(); G.W.updateDashes(0.18); G.W.updateDashes(0.24);
+  assert(near(9999 - a.hp, 42 * 0.55 * 2 + 16), '交叉点双枪与剪切爆发伤害错误：' + (9999 - a.hp));
+  assert(near(9999 - b.hp, 42 * 0.55 * 1.08 + 16), '单道枪影的后续目标没有递增 8%：' + (9999 - b.hp));
   assert(normal.stunT >= 0.6 && elite.expPinSlowT === 1, '终点普通定身或精英减速未生效');
+  assert(G.player.x === px && G.player.y === py, '贯枪被动结算移动了角色');
 });
 
 test('旋枪飞刺周期发射，钉点爆页在返回瞬间结算', () => {
@@ -59,14 +62,15 @@ test('旋枪飞刺周期发射，钉点爆页在返回瞬间结算', () => {
   assert(l.returning && l.expReturnBlast && e.hp < hp && G.W.state.fx.some(f => f.type === 'blast'), '返回钉点没有爆炸');
 });
 
-test('格挡回墨每次举盾封顶十二，守势蓄击强化结束盾击', () => {
-  fresh('shieldrush'); take('shield_bash'); take('shield_ink'); take('shield_charge'); const e = target(160, 0);
-  G.player.ink = 0; cast();
+test('盾印格挡回墨封顶十二，守势蓄击按剩余三层强化结束盾震', () => {
+  fresh('shieldrush'); take('shield_bash'); take('shield_ink'); take('shield_charge'); const e = target(110, 0);
+  const px = G.player.x, py = G.player.y; G.player.ink = 0; cast();
   for (let i = 0; i < 7; i++) G.ebullets.push({ x: 40, y: 0, life: 2 });
   G.W.updateShieldRush(0.01); const d = G.W.state.shieldRush;
-  assert(G.player.ink === 12 && d.expBlocks === 7, '格挡回墨或计数错误：ink=' + G.player.ink + ', blocks=' + d.expBlocks + ', lives=' + G.ebullets.map(x => x.life).join(','));
-  G.W.updateShieldRush(0.5); G.W.updateShieldRush(0.31);
-  assert(near(9999 - e.hp, 38 + 42 * 1.48), '盾击没有按六层上限增伤：' + (9999 - e.hp));
+  assert(G.player.ink === 12 && d.expBlocks === 7 && d.layers === 3, '格挡回墨、计数或免耗层规则错误');
+  G.W.updateShieldRush(3.6);
+  assert(near(9999 - e.hp, (38 + 42) * 1.48), '三层盾震没有按六层格挡上限增伤：' + (9999 - e.hp));
+  assert(G.player.x === px && G.player.y === py, '盾震结算移动了角色');
 });
 
 test('弹射增幅逐次提高飞盾伤害，接盾生成真实旋盾', () => {
@@ -99,15 +103,18 @@ test('靶死余箭重新分散追击，悬箭护航拦截后立即射出', () =>
   assert(G.W.state.bolts.every(x => x.targetId === second.id && x.expFocusBoost), '目标死亡后余箭没有重新追击并增伤');
 });
 
-test('磁墨护膜按聚怪数减伤，坠地磁场牵引并周期伤害', () => {
-  fresh('magfist'); take('fist_guard'); take('fist_field'); const e = target(100, 0), near1 = target(125, 0), near2 = target(140, 0); cast();
+test('远程磁墨按实际聚怪数生成护膜，坠地磁场牵引且角色不动', () => {
+  fresh('magfist'); take('fist_guard'); take('fist_field');
+  const e = target(100, 0), near1 = target(125, 0), near2 = target(140, 0);
+  const px = G.player.x, py = G.player.y; cast();
   G.W.updateFists(0.13); G.P.updateFists(); assert(G.player.magGuardN === 3 && G.player.magGuardT === 2, '聚怪没有生成三层护膜');
+  assert(G.player.x === px && G.player.y === py, '磁墨护膜阶段移动了角色');
   G.player.hurtT = 0; G.player.goldT = 0; const hp = G.player.hp; G.hurtPlayer(100, 'enemy', e);
   assert(near(hp - G.player.hp, 94), '三层护膜没有减伤 6%：' + (hp - G.player.hp));
   G.W.updateFists(0.16); G.W.updateFists(0.36); G.P.updateFists();
   assert(G.P.state.zones.some(z => z.kind === 'fist' && z.t === 2.5), '下砸没有留下磁场');
   near1.x = 150; const x = near1.x, ehp = near1.hp; G.P.updateZones(0.01);
-  assert(near1.x < x && near1.hp < ehp, '磁场没有牵引或周期伤害：x=' + near1.x + ', hp=' + near1.hp + ', before=' + ehp);
+  assert(near1.x < x && near1.hp < ehp && G.player.x === px && G.player.y === py, '磁场牵引、周期伤害或原地规则失效');
 });
 
 test('焦土延烧留下伤害纸洞，跳弹引信只再爆炸一次', () => {
