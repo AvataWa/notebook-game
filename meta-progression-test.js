@@ -1,6 +1,6 @@
 // 局外存档、墨点天赋、装备继承、段位与结算的快速专项测试
 const fs = require('fs');
-const files = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'main.js', 'build-runtime.js', 'build-view.js', 'meta-config.js', 'meta-runtime.js'];
+const files = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'main.js', 'build-runtime.js', 'build-view.js', 'meta-config.js', 'meta-runtime.js', 'ui-copy.js', 'ui-detail-runtime.js'];
 const src = files.map(f => fs.readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
 const drawTexts = [];
 const fakeCtx = new Proxy({}, { get(t, k) {
@@ -34,7 +34,7 @@ test('非法存档回退默认值，首页与 21 条专精入口完整', () => {
   assert(M.data.inventory.length === 0 && !M.data.inherited, '默认背包不为空');
   assert(Object.keys(G.SKILL_DEFS).length === 18, '主动技能不是 18 个');
   drawTexts.length = 0; G.render();
-  assert(drawTexts.includes('我穿越到笔记本了') && drawTexts.includes('天赋 · 墨点与技能专精'), '局外首页未完整绘制');
+  assert(drawTexts.includes('我穿越到笔记本了') && drawTexts.includes('天赋') && drawTexts.includes('文具盒 0'), '局外首页未完整绘制');
   assert(drawTexts.some(s => s.includes('开始游戏')) && drawTexts.some(s => s.includes('段位考核')), '开局入口缺失');
 });
 
@@ -62,7 +62,7 @@ test('开局实际应用生命、墨水、移速、笔锋、冷却与专精', ()
   assert(near(e.maxhp - e.hp, 115), '笔锋没有正确放大实际伤害');
 });
 
-test('普通失败先回顾再装订，装备说明完整且未装订化碎纸', () => {
+test('普通失败保留全部部位经验，装订不重复给经验或碎纸', () => {
   M.resetAll(); M.beginRun(false); G.state = 'play'; G.player.level = 3;
   const keys = firstItems();
   assert(M.recordEquipment({ item: keys[0], rarity: 1 }), '第一件装备未记录');
@@ -73,12 +73,12 @@ test('普通失败先回顾再装订，装备说明完整且未装订化碎纸',
   assert(M.settlement.slots === 1, '普通失败装订次数错误');
   assert(M.continueSettlement() && G.state === 'metaSettlement', '无法从构筑回顾进入装订');
   drawTexts.length = 0; G.render();
-  const description = G.render && M.settlement.found.length ? M.settlement.found[0] : null;
-  assert(drawTexts.includes('装备装订') && drawTexts.some(t => t.includes('攻击 +')), '装订页缺少标题或属性');
+  assert(drawTexts.includes('装备装订') && drawTexts.some(t => t.includes('攻 +')) && drawTexts.some(t => t.includes('部位经验 +')), '装订页缺少标题、属性或经验');
   const uid = M.settlement.found[0].uid; M.toggleSettlement(uid);
   assert(M.finishSettlement(), '无法完成结算');
   assert(M.data.inventory.length === 1 && M.data.inventory[0].key === keys[0] && M.data.inventory[0].rarity === 1, '装订装备未入库');
-  assert(M.data.paper === 12, '未装订装备碎纸数量错误：' + M.data.paper);
+  assert(M.data.equipment.head.level === 2 && M.data.equipment.head.xp === 0, '两件头部装备没有累计 5 点经验并升至 2 级');
+  assert(M.data.paper === 0, '未满级装备仍被错误化为碎纸：' + M.data.paper);
   assert(G.state === 'metaHome', '结算后未返回手账');
 });
 
@@ -89,7 +89,8 @@ test('构筑回顾保存主动辅助、三选一词条和当前装备', () => {
   G.player.equip.hands = { key: 'glove', rarity: 2 }; G.recomputeEquip();
   M.settleRun(false);
   assert(M.settlement.build.actives[0].supports[0].id === 'wide' && M.settlement.build.passives.dmg === 2, '构筑快照不完整');
-  drawTexts.length = 0; G.render(); assert(drawTexts.some(t => t.includes('挑战失败')) && drawTexts.some(t => t.includes('Lv.3')) && drawTexts.some(t => t.includes('已镶嵌辅助 1')), '失败结果或主动辅助回顾缺失');
+  assert(M.summaryTab === 'damage', '构筑回顾没有默认展示伤害统计');
+  M.summaryTab = 'skills'; drawTexts.length = 0; G.render(); assert(drawTexts.some(t => t.includes('挑战失败')) && drawTexts.some(t => t.includes('Lv.3')) && drawTexts.includes('辅 1/4'), '失败结果或主动辅助回顾缺失');
   M.summaryTab = 'affixes'; drawTexts.length = 0; G.render(); assert(drawTexts.some(t => t.includes('×2')) && drawTexts.includes('潜墨'), '三选一词条回顾缺失');
   M.summaryTab = 'equipment'; drawTexts.length = 0; G.render(); assert(drawTexts.includes(G.ITEM_DEFS.glove.name) && drawTexts.some(t => t.includes('攻击 +')), '装备回顾缺失');
   M.continueSettlement(); M.finishSettlement();
@@ -105,12 +106,12 @@ test('伤害统计按实际扣血记录来源、排序占比并随新局清空',
   M.settleRun(false);
   assert(near(M.settlement.damage.cyclone, 40) && near(M.settlement.damage.surge, 25), '结算没有保存伤害快照');
   M.summaryTab = 'damage'; drawTexts.length = 0; G.render();
-  assert(drawTexts.includes('伤害统计') && drawTexts.some(t => t.includes('1. 旋转蜡笔')) && drawTexts.includes('61.5%'), '伤害统计页排序或占比错误');
+  assert(drawTexts.some(t => t.startsWith('伤害统计 ')) && drawTexts.some(t => t.includes('1. 旋转蜡笔')) && drawTexts.includes('61.5%'), '伤害统计页排序或占比错误：' + drawTexts.join(' | '));
   M.continueSettlement(); M.finishSettlement(); M.beginRun(false);
   assert(Object.keys(G.damageStats).length === 0, '新局没有清空伤害统计');
 });
 
-test('段位考核第 1 关 Boss 即通关，免装订且装备自动化碎纸', () => {
+test('段位考核第 1 关 Boss 即通关，免装订且保留部位经验', () => {
   M.resetAll(); M.beginRun(true); G.state = 'play';
   M.recordEquipment({ item: 'glove', rarity: 1 });
   G.killEnemy({ id: 998, boss: true, stage: 1, name: '第一关 Boss', x: 0, y: 0, r: 20, dead: false });
@@ -118,9 +119,9 @@ test('段位考核第 1 关 Boss 即通关，免装订且装备自动化碎纸',
   G.render();
   assert(G.state === 'metaRunSummary' && M.settlement.promoted && M.data.rank === 1 && drawTexts.some(t => t.includes('挑战成功')), '试炼成功结果、晋升或构筑回顾错误');
   assert(M.settlement.slots === 0, '试炼仍提供装订次数');
-  const expectedPaper = M.settlement.found.reduce((sum, eq) => sum + [2, 5, 12, 25][eq.rarity], 0);
   assert(M.continueSettlement() && G.state === 'metaHome', '试炼没有跳过装订直接返回');
-  assert(M.data.inventory.length === 0 && M.data.paper === expectedPaper, '试炼装备未正确自动化为碎纸');
+  assert(M.data.equipment.hands.level === 1 && M.data.equipment.hands.xp === 0, '试炼稀有装备没有提供 2 点部位经验');
+  assert(M.data.inventory.length === 0 && M.data.paper === 0, '免装订试炼错误入库或将未满级装备化为碎纸');
 });
 
 test('继承装备进入下局，局内替换不修改仓库', () => {
@@ -168,7 +169,8 @@ test('段位倍率与大段规则正确', () => {
 test('存档写入合法 JSON，重置返回干净首页', () => {
   M.data.ink = 123; M.save();
   const parsed = JSON.parse(stored['notebook-meta-v1']);
-  assert(parsed.ink === 123 && parsed.version === 1 && Array.isArray(parsed.inventory), '存档结构不合法');
+  assert(parsed.ink === 123 && parsed.version === 2 && Array.isArray(parsed.inventory), '存档结构不合法');
+  assert(['head', 'body', 'hands', 'feet', 'acc'].every(slot => parsed.equipment[slot] && Number.isInteger(parsed.equipment[slot].level)), '存档缺少五部位成长数据');
   M.resetAll(); const clean = JSON.parse(stored['notebook-meta-v1']);
   assert(clean.ink === 0 && clean.rank === 0 && clean.inventory.length === 0 && G.state === 'metaHome', '清空存档未恢复默认');
 });

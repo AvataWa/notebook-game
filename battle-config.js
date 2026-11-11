@@ -49,6 +49,15 @@ const BATTLE_CONFIG = {
     perStage: 10            // 之后每关增加的上限；Boss 额外保留 1 个位置
   },
 
+  equipment: {
+    pickupRadius: 40,       // 装备自动拾取半径（原 22）
+    maxLevel: 10,           // 五个部位各自独立的装备等级上限
+    levelBaseStep: 0.1,     // 每级增加基础攻击与基础生命的比例；特殊词条不受影响
+    rarityXp: [1, 2, 3, 5], // 普通／稀有／传说／史诗提供的部位经验
+    duplicateXp: 1,         // 同名装备额外提供的经验，不再弹出替换窗口
+    replaceInputLock: 0.5   // 不同装备替换弹窗出现后的防误触时间（秒）
+  },
+
   ink: {
     ownSpeed: 1.12,         // 普通状态站在己方墨迹上的移速倍率
     hostileSpeed: 0.58,     // 站在敌方墨迹上的移速倍率
@@ -120,7 +129,6 @@ const BATTLE_CONFIG = {
     cola: 1.8,          // 冰可乐新星
 
     // 哈迪斯机制技能
-    bloodcore: 1.2,     // 红芯投枪
     weakmark: 4,        // 红笔减分
     doommark: 3,        // 死线红勾
 

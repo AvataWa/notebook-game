@@ -225,7 +225,13 @@ const SUPPORTS = {
   followup:{ name: '追加一笔', tag: 'strike' },
   leech:   { name: '回锋',     tag: 'strike' },
   shock:   { name: '震荡纸面', tag: 'strike' },
-  dur:     { name: '持久墨水', tag: 'strike', skills: ['vortex', 'absolve'] }
+  dur:     { name: '持久墨水', tag: 'strike', skills: ['vortex', 'absolve'] },
+  // 连携：由操作、暴击或击杀额外施放所镶嵌的主动技能
+  onabsorb:{ name: '吸墨连携', tag: 'all' },
+  ondive:  { name: '潜墨连携', tag: 'all' },
+  onsurge: { name: '墨潮连携', tag: 'all' },
+  oncrit:  { name: '暴击连携', tag: 'all' },
+  onkill:  { name: '收割连携', tag: 'all' }
 };
 function supportUsable(sid, aid) {
   const sp = SUPPORTS[sid];
@@ -270,6 +276,11 @@ function supDesc(id, l) {           // 辅助在 l 级时的效果描述
     case 'leech':   return '打击命中回复 ' + (0.3 * l).toFixed(1) + '% 最大生命，每秒最多 3 次';
     case 'shock':   return '小怪击退 +' + 50 * l + '%，并僵直 ' + (0.2 * l).toFixed(1) + ' 秒（Boss 免疫僵直）';
     case 'dur':     return '持续/召唤时间 +' + 40 * l + '%';
+    case 'onabsorb':return '吸墨时额外施放本技能，触发伤害为 ' + (100 + 15 * (l - 1)) + '%';
+    case 'ondive':  return '进入潜墨时额外施放本技能，触发伤害为 ' + (100 + 15 * (l - 1)) + '%';
+    case 'onsurge': return '释放墨潮时额外施放本技能，触发伤害为 ' + (100 + 15 * (l - 1)) + '%';
+    case 'oncrit':  return '暴击时额外施放本技能，触发冷却 ' + (1 - 0.1 * (l - 1)).toFixed(1) + ' 秒';
+    case 'onkill':  return '怪物死亡时额外施放本技能，触发冷却 ' + (1 - 0.1 * (l - 1)).toFixed(1) + ' 秒';
   }
   return '';
 }
@@ -312,6 +323,50 @@ const ITEM_DEFS = typeof EQUIPMENT_ITEM_DEFS !== 'undefined' ? EQUIPMENT_ITEM_DE
 const ITEM_KEYS = typeof EQUIPMENT_ITEM_KEYS !== 'undefined' ? EQUIPMENT_ITEM_KEYS : Object.keys(ITEM_DEFS);
 function equipped(key) { return SLOTS.map(s => player.equip[s]).find(eq => eq && eq.key === key) || null; }
 function rarityIndex(eq) { return Math.max(0, Math.min(RARITY_LIST.length - 1, eq && eq.rarity || 0)); }
+function equipmentRule() {
+  return BATTLE.equipment || { pickupRadius: 40, maxLevel: 10, levelBaseStep: 0.1, rarityXp: [1, 2, 3, 5], duplicateXp: 1, replaceInputLock: 0.5 };
+}
+function createEquipmentGrowth() {
+  const growth = {};
+  for (const slot of SLOTS) growth[slot] = { level: 0, xp: 0 };
+  return growth;
+}
+function equipmentTrack(slot, growth) {
+  const source = growth || (player && player.equipGrowth);
+  return source && source[slot] || { level: 0, xp: 0 };
+}
+function equipmentLevel(slot, growth) {
+  return Math.max(0, Math.min(equipmentRule().maxLevel, Math.floor(Number(equipmentTrack(slot, growth).level) || 0)));
+}
+function equipmentXpNeed(level) { return 2 + Math.max(0, Math.min(equipmentRule().maxLevel, level)); }
+function equipmentLevelText(eq, growth) {
+  const def = eq && ITEM_DEFS[eq.key];
+  return 'Lv.' + (def ? equipmentLevel(def.slot, growth) : 0);
+}
+function equipmentProgressText(eq, growth) {
+  const def = eq && ITEM_DEFS[eq.key];
+  if (!def) return '';
+  const level = equipmentLevel(def.slot, growth), track = equipmentTrack(def.slot, growth);
+  return 'Lv.' + level + (level >= equipmentRule().maxLevel ? ' · MAX' : ' · ' + (track.xp || 0) + '/' + equipmentXpNeed(level));
+}
+function equipmentBaseStats(eq, growth) {
+  const def = eq && ITEM_DEFS[eq.key];
+  if (!def) return { atk: 0, hp: 0 };
+  const mul = RARITY_LIST[rarityIndex(eq)].mul * (1 + equipmentLevel(def.slot, growth) * equipmentRule().levelBaseStep);
+  return { atk: Math.round(def.atk * mul), hp: Math.round(def.hp * mul) };
+}
+function grantEquipmentExperience(growth, slot, amount) {
+  if (!growth || !SLOTS.includes(slot)) return { levels: 0, overflow: 0, level: 0, xp: 0 };
+  const track = growth[slot] || (growth[slot] = { level: 0, xp: 0 });
+  let level = equipmentLevel(slot, growth), xp = Math.max(0, Math.floor(Number(track.xp) || 0)) + Math.max(0, Math.floor(Number(amount) || 0));
+  let levels = 0;
+  while (level < equipmentRule().maxLevel && xp >= equipmentXpNeed(level)) {
+    xp -= equipmentXpNeed(level); level++; levels++;
+  }
+  const overflow = level >= equipmentRule().maxLevel ? xp : 0;
+  track.level = level; track.xp = level >= equipmentRule().maxLevel ? 0 : xp;
+  return { levels, overflow, level, xp: track.xp };
+}
 function itemValues(key, rarity = 0) {
   const def = ITEM_DEFS[key], out = {};
   if (def && def.v) for (const k in def.v) out[k] = def.v[k][rarity];
@@ -338,7 +393,8 @@ function makeEquipmentDrop(x, y) {
 /* ---------- 游戏状态 ---------- */
 let state, gameTime, kills, camX, camY, shakeT, cycAng, crumpleT, hitStopT, levelupDelayT;
 let levelupPickAfter = 0;   // 三选一出现后的 0.5 秒输入锁，避免升级瞬间误触
-let player, enemies, bullets, ebullets, drops, floats, lightnings, erupts, minions, totems, sparks, toasts, cards, cardRects, hazards, blades, clouds, brands, novas, followups, fields, erases;
+let equipmentPickAfter = 0; // 装备替换弹窗同样使用独立的真实时间输入锁
+let player, enemies, bullets, ebullets, drops, floats, lightnings, erupts, minions, totems, sparks, toasts, cards, cardRects, cardDetailRects, hazards, blades, clouds, brands, novas, followups, fields, erases;
 let spawnAcc, nextId, bossStageSpawned, curStage, nextHordeT, hordeIndex, killChain, killChainT, enemyTrailT;
 let gestureDraw, pendingGesture, redrawOutlines, gestureNoticeT, drawMode, drawModeT;
 let inkSurgePainting;
@@ -684,7 +740,7 @@ const joy = { active: false, id: -1, bx: JOY_HOME.x, by: JOY_HOME.y, dx: 0, dy: 
 let pendingEquipment = null, diveDecoys = [], absorbShatters = [];
 function resetGame() {
   state = 'start'; gameTime = 0; kills = 0; shakeT = 0; cycAng = 0; crumpleT = 0; hitStopT = 0; levelupDelayT = -1;
-  levelupPickAfter = 0; damageStats = Object.create(null);
+  levelupPickAfter = 0; equipmentPickAfter = 0; damageStats = Object.create(null);
   joy.active = false; joy.id = -1; joy.dx = 0; joy.dy = 0;
   camX = 0; camY = 0; spawnAcc = 0; nextId = 1; pendingEquipment = null; diveDecoys = []; absorbShatters = [];
   bossStageSpawned = 0; curStage = 0; nextHordeT = 12; hordeIndex = 0; killChain = 0; killChainT = 0; enemyTrailT = 0.1;
@@ -692,7 +748,7 @@ function resetGame() {
   resetInkField(); inkSurgePainting = false;
   for (const k in gestureCooldowns) gestureCooldowns[k] = 0;
   enemies = []; bullets = []; ebullets = []; drops = []; floats = []; lightnings = [];
-  erupts = []; minions = []; totems = []; sparks = []; toasts = []; cards = []; cardRects = []; hazards = [];
+  erupts = []; minions = []; totems = []; sparks = []; toasts = []; cards = []; cardRects = []; cardDetailRects = []; hazards = [];
   blades = []; clouds = []; brands = []; novas = []; followups = []; fields = []; erases = [];
   player = {
     x: 0, y: 0, r: BATTLE.player.radius, hp: BATTLE.player.hp, maxhp: BATTLE.player.hp, speed: BATTLE.player.speed, faceA: 0,
@@ -711,6 +767,7 @@ function resetGame() {
     hurtBoostT: 0, lastRevive: -999, leechT: 0, leechN: 0,
     walk: 0, hurtT: 0, goldT: 0, taken: {}, affixes: { dive: {}, surge: {}, absorb: {} },
     equip: { head: null, body: null, hands: null, feet: null, acc: null },
+    equipGrowth: createEquipmentGrowth(),
     actives: []
   };
   if (typeof CreatureGameRuntime !== 'undefined') CreatureGameRuntime.attachPlayer(player);
@@ -726,8 +783,8 @@ function recomputeEquip() {
   const oldMaxInk = player.maxInk || BATTLE.player.maxInk;
   for (const s of SLOTS) {
     const eq = player.equip[s]; if (!eq) continue;
-    const it = ITEM_DEFS[eq.key], mul = RARITY_LIST[rarityIndex(eq)].mul;
-    player.eqAtk += Math.round(it.atk * mul); hpBonus += Math.round(it.hp * mul);
+    const stats = equipmentBaseStats(eq);
+    player.eqAtk += stats.atk; hpBonus += stats.hp;
   }
   player.eqCrit += itemV('glove', 'crit', 15) / 100;
   player.eqSpd *= 1 + itemV('shoes', 'speed', 12) / 100;
@@ -2040,11 +2097,29 @@ function wrapCardDescription(text, maxWidth) {
   return lines;
 }
 function layoutCards(n) {
-  const baseH = n === 4 ? 84 : 92, gap = n === 4 ? 12 : 16;
-  ctx.save(); ctx.font = '12px ' + FONT;
+  const baseH = n === 4 ? 100 : 108, gap = n === 4 ? 12 : 16;
+  ctx.save();
   const heights = cards.map(c => {
-    c.descLines = wrapCardDescription(c.desc, 248);
-    return Math.max(baseH, 92 + (c.descLines.length - 1) * 15);
+    ctx.font = '12px ' + FONT;
+    const level = c.kind === 'support' ? 1 : (+String(c.name).match(/Lv(\d+)/)?.[1] || 1);
+    const short = (c.kind === 'support' || c.kind === 'support+') && window.UICopy
+      ? window.UICopy.supportShort(c.sup, level)
+      : String(c.desc || '').replace(/^Lv1：/, '');
+    c.shortDesc = short;
+    c.descLines = wrapCardDescription(short, 248).slice(0, 2);
+    let detail = '';
+    if (c.kind === 'active+') detail = SKILL_DEFS[c.skill].desc;
+    else if (c.kind === 'support' || c.kind === 'support+') {
+      if (['onabsorb', 'ondive', 'onsurge', 'oncrit', 'onkill'].includes(c.sup)) {
+        detail = '额外施放 · 不耗墨 · 不重置自动冷却';
+      } else {
+        const full = supDesc(c.sup, level);
+        if (full !== short) detail = full;
+      }
+    }
+    ctx.font = '10px ' + FONT;
+    c.detailLines = wrapCardDescription(detail, 248).slice(0, n === 4 ? 1 : 2);
+    return baseH + c.detailLines.length * 13;
   });
   ctx.restore();
   const total = heights.reduce((sum, h) => sum + h, 0) + (n - 1) * gap;
@@ -2056,6 +2131,7 @@ function layoutCards(n) {
     y += h + gap;
     return rect;
   });
+  cardDetailRects = [];
 }
 function buildStartCards() {
   const ids = Object.keys(SKILL_DEFS);
@@ -4195,20 +4271,15 @@ function drawHUD() {
   ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
   ctx.textAlign = 'left'; ctx.font = 'bold 11px ' + FONT;
   player.actives.forEach((a, i) => {
-    const supTxt = a.supports.map(sp => SUPPORTS[sp.id].name + '·' + sp.lvl).join('+');
-    ctx.fillStyle = INK;
     const nameTxt = SKILL_DEFS[a.id].name + ' Lv' + a.lvl;
     const y = skillTop + 12 + i * 15;
-    ctx.fillText(nameTxt, 16, y);
-    if (supTxt) { ctx.fillStyle = PURPLE; ctx.fillText('  ' + supTxt, 16 + ctx.measureText(nameTxt).width + 4, y); }
+    ctx.fillStyle = INK; ctx.fillText(nameTxt, 16, y);
+    ctx.fillStyle = PURPLE;
+    ctx.fillText('辅 ' + a.supports.length + '/' + MAX_SUPPORTS, 16 + ctx.measureText(nameTxt).width + 10, y);
   });
-  ctx.font = 'bold 10px ' + FONT;
-  SLOTS.forEach((s, i) => {
-    const eq = player.equip[s], rarity = eq ? RARITY_LIST[rarityIndex(eq)] : null;
-    ctx.fillStyle = rarity ? rarity.color : '#686868';
-    const eqTxt = eq ? rarity.name + '·' + ITEM_DEFS[eq.key].name : '—';
-    ctx.fillText('[' + SLOT_NAME[s] + ']' + eqTxt, 16, equipTop + 12 + i * 14);
-  });
+  const equipCount = SLOTS.filter(s => player.equip[s]).length;
+  ctx.fillStyle = equipCount ? INK : GRAY; ctx.font = 'bold 10px ' + FONT;
+  ctx.fillText('装备 ' + equipCount + '/' + SLOTS.length, 16, equipTop + 12);
   ctx.restore();
   ctx.textAlign = 'center';
   toasts.forEach((ts, i) => {
@@ -4270,13 +4341,15 @@ function drawCards(title) {
     ctx.textAlign = 'left';
     ctx.fillStyle = cd.tagColor; ctx.font = 'bold 12px ' + FONT;
     ctx.fillText(cd.tag, r.x + 16, r.y + 20);
-    ctx.fillStyle = INK; ctx.font = 'bold 16px ' + FONT;
-    ctx.fillText(cd.name, r.x + 16, r.y + 42);
+    ctx.fillStyle = INK; ctx.font = 'bold 15px ' + FONT;
+    ctx.fillText(cd.name, r.x + 16, r.y + 42, r.w - 32);
     ctx.fillStyle = DARK; ctx.font = '12px ' + FONT;
-    const lines = cd.descLines || wrapCardDescription(cd.desc, r.w - 32);
-    lines.forEach((line, row) => ctx.fillText(line, r.x + 16, r.y + 58 + row * 15));
-    ctx.fillStyle = GRAY; ctx.font = '11px ' + FONT;
-    ctx.fillText(inputLocked ? '0.5 秒后可选择' : ('点按选择  [按 ' + (i + 1) + ']'), r.x + 16, r.y + r.h - 10);
+    const lines = cd.descLines || wrapCardDescription(cd.shortDesc || cd.desc, r.w - 32).slice(0, 2);
+    lines.forEach((line, row) => ctx.fillText(line, r.x + 16, r.y + 59 + row * 15));
+    ctx.fillStyle = GRAY; ctx.font = '10px ' + FONT;
+    const detailY = r.y + 60 + lines.length * 15;
+    (cd.detailLines || []).forEach((line, row) => ctx.fillText(line, r.x + 16, detailY + row * 13));
+    ctx.fillText(inputLocked ? '0.5 秒后可选择' : '点按选择', r.x + 16, r.y + r.h - 11);
   });
 }
 
@@ -4284,16 +4357,18 @@ function drawEnd(win) {
   ctx.fillStyle = 'rgba(245,241,230,0.94)';
   ctx.fillRect(0, 0, W, H);
   setSeed(win ? 555 : 666);
+  const metaRun = window.__metaRuntime && window.__metaRuntime.run;
+  const awaitsSettlement = !win && metaRun && metaRun.mode !== 'bossTest' && !metaRun.settled;
   ctx.textAlign = 'center'; ctx.fillStyle = win ? INK : RED;
   ctx.font = 'bold 30px ' + FONT;
-  ctx.fillText(win ? '你在笔记本里活下来了！' : '你被画叉了……', W / 2, 240);
+  ctx.fillText(win ? '你在笔记本里活下来了！' : (awaitsSettlement ? '战斗失败' : '你被画叉了……'), W / 2, 240);
   if (!win) { jline(W / 2 - 60, 190, W / 2 + 60, 290, RED, 5); jline(W / 2 + 60, 190, W / 2 - 60, 290, RED, 5); }
   ctx.fillStyle = DARK; ctx.font = '16px ' + FONT;
   const t = Math.floor(gameTime);
   const prog = win ? '通关 10 页' : '倒在 ' + curStage + '-' + (((player.level - 1) % 10) + 1);
   ctx.fillText(prog + ' · 存活 ' + String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0') + ' · 击杀 ' + kills + ' · Lv.' + player.level, W / 2, 320);
   ctx.fillStyle = GRAY; ctx.font = '14px ' + FONT;
-  ctx.fillText('点按任意处重开一局', W / 2, 400);
+  ctx.fillText(awaitsSettlement ? '点击屏幕查看战斗结算' : '点按任意处重开一局', W / 2, 400);
 }
 
 /* ---------- 主循环与自动画质：只降低渲染成本，逻辑始终逐帧更新 ---------- */

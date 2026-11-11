@@ -232,27 +232,46 @@
     if (hasItem('bookmark')) { refundInk(itemV('bookmark', 'ink'), player.x, player.y - 30, '灵感'); player.absorbCd = 0; }
     player.itemRerolls = itemV('rerollnote', 'reroll');
   }
+  function recordFound(dr, duplicate) {
+    const xp = equipmentRule().rarityXp[rarityIndex(dr)] + (duplicate ? equipmentRule().duplicateXp : 0);
+    if (window.__metaRuntime) return window.__metaRuntime.recordEquipment({ ...dr, duplicate });
+    const result = grantEquipmentExperience(player.equipGrowth, ITEM_DEFS[dr.item].slot, xp);
+    recomputeEquip();
+    return { xp, paper: 0, ...result };
+  }
+  function toastEquipmentGrowth(slot, gain) {
+    if (gain && gain.levels > 0) toast(SLOT_NAME[slot] + '装备升至 Lv.' + equipmentLevel(slot));
+    else if (gain && gain.paper > 0) toast(SLOT_NAME[slot] + '已满级 · 碎纸 +' + gain.paper);
+  }
   function collectEquipment(dr) {
-    const it = ITEM_DEFS[dr.item], cur = player.equip[it.slot];
-    if (window.__metaRuntime) window.__metaRuntime.recordEquipment(dr);
+    const it = ITEM_DEFS[dr.item], cur = player.equip[it.slot], duplicate = !!cur && cur.key === dr.item;
+    const gain = recordFound(dr, duplicate);
     drops = drops.filter(d => d !== dr);
     if (!cur) {
       player.equip[it.slot] = { key: dr.item, rarity: rarityIndex(dr) }; recomputeEquip();
-      toast('获得' + RARITY_LIST[rarityIndex(dr)].name + '【' + it.name + '】');
+      toast('获得【' + it.name + '】 · 经验 +' + (gain ? gain.xp : 0));
+      toastEquipmentGrowth(it.slot, gain);
       return;
     }
-    pendingEquipment = { drop: dr }; state = 'equipment';
+    if (duplicate) {
+      recomputeEquip(); toast('【' + it.name + '】经验 +' + (gain ? gain.xp : 0));
+      toastEquipmentGrowth(it.slot, gain);
+      return;
+    }
+    pendingEquipment = { drop: dr };
+    equipmentPickAfter = Date.now() + equipmentRule().replaceInputLock * 1000;
+    state = 'equipment';
     joy.active = false; joy.dx = 0; joy.dy = 0;
     if (player.surgeCharging) cancelInkSurgeCharge(player.surgePointerId);
   }
   function resolveEquipment(replace) {
-    if (state !== 'equipment' || !pendingEquipment) return false;
+    if (state !== 'equipment' || !pendingEquipment || Date.now() < equipmentPickAfter) return false;
     const dr = pendingEquipment.drop, it = ITEM_DEFS[dr.item];
     if (replace) {
       player.equip[it.slot] = { key: dr.item, rarity: rarityIndex(dr) }; recomputeEquip();
-      toast('已替换为' + RARITY_LIST[rarityIndex(dr)].name + '【' + it.name + '】');
-    } else toast('保留当前装备');
-    pendingEquipment = null; state = 'play'; return true;
+      toast('已替换为' + RARITY_LIST[rarityIndex(dr)].name + '【' + it.name + '】 · ' + SLOT_NAME[it.slot] + ' Lv.' + equipmentLevel(it.slot));
+    } else toast('保留当前装备 · 经验已入账');
+    pendingEquipment = null; equipmentPickAfter = 0; state = 'play'; return true;
   }
 
   const baseUpdate = update;
@@ -279,7 +298,7 @@
     }
     if (hasAffix('dive', 'divepaint')) player.taken.divepaint = true;
 
-    const nearDrop = drops.find(dr => Math.hypot(player.x - dr.x, player.y - dr.y) < 22);
+    const nearDrop = drops.find(dr => Math.hypot(player.x - dr.x, player.y - dr.y) < equipmentRule().pickupRadius);
     if (nearDrop) {
       collectEquipment(nearDrop);
       if (state === 'equipment') return;
@@ -356,31 +375,36 @@
     return row + 1;
   }
   function drawEquipmentCard(eq, x, y, w, title) {
-    const def = ITEM_DEFS[eq.key], rarity = RARITY_LIST[rarityIndex(eq)];
+    const def = ITEM_DEFS[eq.key], rarity = RARITY_LIST[rarityIndex(eq)], stats = equipmentBaseStats(eq);
     ctx.fillStyle = 'rgba(255,250,238,0.94)'; ctx.fillRect(x, y, w, 235);
     jrect(x, y, w, 235, rarity.color, 2.5);
     ctx.textAlign = 'center'; ctx.fillStyle = DARK; ctx.font = 'bold 12px ' + FONT; ctx.fillText(title, x + w / 2, y + 24);
-    ctx.fillStyle = rarity.color; ctx.font = 'bold 12px ' + FONT; ctx.fillText(rarity.name, x + w / 2, y + 47);
+    ctx.fillStyle = rarity.color; ctx.font = 'bold 12px ' + FONT; ctx.fillText(rarity.name + ' · ' + equipmentLevelText(eq), x + w / 2, y + 47);
     ctx.fillStyle = INK; ctx.font = 'bold 16px ' + FONT; ctx.fillText(def.name, x + w / 2, y + 73);
     ctx.font = '11px ' + FONT; ctx.fillStyle = DARK;
-    ctx.fillText('攻击 +' + Math.round(def.atk * rarity.mul) + '%  生命 +' + Math.round(def.hp * rarity.mul), x + w / 2, y + 96);
+    ctx.fillText('攻击 +' + stats.atk + '%  生命 +' + stats.hp, x + w / 2, y + 96);
     ctx.textAlign = 'left'; ctx.font = '11px ' + FONT;
     wrapText(itemDescription(eq.key, rarityIndex(eq)), x + 12, y + 122, w - 24, 18);
   }
   function drawEquipmentChoice() {
     const dr = pendingEquipment.drop, it = ITEM_DEFS[dr.item], cur = player.equip[it.slot];
+    const locked = Date.now() < equipmentPickAfter;
+    const remaining = Math.max(0, (equipmentPickAfter - Date.now()) / 1000).toFixed(1);
     ctx.fillStyle = 'rgba(35,31,28,0.8)'; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = 'rgba(255,250,238,0.97)'; ctx.fillRect(18, 75, W - 36, 545);
     jrect(18, 75, W - 36, 545, INK, 2.5);
     ctx.textAlign = 'center'; ctx.fillStyle = INK; ctx.font = 'bold 21px ' + FONT;
     ctx.fillText('捡到' + SLOT_NAME[it.slot] + '装备', W / 2, 112);
-    ctx.fillStyle = DARK; ctx.font = '12px ' + FONT; ctx.fillText('同部位已有装备，由你决定是否替换', W / 2, 136);
+    ctx.fillStyle = DARK; ctx.font = '12px ' + FONT;
+    ctx.fillText(locked ? '请看清装备 · ' + remaining + ' 秒后可选择' : '经验已入账 · 换装共用部位等级', W / 2, 136);
     drawEquipmentCard(cur, 30, 158, 150, '当前装备');
     drawEquipmentCard({ key: dr.item, rarity: rarityIndex(dr) }, 195, 158, 150, '新装备');
     for (const [rect, label, color] of [[equipmentReplaceRect, '替换新装备  [1]', INK], [equipmentKeepRect, '保留当前  [2]', DARK]]) {
+      const shownColor = locked ? GRAY : color;
       ctx.fillStyle = 'rgba(255,250,238,0.96)'; ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
-      jrect(rect.x, rect.y, rect.w, rect.h, color, 2.2);
-      ctx.fillStyle = color; ctx.font = 'bold 13px ' + FONT; ctx.textAlign = 'center'; ctx.fillText(label, rect.x + rect.w / 2, rect.y + 29);
+      jrect(rect.x, rect.y, rect.w, rect.h, shownColor, 2.2);
+      ctx.fillStyle = shownColor; ctx.font = 'bold 13px ' + FONT; ctx.textAlign = 'center';
+      ctx.fillText(locked ? remaining + ' 秒后可选择' : label, rect.x + rect.w / 2, rect.y + 29);
     }
   }
   // 主渲染在恢复屏幕坐标前调用：掉落框属于世界层，不再覆盖 HUD 和卡片

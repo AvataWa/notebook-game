@@ -131,7 +131,7 @@ test('跳字两帧长到 2 倍，闪白延长一帧后恢复并回缩', () => {
   f.t = 0;
   assert(G.floatPopScale(f) === 1.5, '跳字稳定尺寸不是 1.5 倍');
 });
-test('触屏按钮不显示快捷键，下移后装备紧跟技能列表', () => {
+test('触屏按钮不显示快捷键，辅助与装备折叠且紧跟技能列表', () => {
   fresh(); G.player.special = 100; drawTexts.length = 0; drawRects.length = 0; G.render();
   const texts = drawTexts.map(t => t.txt);
   for (const label of ['弹反', '长按', '位移']) assert(texts.includes(label), '按钮缺少文字：' + label);
@@ -141,8 +141,9 @@ test('触屏按钮不显示快捷键，下移后装备紧跟技能列表', () =>
   assert(!texts.some(t => t.startsWith('墨水 ') || /^墨潮 \d/.test(t)), '右下角仍重复显示资源信息');
   assert(G.absorbRect.y === 510 && G.absorbRect.h === 64 && G.specialRect.y === 510 && G.diveRect.y === 446, '按钮布局或吸墨向下扩展错误');
   const skills = drawTexts.filter(t => t.x === 16 && t.y === 70);
-  const equipment = drawTexts.filter(t => t.x === 16 && t.txt.startsWith('['));
-  assert(skills.length > 0 && equipment.length > 0 && equipment[0].y > skills[skills.length - 1].y, '装备信息没有紧跟技能列表');
+  const equipment = drawTexts.filter(t => t.x === 16 && /^装备 \d+\/5$/.test(t.txt));
+  assert(skills.length > 0 && equipment.length === 1 && equipment[0].y > skills[skills.length - 1].y, '折叠装备没有紧跟技能列表');
+  assert(texts.some(t => /^辅 \d+\/4$/.test(t)) && !texts.some(t => t.startsWith('[头]')), '辅助或装备仍展开显示');
   assert(!drawRects.some(r => r.x === 10 && r.y === 58), '技能和装备仍有白色背景板');
   assert([...skills, ...equipment].every(t => t.shadowBlur === 4), '技能和装备文字缺少浅色阴影');
 });
@@ -156,21 +157,23 @@ test('角色血量与墨量使用整圆三分之一的细圆弧，并按比例�
   assert(hp && hp.r === 28 && hp.width === 1.6 && Math.abs(hp.end - Math.PI / 2) < 1e-8, '50% 血量圆弧终点错误');
   assert(ink && ink.r === 23 && ink.width === 1.4 && Math.abs(ink.end - Math.PI / 3) < 1e-8, '25% 墨量圆弧终点错误');
 });
-test('三选一长描述按实际宽度换行，卡片加高且文字不压选择提示', () => {
+test('三选一主说明最多两行，补充机制灰字显示且无详情按钮', () => {
   fresh(); G.cards.length = 0;
   G.cards.push(
-    { tag: '[辅助]', tagColor: '#6c4da1', name: '长描述测试', desc: '这是一段用于验证自动换行的超长词条描述，必须在卡片内部完整显示并且不能超出边界或遮挡选择提示。' },
+    { kind: 'active+', skill: 'cyclone', tag: '[强化]', tagColor: '#6c4da1', name: '长描述测试', desc: '这是一段用于验证自动换行的超长词条描述，必须在卡片内部完整显示并且不能超出边界或遮挡选择提示。' },
     { tag: '[被动]', tagColor: '#333', name: '普通词条', desc: '普通长度描述' },
     { tag: '[主动]', tagColor: '#1a2b8f', name: '另一个词条', desc: '另一个普通描述' }
   );
   G.layoutCards(3); drawTexts.length = 0; G.drawCards('测试');
-  const r = G.cardRects[0], lines = G.cards[0].descLines;
-  assert(lines.length > 1 && r.h > 92, '长描述没有换行或卡片没有加高');
+  const r = G.cardRects[0], lines = G.cards[0].descLines, details = G.cards[0].detailLines;
+  assert(lines.length === 2 && details.length > 0 && r.h === 108 + details.length * 13, '主说明、补充说明或卡片高度错误');
   assert(lines.every(line => line.length * 10 <= r.w - 32), '换行后的描述仍超出卡片宽度');
-  const lastY = r.y + 58 + (lines.length - 1) * 15;
+  const lastY = r.y + 59 + (lines.length - 1) * 15;
   assert(lastY <= r.y + r.h - 25, '描述末行压到卡片底部选择提示');
   assert(!drawTexts.some(t => t.txt === G.cards[0].desc), '绘制时仍把长描述作为单行输出');
   lines.forEach(line => assert(drawTexts.some(t => t.txt === line && t.x === r.x + 16), '换行文本没有实际绘制：' + line));
+  details.forEach(line => assert(drawTexts.some(t => t.txt === line && t.font.startsWith('10px')), '灰字补充说明没有实际绘制：' + line));
+  assert(!drawTexts.some(t => t.txt === '详情'), '三选一仍显示详情按钮');
 });
 test('圆心与墨潮外圈增伤标注严格对应 50% 和 70% 半径', () => {
   fresh(); drawArcs.length = 0; drawTexts.length = 0;

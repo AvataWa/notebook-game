@@ -33,14 +33,17 @@ eval(src + `
 
 G.resetGame();
 G.applyOption(0);
+const realNow = Date.now;
+let fakeNow = realNow();
+Date.now = () => fakeNow;
 const dt = 1 / 60;
 let steps = 0, err = null;
 const bossSeen = new Set();
 let maxStage = 0, sawPhase2 = false, sawHazard = false, sawEbullet = false;
 try {
   while (G.state !== 'win' && G.state !== 'over' && steps < 60 * 2400) {
-    if (G.state === 'levelup') G.applyOption(Math.floor(Math.random() * G.cards.length));
-    else if (G.state === 'equipment') window.__buildRuntime.resolveEquipment(steps % 2 === 0);
+    if (G.state === 'levelup') { fakeNow += 500; G.applyOption(Math.floor(Math.random() * G.cards.length)); }
+    else if (G.state === 'equipment') { fakeNow += 500; window.__buildRuntime.resolveEquipment(steps % 2 === 0); }
     else if (G.state === 'play') {
       // 锁血 + 加攻 + 随机瞬移：只验证流程不验证平衡
       G.player.hp = G.player.maxhp = 99999;

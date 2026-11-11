@@ -131,7 +131,7 @@
     const oldHp = e.hp, sparkCount = sparks.length, floatCount = floats.length;
     const result = baseHurtEnemy(e, dmg, dotDps, sx, sy, vuln, critAdd, bossMul, hitCol, weakFloat, skillId);
     if (e.hp >= oldHp) return result;
-    const crit = floats.slice(floatCount).some(f => f.crit);
+    const crit = !!(floats[floatCount] && floats[floatCount].crit);
     const heavy = !weakFloat && (crit || HEAVY.has(skillId));
     const family = weakFloat ? 'sustain' : familyOf(skillId);
     // 统一结算原本附带的圆点爆点由方向化笔触替换，避免两层特效叠成噪点。

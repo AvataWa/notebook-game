@@ -125,7 +125,7 @@ test('养成面板渲染完整且暂停战斗计时，返回后恢复', () => {
   G.buildView.open(); G.buildView.setTab('skills'); drawTexts.length = 0; G.loop(1000);
   assert(G.gameTime === before, '面板打开后战斗计时仍然推进');
   assert(drawTexts.includes('角色养成'), '养成标题未绘制：' + drawTexts.slice(-12).join('|'));
-  assert(drawTexts.includes('游戏已暂停 · 共 1 项'), '暂停信息未绘制：' + drawTexts.slice(-12).join('|'));
+  assert(drawTexts.includes('已暂停 · 点按条目看详情'), '暂停信息未绘制：' + drawTexts.slice(-12).join('|'));
   G.buildView.setTab('affixes'); G.render(); assert(drawTexts.includes('词条'), '词条页签无法切换');
   G.buildView.setTab('equipment'); G.render(); assert(drawTexts.includes('装备'), '装备页签无法切换');
   assert(G.buildView.close() && G.state === 'play', '返回战斗失败');

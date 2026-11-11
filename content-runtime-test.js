@@ -54,11 +54,12 @@ test('四品质概率、颜色与数值倍率完整且递增', () => {
   }
   for (let i = 0; i < 40; i++) { const dr = G.makeEquipmentDrop(0, 0); assert(dr.rarity >= 0 && dr.rarity < 4, '掉落没有合法品质'); }
 });
-test('空部位直接装备，品质影响基础攻防', () => {
+test('空部位直接装备，品质与掉落经验同时生效', () => {
   fresh(); G.drops = [{ x: 0, y: 0, item: 'glove', rarity: 3, bob: 0 }];
   G.runtime.collectEquipment(G.drops[0]);
   assert(G.player.equip.hands.key === 'glove' && G.player.equip.hands.rarity === 3, '空部位未直接装备');
-  assert(G.player.eqAtk === 23 && G.player.eqCrit === 0.35, '史诗属性或暴击数值错误');
+  assert(G.player.equipGrowth.hands.level === 2 && G.player.equipGrowth.hands.xp === 0, '史诗 5 点经验没有按 2/3 点需求连升两级');
+  assert(G.player.eqAtk === 28 && G.player.eqCrit === 0.35, '部位等级加成或特殊词条数值错误');
   assert(G.state === 'play' && G.drops.length === 0, '直接装备后状态或掉落错误');
 });
 test('相邻两件装备只走新拾取逻辑，不再弹出 undefined', () => {
@@ -74,20 +75,26 @@ test('Boss 掉落通过统一入口生成并带有合法品质', () => {
   fresh(); G.killEnemy({ id: 999, boss: true, stage: 1, name: '测试 Boss', x: 100, y: 100, r: 20, dead: false });
   assert(G.drops.length === 1 && Number.isInteger(G.drops[0].rarity) && G.drops[0].rarity >= 0 && G.drops[0].rarity < 4, 'Boss 掉落缺少品质');
 });
-test('同部位拾取必须询问，替换会穿上新装备', () => {
-  fresh(); equip('glove', 0); G.drops = [{ x: 0, y: 0, item: 'compass', rarity: 2, bob: 0 }];
-  G.runtime.collectEquipment(G.drops[0]);
-  assert(G.state === 'equipment' && G.pendingEquipment, '未进入替换选择');
-  assert(G.player.equip.hands.key === 'glove', '询问前已自动替换');
-  G.render(); assert(G.runtime.resolveEquipment(true), '替换操作失败');
+test('不同装备弹窗有输入锁，替换后共用部位等级', () => {
+  fresh(); equip('glove', 0); G.player.equipGrowth.hands.level = 2; G.drops = [{ x: 0, y: 0, item: 'compass', rarity: 2, bob: 0 }];
+  const realNow = Date.now; let now = 10000; Date.now = () => now;
+  try {
+    G.runtime.collectEquipment(G.drops[0]);
+    assert(G.state === 'equipment' && G.pendingEquipment, '未进入替换选择');
+    assert(G.player.equip.hands.key === 'glove', '询问前已自动替换');
+    assert(!G.runtime.resolveEquipment(true), '0.5 秒输入锁未生效');
+    now += 500; G.render(); assert(G.runtime.resolveEquipment(true), '解锁后替换操作失败');
+  } finally { Date.now = realNow; }
   assert(G.state === 'play' && !G.pendingEquipment && G.player.equip.hands.key === 'compass' && G.player.equip.hands.rarity === 2, '替换结果错误');
+  assert(G.player.equipGrowth.hands.level === 2 && G.player.equipGrowth.hands.xp === 3, '换装没有保留部位等级或掉落经验');
 });
-test('同名同部位也必须询问，保留不会变化', () => {
+test('同名重复提供额外经验且不弹窗，保留原品质', () => {
   fresh(); equip('glove', 1); G.drops = [{ x: 0, y: 0, item: 'glove', rarity: 3, bob: 0 }];
+  const oldAtk = G.player.eqAtk;
   G.runtime.collectEquipment(G.drops[0]);
-  assert(G.state === 'equipment', '同名装备没有询问');
-  G.runtime.resolveEquipment(false);
-  assert(G.player.equip.hands.rarity === 1 && G.state === 'play' && G.drops.length === 0, '保留当前的结果错误');
+  assert(G.state === 'play' && !G.pendingEquipment, '同名装备错误弹窗');
+  assert(G.player.equip.hands.rarity === 1 && G.player.equipGrowth.hands.level === 2 && G.player.equipGrowth.hands.xp === 1, '同名 6 点经验或原品质错误');
+  assert(G.player.eqAtk > oldAtk && G.drops.length === 0, '部位升级没有提高基础攻击');
 });
 test('入墨无息与潜行蓄潮实际生效', () => {
   fresh(); G.player.affixes.dive.freeentry = true; G.player.affixes.dive.divecharge = true; G.player.ink = 100;

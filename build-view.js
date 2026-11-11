@@ -1,4 +1,4 @@
-/* 角色养成查看：打开即暂停，完整展示主动、辅助、操作词条与装备。 */
+/* 角色养成查看：打开即暂停；总览短文案，点按查看完整机制。 */
 (() => {
   'use strict';
 
@@ -41,15 +41,21 @@
     }
     return SLOTS.filter(slot => player.equip[slot]).map(slot => ({ slot, eq: player.equip[slot] }));
   }
-  function buildPerPage() { return buildTab === 'skills' ? 1 : (buildTab === 'affixes' ? 5 : 4); }
+  function buildPerPage() { return buildTab === 'skills' ? 4 : (buildTab === 'affixes' ? 5 : 4); }
   function buildPageCount() { return Math.max(1, Math.ceil(buildEntries().length / buildPerPage())); }
-  function changeBuildPage(dir) {
-    buildPage = Math.max(0, Math.min(buildPageCount() - 1, buildPage + dir));
+  function changeBuildPage(dir) { buildPage = Math.max(0, Math.min(buildPageCount() - 1, buildPage + dir)); }
+  function visibleEntries() {
+    const entries = buildEntries(), per = buildPerPage();
+    buildPage = Math.max(0, Math.min(buildPageCount() - 1, buildPage));
+    return entries.slice(buildPage * per, buildPage * per + per);
   }
-
-  function buildWrap(text, x, y, maxWidth, lineHeight, maxLines = 3) {
-    const lines = [];
-    let line = '';
+  function entryRect(i) {
+    if (buildTab === 'skills') return { x: 24, y: 137 + i * 108, w: 327, h: 100 };
+    if (buildTab === 'affixes') return { x: 24, y: 137 + i * 83, w: 327, h: 76 };
+    return { x: 24, y: 137 + i * 103, w: 327, h: 94 };
+  }
+  function buildWrap(text, x, y, maxWidth, lineHeight, maxLines = 2) {
+    const lines = []; let line = '';
     for (const ch of String(text || '')) {
       if (ch === '\n') { lines.push(line); line = ''; continue; }
       if (line && ctx.measureText(line + ch).width > maxWidth) { lines.push(line); line = ch; }
@@ -67,57 +73,54 @@
     ctx.fillStyle = enabled ? INK : GRAY; ctx.textAlign = 'center'; ctx.font = 'bold 12px ' + FONT;
     ctx.fillText(label, rect.x + rect.w / 2, rect.y + rect.h / 2 + 4);
   }
-  function buildCard(y, h, color = INK) {
-    ctx.fillStyle = 'rgba(255,250,238,0.95)'; ctx.fillRect(24, y, 327, h);
-    jrect(24, y, 327, h, color, 1.6);
+  function buildCard(rect, color = INK) {
+    ctx.fillStyle = 'rgba(255,250,238,0.95)'; ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    jrect(rect.x, rect.y, rect.w, rect.h, color, 1.6);
   }
-  function drawSkillEntry(a, y) {
-    const def = SKILL_DEFS[a.id], c = skillCalc(a);
-    buildCard(y, 423, attrOf(a.id));
-    ctx.textAlign = 'left'; ctx.fillStyle = attrOf(a.id); ctx.font = 'bold 18px ' + FONT;
-    ctx.fillText(def.name + '  Lv.' + a.lvl, 38, y + 29);
+  function detailHint(rect) {
     ctx.textAlign = 'right'; ctx.fillStyle = GRAY; ctx.font = '10px ' + FONT;
-    ctx.fillText((SKILL_TAGS[a.id] || []).map(t => TAG_NAME[t]).join(' · '), 337, y + 27);
-    ctx.textAlign = 'left'; ctx.fillStyle = DARK; ctx.font = '11px ' + FONT;
-    buildWrap(def.desc, 38, y + 51, 299, 16, 2);
-    ctx.fillStyle = PURPLE; ctx.font = 'bold 12px ' + FONT;
-    ctx.fillText('辅助 ' + a.supports.length + ' / ' + MAX_SUPPORTS, 38, y + 91);
-    if (!a.supports.length) {
-      ctx.fillStyle = GRAY; ctx.font = '11px ' + FONT; ctx.fillText('尚未镶嵌辅助技能', 38, y + 119);
-    }
-    a.supports.forEach((sp, i) => {
-      const sy = y + 112 + i * 73;
-      ctx.fillStyle = INK; ctx.font = 'bold 12px ' + FONT;
-      ctx.fillText('◆ ' + SUPPORTS[sp.id].name + '  Lv.' + sp.lvl, 38, sy);
-      ctx.fillStyle = DARK; ctx.font = '10px ' + FONT;
-      buildWrap(supDesc(sp.id, sp.lvl), 48, sy + 20, 282, 15, 2);
-    });
-    ctx.fillStyle = GRAY; ctx.font = '10px ' + FONT; ctx.textAlign = 'right';
-    const countText = (SKILL_TAGS[a.id] || []).includes('proj') ? '　当前弹数加成 +' + c.count : '';
-    ctx.fillText('范围 x' + c.rad.toFixed(2) + countText, 337, y + 405);
+    ctx.fillText('详情 ›', rect.x + rect.w - 12, rect.y + rect.h - 10);
   }
-  function drawAffixEntry(entry, y) {
+  function drawSkillEntry(a, rect) {
+    const def = SKILL_DEFS[a.id];
+    buildCard(rect, attrOf(a.id));
+    ctx.textAlign = 'left'; ctx.fillStyle = attrOf(a.id); ctx.font = 'bold 15px ' + FONT;
+    ctx.fillText(def.name + '  Lv.' + a.lvl, rect.x + 14, rect.y + 23);
+    ctx.textAlign = 'right'; ctx.fillStyle = PURPLE; ctx.font = 'bold 11px ' + FONT;
+    ctx.fillText('辅 ' + a.supports.length + '/' + MAX_SUPPORTS, rect.x + rect.w - 14, rect.y + 22);
+    ctx.textAlign = 'left'; ctx.fillStyle = DARK; ctx.font = '11px ' + FONT;
+    buildWrap(window.UICopy ? window.UICopy.skillShort(a.id) : def.desc, rect.x + 14, rect.y + 47, rect.w - 28, 16, 2);
+    detailHint(rect);
+  }
+  function drawAffixEntry(entry, rect) {
     const isPassive = entry.kind === 'passive', def = entry.def;
     const title = isPassive ? '通用被动' : ({ dive: '潜墨辅助', surge: '墨潮辅助', absorb: '吸墨辅助' })[def.skill];
-    buildCard(y, 76, isPassive ? DARK : INK);
+    buildCard(rect, isPassive ? DARK : INK);
     ctx.textAlign = 'left'; ctx.fillStyle = isPassive ? DARK : INK; ctx.font = 'bold 13px ' + FONT;
-    ctx.fillText(def.name + (isPassive && entry.count > 1 ? '  ×' + entry.count : ''), 38, y + 23);
+    ctx.fillText(def.name + (isPassive && entry.count > 1 ? '  ×' + entry.count : ''), rect.x + 14, rect.y + 22);
     ctx.textAlign = 'right'; ctx.fillStyle = GRAY; ctx.font = '10px ' + FONT;
-    ctx.fillText(title, 337, y + 22);
+    ctx.fillText(title, rect.x + rect.w - 14, rect.y + 21);
     ctx.textAlign = 'left'; ctx.fillStyle = DARK; ctx.font = '11px ' + FONT;
-    buildWrap(def.desc, 38, y + 45, 299, 16, 2);
+    buildWrap(window.UICopy ? window.UICopy.affixShort(def) : def.desc, rect.x + 14, rect.y + 43, rect.w - 28, 15, 2);
   }
-  function drawEquipmentEntry(entry, y) {
-    const eq = entry.eq, def = ITEM_DEFS[eq.key], ri = rarityIndex(eq), rarity = RARITY_LIST[ri];
-    buildCard(y, 94, rarity.color);
+  function drawEquipmentEntry(entry, rect) {
+    const eq = entry.eq, def = ITEM_DEFS[eq.key], ri = rarityIndex(eq), rarity = RARITY_LIST[ri], stats = equipmentBaseStats(eq);
+    buildCard(rect, rarity.color);
     ctx.textAlign = 'left'; ctx.fillStyle = rarity.color; ctx.font = 'bold 14px ' + FONT;
-    ctx.fillText(def.name, 38, y + 24);
+    ctx.fillText(def.name, rect.x + 14, rect.y + 22);
     ctx.textAlign = 'right'; ctx.font = 'bold 11px ' + FONT;
-    ctx.fillText(rarity.name + ' · ' + SLOT_NAME[entry.slot], 337, y + 23);
+    ctx.fillText(equipmentLevelText(eq) + ' · ' + rarity.name, rect.x + rect.w - 14, rect.y + 21);
     ctx.textAlign = 'left'; ctx.fillStyle = DARK; ctx.font = '10px ' + FONT;
-    ctx.fillText('攻击 +' + Math.round(def.atk * rarity.mul) + '%　生命 +' + Math.round(def.hp * rarity.mul), 38, y + 44);
+    ctx.fillText('攻击 +' + stats.atk + '%　生命 +' + stats.hp, rect.x + 14, rect.y + 41);
     ctx.font = '11px ' + FONT;
-    buildWrap(itemDescription(eq.key, ri), 38, y + 65, 299, 16, 2);
+    buildWrap(window.UICopy ? window.UICopy.itemShort(eq.key, ri) : itemDescription(eq.key, ri), rect.x + 14, rect.y + 60, rect.w - 28, 15, 2);
+    detailHint(rect);
+  }
+  function openEntry(entry) {
+    if (!window.UICopy) return;
+    if (buildTab === 'skills') window.UICopy.skillDetail(entry);
+    else if (buildTab === 'affixes') window.UICopy.affixDetail(entry);
+    else window.UICopy.itemDetail(entry.eq, entry.slot);
   }
   function drawBuildView() {
     ctx.fillStyle = 'rgba(35,31,28,0.8)'; ctx.fillRect(0, 0, W, H);
@@ -127,28 +130,23 @@
     ctx.fillText('角色养成', 27, 61);
     buildButton(buildCloseRect, '返回');
     for (const tab of buildTabRects) buildButton(tab, tab.name, true, buildTab === tab.id);
-
-    const entries = buildEntries(), perPage = buildPerPage();
-    buildPage = Math.max(0, Math.min(buildPageCount() - 1, buildPage));
-    const visible = entries.slice(buildPage * perPage, buildPage * perPage + perPage);
+    const entries = buildEntries(), visible = visibleEntries();
     if (!visible.length) {
       ctx.textAlign = 'center'; ctx.fillStyle = GRAY; ctx.font = '13px ' + FONT;
       const empty = buildTab === 'skills' ? '还没有主动技能' : (buildTab === 'affixes' ? '还没有获得词条' : '还没有装备');
       ctx.fillText(empty, W / 2, 330);
-    } else if (buildTab === 'skills') {
-      drawSkillEntry(visible[0], 137);
-    } else if (buildTab === 'affixes') {
-      visible.forEach((entry, i) => drawAffixEntry(entry, 137 + i * 83));
-    } else {
-      visible.forEach((entry, i) => drawEquipmentEntry(entry, 137 + i * 103));
-    }
-
+    } else visible.forEach((entry, i) => {
+      const rect = entryRect(i);
+      if (buildTab === 'skills') drawSkillEntry(entry, rect);
+      else if (buildTab === 'affixes') drawAffixEntry(entry, rect);
+      else drawEquipmentEntry(entry, rect);
+    });
     buildButton(buildPrevRect, '上一页', buildPage > 0);
     buildButton(buildNextRect, '下一页', buildPage < buildPageCount() - 1);
     ctx.textAlign = 'center'; ctx.fillStyle = DARK; ctx.font = '11px ' + FONT;
     ctx.fillText((buildPage + 1) + ' / ' + buildPageCount(), W / 2, 604);
     ctx.fillStyle = GRAY; ctx.font = '10px ' + FONT;
-    ctx.fillText('游戏已暂停 · 共 ' + entries.length + ' 项', W / 2, 624);
+    ctx.fillText('已暂停 · 点按条目看详情', W / 2, 624);
   }
 
   const baseApplyOptionForView = applyOption;
@@ -161,12 +159,10 @@
     }
   };
   const baseRenderForView = render;
-  render = function() {
-    baseRenderForView();
-    if (state === 'build') drawBuildView();
-  };
+  render = function() { baseRenderForView(); if (state === 'build') drawBuildView(); };
 
   canvas.addEventListener('pointerdown', e => {
+    if (window.UIDetail && window.UIDetail.isOpen) return;
     const p = toLogical(e);
     if ((state === 'play' || state === 'levelup' || state === 'start') && pointInRect(p, buildRect)) {
       e.preventDefault(); e.stopImmediatePropagation(); openBuildView(); return;
@@ -175,10 +171,13 @@
     e.preventDefault(); e.stopImmediatePropagation();
     if (pointInRect(p, buildCloseRect)) { closeBuildView(); return; }
     for (const tab of buildTabRects) if (pointInRect(p, tab)) { setBuildTab(tab.id); return; }
-    if (pointInRect(p, buildPrevRect)) changeBuildPage(-1);
-    else if (pointInRect(p, buildNextRect)) changeBuildPage(1);
+    if (pointInRect(p, buildPrevRect)) { changeBuildPage(-1); return; }
+    if (pointInRect(p, buildNextRect)) { changeBuildPage(1); return; }
+    const visible = visibleEntries();
+    for (let i = 0; i < visible.length; i++) if (pointInRect(p, entryRect(i))) { openEntry(visible[i]); return; }
   }, true);
   window.addEventListener('keydown', e => {
+    if (window.UIDetail && window.UIDetail.isOpen) return;
     if (state === 'build' && e.key === 'Escape') {
       e.preventDefault(); e.stopImmediatePropagation(); closeBuildView();
     }
