@@ -37,10 +37,11 @@ function take(id) { G.cards = [{ kind: 'passive', id }]; G.state = 'levelup'; G.
 function cast() { const a = G.player.actives[0]; return G.fireSkill(a, G.skillCalc(a)); }
 function hit(e, skill) { G.hurtEnemy(e, 1, 0, e.x, e.y, 0, 0, 0, '#000', false, skill); }
 
-test('内容池增加三个主动和六条有前置条件的被动', () => {
+test('内容池增加两个主动和四条有前置条件的被动，红笔减分已移除', () => {
   fresh('cyclone');
-  assert(Object.keys(G.SKILL_DEFS).length === 21, '主动总数不是 21');
-  assert(G.PASSIVES.length === 16, '被动总数不是 16');
+  assert(Object.keys(G.SKILL_DEFS).length === 20 && !G.SKILL_DEFS.weakmark, '主动总数不是 20 或红笔减分仍存在');
+  assert(G.PASSIVES.length === 14, '被动总数不是 14');
+  assert(!G.PASSIVES.some(p => ['hweakspread','hdoublequestion'].includes(p.id)), '红笔减分联动被动仍存在');
   assert(!G.SKILL_DEFS.ramruler && !G.SKILL_DEFS.rulerwall, '撞墙主动仍在内容池');
   assert(!G.PASSIVES.some(p => ['henemywall', 'hbounce', 'hwallwave', 'hwallline'].includes(p.id)), '撞墙被动仍在内容池');
   assert(!G.PASSIVES.find(p => p.id === 'hdualcore').available(), '没有红芯投枪时仍提供扩芯弹匣');
@@ -105,18 +106,6 @@ test('扩芯弹匣增加上限，拔芯创口只在自然到期时结算', () =>
   assert(e2.hp === hp2 && G.H.state.shards.length === 2, '死亡掉落错误触发创口或没有红芯');
 });
 
-test('虚弱降低真实来源伤害，死亡后半时传播', () => {
-  fresh('weakmark'); target(100, 0); target(120, 0); target(140, 0); const spreadTarget = target(160, 0); cast();
-  const weakened = G.enemies.filter(x => x.hadesWeakT > 0);
-  assert(weakened.length === 3, '虚弱目标数量不是 3');
-  G.player.hurtT = 0; const hp = G.player.hp; G.hurtPlayer(20, 'enemy', weakened[0]);
-  assert(Math.round(hp - G.player.hp) === 14, '虚弱没有降低 30% 实际扣血');
-  take('hweakspread'); const source = weakened[0], before = source.hadesWeakT;
-  for (const other of weakened.slice(1)) other.dead = true;
-  G.killEnemy(source);
-  assert(Math.abs(spreadTarget.hadesWeakT - before / 2) < 0.0001, '虚弱没有按剩余半时传播：' + JSON.stringify(G.enemies.map(x => ({ id: x.id, dead: x.dead, weak: x.hadesWeakT }))));
-});
-
 test('死线延迟结算且不能刷新，两个不同主动可提前催动', () => {
   fresh('doommark'); const e = target(100, 0); cast(); const first = e.hadesDoom; const hp = e.hp;
   assert(first && !cast() && e.hadesDoom === first, '死线被重复刷新');
@@ -142,14 +131,8 @@ test('死线一次标记 4 个高生命目标，覆盖 620 范围并强化结算
   assert(G.floats.some(f => f.txt === '死线！' && f.crit), '缺少强化结算跳字');
 });
 
-test('双重审问真实延长攻击前摇', () => {
-  fresh('doommark'); const e = target(20, 0); cast(); G.H.applyWeak(e, 5, G.skillCalc(G.player.actives[0])); take('hdoublequestion');
-  e.swingT = 0.5; G.updateMeleeSwing(e, 0.1);
-  assert(Math.abs(e.swingT - (0.5 - 0.1 / 1.3)) < 0.0001, '前摇没有按 1.3 倍延长');
-});
-
-test('红芯、虚弱与死线渲染不报错', () => {
-  fresh('doommark'); const e = target(200, 0); cast(); G.H.applyWeak(e, 5, null); e.hadesCoreT = 4;
+test('红芯与死线渲染不报错', () => {
+  fresh('doommark'); const e = target(200, 0); cast(); e.hadesCoreT = 4;
   G.H.dropShard(30, 30); G.render();
   assert(e.hadesDoom && G.H.state.shards.length === 1, '渲染过程破坏了状态');
 });

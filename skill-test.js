@@ -1,5 +1,5 @@
 // 逐技能覆盖测试：每个主动技能 + 其全部合法辅助各跑一段战斗，确保不崩溃且能打出伤害
-const src = require('fs').readFileSync(__dirname + '/enemy-config.js', 'utf8') + '\n' + require('fs').readFileSync(__dirname + '/main.js', 'utf8').replace("'use strict';", '');
+const src = require('fs').readFileSync(__dirname + '/battle-config.js', 'utf8') + '\n' + require('fs').readFileSync(__dirname + '/enemy-config.js', 'utf8') + '\n' + require('fs').readFileSync(__dirname + '/main.js', 'utf8').replace("'use strict';", '');
 
 const fakeCtx = new Proxy({}, {
   get(t, k) { if (k === 'measureText') return () => ({ width: 10 }); return () => {}; },

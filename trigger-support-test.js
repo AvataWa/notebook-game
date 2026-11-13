@@ -1,6 +1,6 @@
 // 五类主动连携、独立触发冷却与红芯投枪下线专项测试
 const fs = require('fs');
-const src = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'main.js', 'build-runtime.js', 'hades-runtime.js', 'hades-weapons-runtime.js', 'weapon-passives-expansion.js', 'support-expansion-runtime.js', 'trigger-support-runtime.js']
+const src = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'main.js', 'build-runtime.js', 'hades-runtime.js', 'hades-weapons-runtime.js', 'weapon-passives-expansion.js', 'form-passives-runtime.js', 'support-expansion-runtime.js', 'elemental-support-runtime.js', 'trigger-support-runtime.js']
   .map(f => fs.readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
 const fakeCtx = new Proxy({}, { get(t, k) {
   if (k === 'measureText') return txt => ({ width: String(txt).length * 10 });
@@ -31,9 +31,9 @@ function target(x = 50) {
 
 test('红芯及三条专属被动下线，五种连携可供全部主动使用', () => {
   fresh();
-  assert(Object.keys(G.SKILL_DEFS).length === 30 && !G.SKILL_DEFS.bloodcore, '红芯投枪仍在主动池');
+  assert(Object.keys(G.SKILL_DEFS).length === 29 && !G.SKILL_DEFS.bloodcore && !G.SKILL_DEFS.weakmark, '红芯投枪或红笔减分仍在主动池');
   assert(!['hdualcore', 'hcorewound', 'hshardguard'].some(id => G.PASSIVES.some(p => p.id === id)), '红芯专属被动仍在词条池');
-  assert(Object.keys(G.SUPPORTS).length === 61, '辅助总数不是 61');
+  assert(Object.keys(G.SUPPORTS).length === 70, '辅助总数不是 70');
   for (const id of ['onabsorb', 'ondive', 'onsurge', 'oncrit', 'onkill']) assert(G.supportUsable(id, 'cyclone') && G.supportUsable(id, 'tornado'), id + ' 未对全部主动开放');
   assert(G.supDesc('oncrit', 1).includes('1.0 秒') && G.supDesc('onkill', 3).includes('0.8 秒'), '触发冷却文案错误');
 });

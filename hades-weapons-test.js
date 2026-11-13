@@ -1,6 +1,6 @@
 // 十个哈迪斯武器启发主动与四十条专属被动的专项测试
 const fs = require('fs');
-const src = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'main.js', 'build-runtime.js', 'hades-runtime.js', 'hades-weapons-runtime.js', 'weapon-passives-expansion.js', 'support-expansion-runtime.js', 'trigger-support-runtime.js']
+const src = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'main.js', 'build-runtime.js', 'hades-runtime.js', 'hades-weapons-runtime.js', 'weapon-passives-expansion.js', 'form-passives-runtime.js', 'support-expansion-runtime.js', 'elemental-support-runtime.js', 'trigger-support-runtime.js']
   .map(f => fs.readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
 const fakeCtx = new Proxy({}, { get(t, k) {
   if (k === 'measureText') return txt => ({ width: String(txt).length * 10 });
@@ -34,11 +34,11 @@ function take(id) { G.cards = [{ kind: 'passive', id }]; G.state = 'levelup'; G.
 function cast() { const a = G.player.actives[0]; return G.fireSkill(a, G.skillCalc(a)); }
 function repeat(fn, n, dt) { for (let i = 0; i < n; i++) fn(dt); }
 
-test('内容池达到三十主动、五十三被动和六十一辅助，四十条武器被动均有前置', () => {
+test('内容池达到二十九主动、八十被动和七十辅助，四十条武器被动均有前置', () => {
   fresh('cyclone');
-  assert(Object.keys(G.SKILL_DEFS).length === 30, '主动总数不是 30');
-  assert(G.PASSIVES.length === 53, '被动总数不是 53');
-  assert(Object.keys(G.SUPPORTS).length === 61, '辅助总数不是 61');
+  assert(Object.keys(G.SKILL_DEFS).length === 29, '主动总数不是 29');
+  assert(G.PASSIVES.length === 80, '被动总数不是 80');
+  assert(Object.keys(G.SUPPORTS).length === 70, '辅助总数不是 70');
   const ids = ['slash_echo','slash_pull','slash_charge','slash_crack','pierce_long','pierce_return','pierce_ramp','pierce_pin',
     'spin_double','spin_pull','spin_spear','spin_blast','shield_reflect','shield_bash','shield_ink','shield_charge',
     'ricoshield_double','ricoshield_catch','ricoshield_ramp','ricoshield_orbit','perfect_tail','perfect_split','perfect_mark','perfect_rain',
@@ -50,9 +50,9 @@ test('内容池达到三十主动、五十三被动和六十一辅助，四十�
   }
 });
 
-test('三十主动共用唯一基础冷却表，修改表值会直接改变实际间隔', () => {
+test('二十九主动共用唯一基础冷却表，修改表值会直接改变实际间隔', () => {
   const table = G.BATTLE.activeCooldowns, ids = Object.keys(G.SKILL_DEFS);
-  assert(Object.keys(table).length === 30, '基础冷却表不是 30 项');
+  assert(Object.keys(table).length === 29, '基础冷却表不是 29 项');
   for (const id of ids) assert(Number.isFinite(table[id]) && table[id] > 0, id + ' 缺少有效基础冷却');
   fresh('piercerush'); target(100, 0);
   const a = G.player.actives[0], previous = table.piercerush;

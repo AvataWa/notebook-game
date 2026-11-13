@@ -15,8 +15,8 @@ eval(src + `
 ;globalThis.G = {
   resetGame, update, updatePlayerInk, render, toggleDive, enterDive, exitDive, castAbsorb, reflectEnemyBullet,
   castInkSurge, buildOptions, rerollOptions, applyOption, recomputeEquip, itemV, itemDescription, makeEquipmentDrop, hurtPlayer, inkCellAt,
-  spawnEnemy, addInkStain, addHostileInk, updateInkStains, killEnemy,
-  get BATTLE() { return BATTLE; }, get keys() { return keys; },
+  spawnEnemy, addInkStain, addHostileInk, updateInkStains, killEnemy, hurtEnemy,
+  get BATTLE() { return BATTLE; }, get keys() { return keys; }, get erupts() { return erupts; },
   get gameTime() { return gameTime; }, set gameTime(v) { gameTime = v; },
   get toasts() { return toasts; },
   get RARITIES() { return RARITIES; }, get OPERATION_AFFIXES() { return OPERATION_AFFIXES; },
@@ -104,12 +104,13 @@ test('入墨无息与潜行蓄潮实际生效', () => {
   assert(G.player.special === 4, '潜行蓄潮没有每秒充能 4%');
   assert(G.player.ink < 100 && G.player.diveSpent > 0, '免费期后没有正常耗墨');
 });
-test('散返生成三颗返还弹，墨轨宽度数据进入子弹', () => {
+test('散返生成三颗返还弹，每颗墨轨生成三个真实伤害墨点', () => {
   fresh(); G.player.affixes.absorb.reflectsplit = true; G.player.affixes.absorb.reflecttrail = true;
   G.castAbsorb();
   const eb = { x: 0, y: 0, vx: -100, vy: 0, dmg: 10, life: 2, sourceId: 0, reflectable: true };
   assert(G.reflectEnemyBullet(eb), '弹反失败');
   assert(G.bullets.length === 3 && G.bullets.every(b => b.inkWide === 1.8), '散返或墨轨未生效');
+  assert(G.erupts.length === 9 && G.erupts.every(er => Math.abs(er.dmg - G.bullets[0].dmg * 0.2) < 1e-8), '墨轨墨点数量或伤害错误');
 });
 test('刷新便利贴提供次数并实际刷新选项', () => {
   fresh(); equip('rerollnote', 2); G.runtime.applyLevelEquipment();
@@ -188,5 +189,75 @@ test('普通吸墨纸甲将灰墨移速倍率由 0.58 提升至 0.832', () => {
   const expected = G.BATTLE.player.speed * 0.832 * 0.1;
   assert(Math.abs(G.player.x - expected) < 0.001, '灰墨抗减速效果错误：' + G.player.x + ' / ' + expected);
 });
-console.log(failed ? 'CONTENT_RUNTIME_TEST_FAILURES: ' + failed : 'CONTENT_RUNTIME_TEST_OK (20/20)');
+test('入墨起笔减少冷却且两秒内不重复触发', () => {
+  fresh(); G.player.actives[0].t = 5; G.player.affixes.dive.divepaint = true;
+  G.enterDive(); assert(Math.abs(G.player.actives[0].t - 4.65) < 1e-8, '首次入墨未减冷却');
+  G.exitDive(); G.player.diveCd = 0; G.gameTime = 1; G.enterDive();
+  assert(Math.abs(G.player.actives[0].t - 4.65) < 1e-8, '入墨起笔冷却内重复触发');
+  G.exitDive(); G.player.diveCd = 0; G.gameTime = 2.01; G.enterDive();
+  assert(Math.abs(G.player.actives[0].t - 4.3) < 1e-8, '入墨起笔冷却结束后未再次触发');
+});
+test('灰墨渡船将潜墨探索速度倍率由 0.2 提升至 0.6', () => {
+  fresh(); G.player.affixes.dive.grayboat = true; G.toggleDive(); G.keys.d = true; G.update(0.1); G.keys.d = false;
+  const expected = G.BATTLE.player.speed * G.BATTLE.dive.speed * 0.6 * 0.1;
+  assert(Math.abs(G.player.x - expected) < 0.001, '灰墨渡船探索速度错误：' + G.player.x + ' / ' + expected);
+});
+test('墨路回响按移动距离叠层并在退出时结算四层伤害', () => {
+  fresh(); G.player.affixes.dive.widetrail = true; G.toggleDive();
+  G.player.diveEchoDist = 89; G.player.diveEchoStacks = 3; G.keys.d = true; G.update(0.1); G.keys.d = false;
+  assert(G.player.diveEchoStacks === 4, '移动距离没有叠到四层');
+  G.spawnEnemy('stick', G.player.x + 20, G.player.y); const e = G.enemies[G.enemies.length - 1]; e.hp = e.maxhp = 500; e.sp = 0;
+  G.exitDive(); assert(Math.abs(e.hp - 420) < 1e-8, '四层墨路回响不是 80 伤害：' + e.hp);
+});
+test('洗墨反击覆盖灰墨时发射真实墨刺并回复一墨水', () => {
+  fresh(); G.addHostileInk(0, 0, 10, 80); G.spawnEnemy('stick', 150, 0); G.player.affixes.dive.washregen = true; G.player.ink = 50;
+  G.toggleDive(); G.keys.d = true; G.update(0.1); G.keys.d = false;
+  assert(G.bullets.some(b => b.kind === 'dive' && b.dmg === 25), '覆盖灰墨没有发射 25 伤害墨刺');
+  const expected = 50 - G.BATTLE.dive.otherCost * 0.1 + 1;
+  assert(Math.abs(G.player.ink - expected) < 0.001, '洗墨反击回墨错误：' + G.player.ink + ' / ' + expected);
+});
+test('入墨洗地无灰墨也充能，净化灰墨额外充能', () => {
+  fresh(); G.player.affixes.dive.entrywash = true; G.enterDive(); assert(G.player.special === 5, '无灰墨时没有基础充能');
+  fresh(); G.addHostileInk(0, 0, 10, 80); G.player.affixes.dive.entrywash = true; G.enterDive();
+  assert(G.player.special === 15 && G.inkCellAt(0, 0).owner === 1, '净化灰墨没有额外充能或转为彩墨');
+});
+test('一线残影对滑行路径造成 45 点真实伤害', () => {
+  fresh(); G.spawnEnemy('stick', 30, 0); const e = G.enemies[G.enemies.length - 1]; e.hp = e.maxhp = 500; e.sp = 0;
+  G.player.affixes.dive.exitdash = true; G.player.faceA = 0; G.enterDive(); G.exitDive();
+  assert(G.player.x === 55 && Math.abs(e.hp - 455) < 1e-8, '残影位移或路径伤害错误');
+});
+test('洗地始终减少最长主动冷却，覆盖大量灰墨回墨封顶 15', () => {
+  fresh(); G.player.affixes.surge.washink = true; G.player.actives[0].t = 5; G.player.special = 100;
+  G.castInkSurge(100, false); assert(G.player.actives[0].t === 4, '无灰墨时没有减少最长主动冷却');
+  fresh(); G.addHostileInk(0, 0, 10, 400); G.player.affixes.surge.washink = true; G.player.ink = 20; G.player.special = 100;
+  G.castInkSurge(400, false); assert(G.player.ink === 35, '洗地回墨没有封顶 15：' + G.player.ink);
+});
+test('墨潮领地让目标站在彩墨上实际受伤增加 20%', () => {
+  fresh(); G.spawnEnemy('stick', 50, 0); const e = G.enemies[G.enemies.length - 1]; e.hp = e.maxhp = 500; e.sp = 0;
+  G.player.affixes.surge.surgeslow = true; G.player.special = 100; G.castInkSurge(100, false);
+  const hp = e.hp; G.hurtEnemy(e, 100, 0, 0, 0, 0, 0, 0, '#1a2b8f', false, 'cyclone');
+  assert(Math.abs(hp - e.hp - 120) < 1e-8, '墨潮领地易伤未进入真实结算');
+});
+test('溢墨外圈延迟爆裂且只结算环带目标', () => {
+  fresh(); G.spawnEnemy('stick', 130, 0); const e = G.enemies[G.enemies.length - 1]; e.hp = e.maxhp = 500; e.sp = 0;
+  G.player.affixes.surge.outerink = true; G.player.special = 100; G.castInkSurge(100, true);
+  assert(e.hp === 500 && G.erupts.some(er => er.ringInner === 100), '外圈目标被内圈误伤或缺少环形爆发');
+  G.update(0.26); assert(e.hp < 500, '溢墨外圈延迟后没有真实伤害');
+});
+test('墨种爆炸真实击杀附近目标且不会继续连锁', () => {
+  fresh(); G.player.affixes.surge.surgeseed = true;
+  G.spawnEnemy('stick', 30, 0); const first = G.enemies[G.enemies.length - 1]; first.hp = first.maxhp = 1; first.sp = 0;
+  G.spawnEnemy('stick', 65, 0); const second = G.enemies[G.enemies.length - 1]; second.hp = second.maxhp = 1; second.sp = 0;
+  G.player.special = 100; G.castInkSurge(40, false);
+  assert(first.dead && !second.dead && G.erupts.length === 1, '墨种没有只在墨潮击杀后生成爆炸');
+  G.update(0.1); assert(second.dead && !G.erupts.some(er => !er.done), '墨种爆炸未击杀或错误继续连锁');
+});
+test('反击领地造成真实范围伤害并遵守 0.8 秒冷却', () => {
+  fresh(); G.spawnEnemy('stick', 50, 0); const e = G.enemies[G.enemies.length - 1]; e.hp = e.maxhp = 500; e.sp = 0;
+  G.player.affixes.absorb.bulletink = true; G.castAbsorb();
+  const eb = { x: 0, y: 0, vx: -100, vy: 0, dmg: 10, life: 2, sourceId: e.id, reflectable: true };
+  G.reflectEnemyBullet(eb); assert(Math.abs(e.hp - 470) < 1e-8, '反击领地没有造成 30 伤害');
+  G.reflectEnemyBullet({ ...eb, life: 2 }); assert(Math.abs(e.hp - 470) < 1e-8, '反击领地冷却内重复造成伤害');
+});
+console.log(failed ? 'CONTENT_RUNTIME_TEST_FAILURES: ' + failed : 'CONTENT_RUNTIME_TEST_OK (31/31)');
 process.exit(failed ? 1 : 0);

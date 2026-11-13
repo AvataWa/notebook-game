@@ -1,5 +1,5 @@
 // 墨水资源回归：技能扣费、领地回复、吸墨怪、击杀爆墨与完整墨潮
-const src = require('fs').readFileSync(__dirname + '/enemy-config.js', 'utf8') + '\n' + require('fs').readFileSync(__dirname + '/main.js', 'utf8').replace("'use strict';", '');
+const src = require('fs').readFileSync(__dirname + '/battle-config.js', 'utf8') + '\n' + require('fs').readFileSync(__dirname + '/enemy-config.js', 'utf8') + '\n' + require('fs').readFileSync(__dirname + '/main.js', 'utf8').replace("'use strict';", '');
 const fakeCtx = new Proxy({}, { get(t, k) { if (k === 'measureText') return () => ({ width: 10 }); return () => {}; }, set() { return true; } });
 const fakeCanvas = { getContext: () => fakeCtx, width: 0, height: 0, style: {}, addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 375, height: 667 }) };
 global.window = { addEventListener() {}, devicePixelRatio: 1, innerWidth: 375, innerHeight: 667 };
@@ -27,10 +27,10 @@ test('墨水不足暂停施放，不变负也不生成复制体', () => {
   assert(G.player.ink === 0 && G.inkStats().friendly === 0, '缺墨仍施放'); assert(G.player.actives[0].t === 0.2, '缺墨没有进入重试');
   assert(!G.enemies.some(e => e.shade), '已删除的透支复制体仍出现'); assert(G.spendSkillInk(G.player.actives[0], 20) === false, '允许透支');
 });
-test('己方墨迹潜墨每秒耗墨 12，并停止所有主动技能', () => {
+test('己方墨迹潜墨每秒耗墨 24，并停止所有主动技能', () => {
   fresh(); active(); G.addInkStain(0, 0, 10, 45, '#1a2b8f'); G.player.ink = 30; assert(G.toggleDive(), '无法潜墨');
   const cells = G.inkStats().friendly; G.updatePlayerInk(1); G.updateSkills(1);
-  assert(near(G.player.ink, 18), '己方墨迹潜墨消耗错误'); assert(G.inkStats().friendly === cells && G.player.actives[0].t === 0, '潜墨仍施放技能');
+  assert(near(G.player.ink, 6), '己方墨迹潜墨消耗错误'); assert(G.inkStats().friendly === cells && G.player.actives[0].t === 0, '潜墨仍施放技能');
 });
 test('非己方墨迹可开启潜墨，每秒耗墨 36，耗尽后自动退出', () => {
   fresh(); G.player.ink = 40; assert(G.toggleDive() && G.player.diving, '空白区域无法开启潜墨');

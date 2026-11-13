@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  const RED = '#b84747', BLUE = '#315fa8', PURPLE = '#76519b', DARK_RED = '#793737';
+  // 技能表现统一读取 calc 缓存的属性色；红色只保留给敌方攻击。
   const IDS = ['pageslash', 'piercerush', 'spinlance', 'shieldrush', 'ricoshield',
     'perfectarrow', 'arrowfocus', 'magfist', 'inkgrenade', 'heatrail'];
   const S = {
@@ -27,8 +27,8 @@
     perfectarrow: ['proj'], arrowfocus: ['proj'], magfist: ['strike'], inkgrenade: ['area'], heatrail: ['proj']
   });
   Object.assign(SKILL_ATTR, {
-    pageslash: 'phys', piercerush: 'phys', spinlance: 'phys', shieldrush: 'phys', ricoshield: 'phys',
-    perfectarrow: 'phys', arrowfocus: 'phys', magfist: 'phys', inkgrenade: 'fire', heatrail: 'fire'
+    pageslash: 'phys', piercerush: 'phys', spinlance: 'ice', shieldrush: 'phys', ricoshield: 'ice',
+    perfectarrow: 'ice', arrowfocus: 'thunder', magfist: 'phys', inkgrenade: 'fire', heatrail: 'fire'
   });
   Object.assign(INK_COST, { pageslash: 5, piercerush: 5, spinlance: 6, shieldrush: 5, ricoshield: 5,
     perfectarrow: 4, arrowfocus: 6, magfist: 5, inkgrenade: 6, heatrail: 6 });
@@ -48,10 +48,10 @@
   passive('shield_bash', '碎页守城', '盾印结算时强化盾震，剩余层数提高范围与伤害', 'shieldrush');
   passive('ricoshield_double', '双盾轮转', '同时掷出第二面盾牌，单盾伤害 -20%', 'ricoshield');
   passive('ricoshield_catch', '接盾震页', '接住盾牌时释放近身冲击并重置投掷', 'ricoshield');
-  passive('perfect_tail', '裂帛箭尾', '完美射击穿过目标后追加红色剑气', 'perfectarrow');
+  passive('perfect_tail', '裂帛箭尾', '完美射击穿过目标后追加冰晶剑气', 'perfectarrow');
   passive('perfect_split', '一箭双星', '完美命中后向两侧分裂箭矢，射击附近目标', 'perfectarrow');
   passive('focus_more', '悬箭扩编', '集火箭矢 +4，悬停阵列扩大', 'arrowfocus');
-  passive('focus_burst', '满批红叉', '同一目标被集火命中 6 次后触发红叉爆裂', 'arrowfocus');
+  passive('focus_burst', '满批电叉', '同一目标被集火命中 6 次后触发电叉爆裂', 'arrowfocus');
   passive('fist_aftershock', '坠地余震', '下砸后再次扩散一次 50% 伤害的冲击环', 'magfist');
   passive('fist_juggle', '浮空追打', '对浮空目标伤害 +35%，下砸后再次小幅弹起', 'magfist');
   passive('grenade_cluster', '子母墨弹', '主爆炸后抛出 5 枚依次落地的小墨弹', 'inkgrenade');
@@ -77,7 +77,7 @@
 
   function cap(array, item, max) { if (array.length >= max) array.shift(); array.push(item); return item; }
   function fx(type, x, y, radius, color, duration, extra) {
-    return cap(S.fx, Object.assign({ type, x, y, r: radius, col: color || RED, t: duration, total: duration }, extra || {}), 56);
+    return cap(S.fx, Object.assign({ type, x, y, r: radius, col: color || INK, t: duration, total: duration }, extra || {}), 56);
   }
   function byId(id) { return enemies.find(e => e.id === id && !e.dead) || null; }
   function nearest(x, y, range, excluded) {
@@ -103,11 +103,12 @@
   function directDamage(e, amount, c, skill, x, y) {
     if (!e || e.dead) return;
     hurtEnemy(e, amount, amount * (c.dot || 0), x, y, c.vuln || 0, c.bcrit || 0, 0,
-      skill === 'heatrail' || skill === 'inkgrenade' ? RED : BLUE, false, skill);
+      c.col || attrOf(skill), false, skill);
   }
   function blast(x, y, radius, damage, c, skill, color) {
-    fx('blast', x, y, radius, color || RED, 0.42);
-    fx('crack', x, y, radius * 0.72, color || DARK_RED, 2.4);
+    const col = color || (c && c.col) || attrOf(skill);
+    fx('blast', x, y, radius, col, 0.42);
+    fx('crack', x, y, radius * 0.72, col, 2.4);
     shakeT = Math.max(shakeT, Math.min(0.18, radius / 700));
     hitStopT = Math.max(hitStopT, radius >= 100 ? 0.035 : 0.018);
     for (const e of enemies) if (!e.dead && Math.hypot(e.x - x, e.y - y) < radius + e.r) areaDamage(e, damage, c, skill, x, y);
@@ -139,9 +140,9 @@
         for (const eb of ebullets) if (Math.hypot(eb.x - slash.x, eb.y - slash.y) < slash.r) {
           eb.life = 0; if (hooks) hooks.onSlashCut(slash, eb);
         }
-        fx('slash', slash.x, slash.y, slash.r, BLUE, 0.48, { angle: slash.angle });
+        fx('slash', slash.x, slash.y, slash.r, slash.c.col, 0.48, { angle: slash.angle });
         if (has('slash_pull')) {
-          fx('slash', slash.x, slash.y, slash.r * 0.88, PURPLE, 0.42, { angle: slash.angle + Math.PI, reverse: true });
+          fx('slash', slash.x, slash.y, slash.r * 0.88, slash.c.col, 0.42, { angle: slash.angle + Math.PI, reverse: true });
           for (const e of enemies) if (!e.dead && Math.hypot(e.x - slash.x, e.y - slash.y) < slash.r * 0.9 + e.r)
             areaDamage(e, 18 * slash.c.dmg, slash.c, 'pageslash', slash.x, slash.y);
         }
@@ -149,7 +150,7 @@
       }
       if (slash.hit && !slash.echo && has('slash_echo') && slash.age >= 0.58) {
         slash.echo = true; blast(slash.x + Math.cos(slash.angle) * slash.r * 0.45, slash.y + Math.sin(slash.angle) * slash.r * 0.45,
-          slash.r * 0.75, 27.6 * slash.c.dmg, slash.c, 'pageslash', BLUE);
+          slash.r * 0.75, 27.6 * slash.c.dmg, slash.c, 'pageslash', slash.c.col);
       }
     }
     for (let i = S.slashes.length - 1; i >= 0; i--) if (S.slashes[i].age > 0.95) S.slashes.splice(i, 1);
@@ -185,7 +186,7 @@
     for (const d of S.dashes) {
       d.t += dt;
       if (d.phase === 'aim') {
-        if (d.t >= 0.18) { d.phase = 'out'; d.t = 0; fx('line', d.x0, d.y0, 0, RED, 0.3, { x2: d.x1, y2: d.y1 }); }
+        if (d.t >= 0.18) { d.phase = 'out'; d.t = 0; fx('line', d.x0, d.y0, 0, d.c.col, 0.3, { x2: d.x1, y2: d.y1 }); }
         continue;
       }
       const back = d.phase === 'back', duration = 0.24, p = Math.min(1, d.t / duration);
@@ -193,14 +194,14 @@
       const oldX = d.hx, oldY = d.hy;
       d.hx = sx + (ex - sx) * p; d.hy = sy + (ey - sy) * p;
       dashHits(d, oldX, oldY, d.hx, d.hy, back ? 0.6 : 1, back ? d.backHits : d.hits);
-      fx('spear', d.hx, d.hy, 25, back ? PURPLE : RED, 0.18, { angle: d.angle + (back ? Math.PI : 0) });
+      fx('spear', d.hx, d.hy, 25, d.c.col, 0.18, { angle: d.angle + (back ? Math.PI : 0) });
       if (p >= 1) {
         if (!back && !d.group.burst) {
           d.group.burst = true;
-          blast(d.crossX, d.crossY, 82 * d.c.rad, 16 * d.c.dmg, d.c, 'piercerush', RED);
-          fx('crosscut', d.crossX, d.crossY, 64 * d.c.rad, RED, 0.38, { angle: d.angle });
+          blast(d.crossX, d.crossY, 82 * d.c.rad, 16 * d.c.dmg, d.c, 'piercerush', d.c.col);
+          fx('crosscut', d.crossX, d.crossY, 64 * d.c.rad, d.c.col, 0.38, { angle: d.angle });
         }
-        if (!back && has('pierce_long')) blast(d.x1, d.y1, 76 * d.c.rad, 14 * d.c.dmg, d.c, 'piercerush', RED);
+        if (!back && has('pierce_long')) blast(d.x1, d.y1, 76 * d.c.rad, 14 * d.c.dmg, d.c, 'piercerush', d.c.col);
         if (window.__weaponPassives) window.__weaponPassives.onDashEnd(d, back);
         if (!back && has('pierce_return')) { d.phase = 'back'; d.t = 0; }
         else d.done = true;
@@ -209,16 +210,17 @@
     for (let i = S.dashes.length - 1; i >= 0; i--) if (S.dashes[i].done) S.dashes.splice(i, 1);
   }
 
-  function makeLance(x, y, c) {
+  function makeLance(x, y, c, targetId) {
     cap(S.lances, { id: S.nextId++, x, y, angle: Math.random() * Math.PI, t: 3.6 * c.areaT, tick: 0,
-      c, returning: false, hits: Object.create(null), damage: 16 * c.dmg * (has('spin_double') ? 0.75 : 1) }, 4);
+      c, targetId: targetId || 0, returning: false, hits: Object.create(null),
+      damage: 16 * c.dmg * (has('spin_double') ? 0.75 : 1) }, 4);
   }
   function fireSpinlance(a, c) {
     const target = nearest(player.x, player.y, 430);
     const angle = target ? Math.atan2(target.y - player.y, target.x - player.x) : player.faceA;
     const x = target ? target.x : player.x + Math.cos(angle) * 180, y = target ? target.y : player.y + Math.sin(angle) * 180;
-    makeLance(x, y, c);
-    if (has('spin_double')) makeLance(x + Math.cos(angle + Math.PI / 2) * 115, y + Math.sin(angle + Math.PI / 2) * 115, c);
+    makeLance(x, y, c, target && target.id);
+    if (has('spin_double')) makeLance(x + Math.cos(angle + Math.PI / 2) * 115, y + Math.sin(angle + Math.PI / 2) * 115, c, target && target.id);
     return true;
   }
   function updateLances(dt) {
@@ -228,10 +230,12 @@
         l.t -= dt; l.tick -= dt;
         if (l.tick <= 0) {
           l.tick += 0.36;
-          for (const e of enemies) if (!e.dead && Math.hypot(e.x - l.x, e.y - l.y) < 92 * l.c.rad + e.r)
+          for (const e of enemies) if (!e.dead && Math.hypot(e.x - l.x, e.y - l.y) < 92 * l.c.rad + e.r) {
+            e.spinSlowT = Math.max(e.spinSlowT || 0, 0.45);   // 冰旋枪范围内减速 20%
             areaDamage(e, l.damage, l.c, 'spinlance', l.x, l.y);
+          }
         }
-        if (l.t <= 0) {
+        if (l.t <= 0 || (l.targetId && !byId(l.targetId))) {
           l.returning = true;
           if (window.__weaponPassives) window.__weaponPassives.onLanceReturn(l);
         }
@@ -240,7 +244,7 @@
         l.x += Math.cos(angle) * 610 * dt; l.y += Math.sin(angle) * 610 * dt;
         for (const e of enemies) {
           if (e.dead || l.hits[e.id] || segmentDistance(e.x, e.y, oldX, oldY, l.x, l.y) > 35 + e.r) continue;
-          l.hits[e.id] = true; areaDamage(e, l.damage * 1.2, l.c, 'spinlance', oldX, oldY);
+          l.hits[e.id] = true; areaDamage(e, l.damage * 1.6, l.c, 'spinlance', oldX, oldY);
           if (has('spin_pull') && !e.boss) {
             const d = Math.hypot(player.x - e.x, player.y - e.y);
             if (d > 42) { e.x += (player.x - e.x) / d * Math.min(65, d - 42); e.y += (player.y - e.y) / d * Math.min(65, d - 42); }
@@ -258,7 +262,7 @@
     const target = nearest(player.x, player.y, 380);
     const angle = target ? Math.atan2(target.y - player.y, target.x - player.x) : player.faceA;
     S.shieldRush = { angle, t: 0, duration: 3.6, layers: 3, c, counters: 0, done: false };
-    fx('ring', player.x, player.y, 58, BLUE, 0.35);
+    fx('ring', player.x, player.y, 58, c.col, 0.35);
     return true;
   }
   function finishShieldRush(d) {
@@ -267,15 +271,16 @@
     const hooks = window.__weaponPassives;
     let raw = (14 + d.layers * 8) * d.c.dmg;
     if (has('shield_bash')) raw += (24 + d.layers * 6) * d.c.dmg;
+    raw *= 1 + Math.min(0.36, d.counters * 0.12);   // 每次真实格挡强化结束盾震，最多 +36%
     const damage = hooks ? hooks.modifyShieldBash(d, raw) : raw;
-    blast(player.x, player.y, (82 + d.layers * 18) * d.c.rad, damage, d.c, 'shieldrush', BLUE);
+    blast(player.x, player.y, (82 + d.layers * 18) * d.c.rad, damage, d.c, 'shieldrush', d.c.col);
     S.shieldRush = null;
   }
   function consumeShieldRush(d) {
     if (!d || d.done || d.layers <= 0) return;
     d.layers--; d.counters++;
-    blast(player.x, player.y, 76 * d.c.rad, 18 * d.c.dmg, d.c, 'shieldrush', BLUE);
-    fx('shieldbreak', player.x, player.y, 54, BLUE, 0.32, { layer: d.layers });
+    blast(player.x, player.y, 76 * d.c.rad, 18 * d.c.dmg, d.c, 'shieldrush', d.c.col);
+    fx('shieldbreak', player.x, player.y, 54, d.c.col, 0.32, { layer: d.layers });
     if (d.layers <= 0) finishShieldRush(d);
   }
   function updateShieldRush(dt) {
@@ -284,7 +289,7 @@
     d.t += dt;
     for (const eb of ebullets) {
       if (eb.life <= 0 || Math.hypot(eb.x - player.x, eb.y - player.y) > 76 + (eb.r || 0)) continue;
-      eb.life = 0; fx('ring', eb.x, eb.y, 28, BLUE, 0.2);
+      eb.life = 0; fx('ring', eb.x, eb.y, 28, d.c.col, 0.2);
       if (hooks) hooks.onShieldBlock(d, eb);
       if (has('shield_reflect')) {
         const dx = eb.x - player.x, dy = eb.y - player.y;
@@ -321,16 +326,22 @@
         shield.done = true;
         if (window.__weaponPassives) window.__weaponPassives.onShieldCatch(shield);
         if (has('ricoshield_catch')) {
-          blast(player.x, player.y, 105 * shield.c.rad, 20 * shield.c.dmg, shield.c, 'ricoshield', BLUE);
+          blast(player.x, player.y, 105 * shield.c.rad, 20 * shield.c.dmg, shield.c, 'ricoshield', shield.c.col);
           for (const a of player.actives) if (a.id === 'ricoshield') a.t = 0;
         }
       } else {
-        const damage = window.__weaponPassives ? window.__weaponPassives.modifyRicoDamage(shield, shield.damage) : shield.damage;
+        const repeat = target.id === shield.lastId;
+        const baseDamage = shield.damage * (repeat ? 0.45 : 1);   // 单目标也可继续回弹，重复命中递减
+        const damage = window.__weaponPassives ? window.__weaponPassives.modifyRicoDamage(shield, baseDamage) : baseDamage;
         directDamage(target, damage, shield.c, 'ricoshield', shield.x, shield.y);
         shield.lastId = target.id; shield.bounces++; shield.returning = shield.bounces >= 6;
-        const next = nearest(shield.x, shield.y, 460 * (1 + shield.c.lifeMul), target.id);
-        if (next) shield.targetId = next.id; else shield.returning = true;
-        fx('ring', shield.x, shield.y, 32 * (1 + shield.c.brad), BLUE, 0.2);
+        if (!shield.returning) {
+          const next = nearest(shield.x, shield.y, 460 * (1 + shield.c.lifeMul), target.id);
+          if (next) shield.targetId = next.id;
+          else if (!target.dead) shield.targetId = target.id;
+          else shield.returning = true;
+        }
+        fx('ring', shield.x, shield.y, 32 * (1 + shield.c.brad), shield.c.col, 0.2);
       }
     }
     for (let i = S.shields.length - 1; i >= 0; i--) if (S.shields[i].done) S.shields.splice(i, 1);
@@ -359,7 +370,7 @@
         spawnBolt({ kind: 'perfect', skill: 'perfectarrow', x: player.x, y: player.y, angle: charge.angle,
           speed: 1050 * charge.c.proj, damage: 72 * charge.c.dmg * (1 + charge.c.bdmg), c: charge.c,
           radius: 10 * charge.c.rad * (1 + charge.c.brad), life: 0.75 * (1 + charge.c.lifeMul), pierce: 99 });
-        fx('flash', player.x + Math.cos(charge.angle) * 35, player.y + Math.sin(charge.angle) * 35, 35, RED, 0.16);
+        fx('flash', player.x + Math.cos(charge.angle) * 35, player.y + Math.sin(charge.angle) * 35, 35, charge.c.col, 0.16);
         charge.done = true;
       }
     }
@@ -401,25 +412,25 @@
             e.x += dx / d * pull; e.y += dy / d * pull;
           }
         }
-        fx('magnet', fist.x, fist.y, 150 * fist.c.rad, PURPLE, 0.42);
+        fx('magnet', fist.x, fist.y, 150 * fist.c.rad, fist.c.col, 0.42);
       }
       if (!fist.upper && fist.age >= 0.28 && target) {
         fist.upper = true;
         areaDamage(target, 32 * fist.c.dmg * (target.boss ? 1.35 : 1), fist.c, 'magfist', fist.x, fist.y);
         if (!target.boss) { target.weaponAirT = target.weaponAirTotal = 0.82; target.weaponAirLift = 38; }
-        fx('upper', target.x, target.y, 64, PURPLE, 0.36);
+        fx('upper', target.x, target.y, 64, fist.c.col, 0.36);
       }
       if (!fist.slam && fist.age >= 0.64) {
         fist.slam = true;
         fist.slamX = target ? target.x : fist.x; fist.slamY = target ? target.y : fist.y;
         if (target) target.weaponAirT = 0;
-        blast(fist.slamX, fist.slamY, 110 * fist.c.rad, 43 * fist.c.dmg, fist.c, 'magfist', PURPLE);
+        blast(fist.slamX, fist.slamY, 110 * fist.c.rad, 43 * fist.c.dmg, fist.c, 'magfist', fist.c.col);
         if (target && has('fist_juggle') && !target.dead && !target.boss) {
           target.weaponAirT = target.weaponAirTotal = 0.48; target.weaponAirLift = 22;
         }
       }
       if (fist.slam && !fist.after && has('fist_aftershock') && fist.age >= 1.05) {
-        fist.after = true; blast(fist.slamX, fist.slamY, 135 * fist.c.rad, 21.5 * fist.c.dmg, fist.c, 'magfist', PURPLE);
+        fist.after = true; blast(fist.slamX, fist.slamY, 135 * fist.c.rad, 21.5 * fist.c.dmg, fist.c, 'magfist', fist.c.col);
       }
       if (fist.age > 1.25) fist.done = true;
     }
@@ -439,10 +450,11 @@
     return true;
   }
   function explodeGrenade(g) {
-    blast(g.x, g.y, g.radius, g.damage, g.c, 'inkgrenade', RED);
+    blast(g.x, g.y, g.radius, g.damage, g.c, 'inkgrenade', g.c.col);
     if (g.main && has('grenade_cluster')) {
-      for (let i = 0; i < 5; i++) {
-        const angle = i / 5 * Math.PI * 2;
+      const count = g.formSplit ? 3 : 5;
+      for (let i = 0; i < count; i++) {
+        const angle = i / count * Math.PI * 2;
         cap(S.grenades, { id: S.nextId++, sx: g.x, sy: g.y, x: g.x, y: g.y, z: 0,
           tx: g.x + Math.cos(angle) * 105, ty: g.y + Math.sin(angle) * 105, targetId: 0,
           age: 0, duration: 0.32 + i * 0.07, radius: 46 * g.c.rad, damage: 19 * g.c.dmg, c: g.c, main: false }, 18);
@@ -488,12 +500,12 @@
       if (has('rail_double') && rail.shots % 5 === 0) {
         railShot(rail, rail.angle - 0.18, 6.5, 'rail'); railShot(rail, rail.angle + 0.18, 6.5, 'rail');
       }
-      fx('muzzle', player.x + Math.cos(rail.angle) * 24, player.y + Math.sin(rail.angle) * 24, 22, RED, 0.12);
+      fx('muzzle', player.x + Math.cos(rail.angle) * 24, player.y + Math.sin(rail.angle) * 24, 22, rail.c.col, 0.12);
     }
     player.weaponHeat = rail.heat;
     if (rail.shots >= 12 && rail.age >= 1.12) {
       railShot(rail, rail.angle, 44 * (1 + rail.heat), 'final');
-      fx('flash', player.x + Math.cos(rail.angle) * 30, player.y + Math.sin(rail.angle) * 30, 45, RED, 0.2);
+      fx('flash', player.x + Math.cos(rail.angle) * 30, player.y + Math.sin(rail.angle) * 30, 45, rail.c.col, 0.2);
       player.weaponHeat = 0; S.rail = null;
     }
   }
@@ -519,7 +531,7 @@
           if (has('perfect_tail') && !b.tailDone) {
             b.tailDone = true;
             const tx = e.x + Math.cos(b.angle) * 48, ty = e.y + Math.sin(b.angle) * 48;
-            fx('line', e.x, e.y, 0, RED, 0.35, { x2: tx, y2: ty });
+            fx('line', e.x, e.y, 0, b.c.col, 0.35, { x2: tx, y2: ty });
             for (const other of enemies) if (!other.dead && segmentDistance(other.x, other.y, e.x, e.y, tx, ty) < 28 + other.r)
               directDamage(other, 24 * b.c.dmg, b.c, 'perfectarrow', e.x, e.y);
           }
@@ -529,12 +541,12 @@
               angle: b.angle + side * 0.62, speed: 760, damage: 24 * b.c.dmg, c: b.c, radius: 6, life: 0.65, pierce: 1 });
           }
         } else if (b.kind === 'focus') {
-          e.weaponMarkHits = (e.weaponMarkHits || 0) + 1; e.weaponMarkT = 2;
+          e.weaponMarkHits = (e.weaponMarkHits || 0) + 1; e.weaponMarkT = 2; e.weaponMarkC = b.c.col;
           if (has('focus_burst') && e.weaponMarkHits >= 6) {
-            e.weaponMarkHits = 0; blast(e.x, e.y, 72 * b.c.rad, 34 * b.c.dmg, b.c, 'arrowfocus', RED);
+            e.weaponMarkHits = 0; blast(e.x, e.y, 72 * b.c.rad, 34 * b.c.dmg, b.c, 'arrowfocus', b.c.col);
           }
         } else if (b.kind === 'final' && has('rail_final') && !b.exploded) {
-          b.exploded = true; blast(b.x, b.y, 65 + 85 * b.heat, 32 * b.heat * b.c.dmg, b.c, 'heatrail', RED);
+          b.exploded = true; blast(b.x, b.y, 65 + 85 * b.heat, 32 * b.heat * b.c.dmg, b.c, 'heatrail', b.c.col);
         }
         if (b.pierce > 0) b.pierce--; else { b.life = 0; break; }
       }
@@ -641,115 +653,129 @@
   }
   function drawSlashes() {
     for (const s of S.slashes) if (!s.hit) {
+      const sc = s.c.col || attrOf('pageslash');
       const p = Math.min(1, s.age / 0.18); ctx.globalAlpha = 0.18 + p * 0.35;
       ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.arc(s.x, s.y, s.r, s.angle - Math.PI * 2 / 3, s.angle + Math.PI * 2 / 3); ctx.closePath();
-      ctx.fillStyle = BLUE; ctx.fill(); ctx.globalAlpha = 0.8; jcircle(s.x, s.y, s.r * p, BLUE, 2);
+      ctx.fillStyle = sc; ctx.fill(); ctx.globalAlpha = 0.8; jcircle(s.x, s.y, s.r * p, sc, 2);
     }
     ctx.globalAlpha = 1;
   }
   function drawDashes() {
     for (const d of S.dashes) {
+      const dc = d.c.col || attrOf('piercerush');
       if (d.phase === 'aim') {
-        ctx.globalAlpha = 0.4 + Math.min(0.5, d.t * 3); line(d.x0, d.y0, d.x1, d.y1, RED, 2 + d.t * 12);
-        line(d.x0, d.y0, d.x0 + (d.x1 - d.x0) * Math.min(1, d.t / 0.18), d.y0 + (d.y1 - d.y0) * Math.min(1, d.t / 0.18), RED, 5);
-        if (d.side < 0) { const r = 13 + d.t * 25; line(d.crossX - r, d.crossY - r, d.crossX + r, d.crossY + r, RED, 3); line(d.crossX + r, d.crossY - r, d.crossX - r, d.crossY + r, RED, 3); }
+        ctx.globalAlpha = 0.4 + Math.min(0.5, d.t * 3); line(d.x0, d.y0, d.x1, d.y1, dc, 2 + d.t * 12);
+        line(d.x0, d.y0, d.x0 + (d.x1 - d.x0) * Math.min(1, d.t / 0.18), d.y0 + (d.y1 - d.y0) * Math.min(1, d.t / 0.18), dc, 5);
+        if (d.side < 0) { const r = 13 + d.t * 25; line(d.crossX - r, d.crossY - r, d.crossX + r, d.crossY + r, dc, 3); line(d.crossX + r, d.crossY - r, d.crossX - r, d.crossY + r, dc, 3); }
       } else {
         const sx = d.phase === 'back' ? d.x1 : d.x0, sy = d.phase === 'back' ? d.y1 : d.y0;
-        ctx.globalAlpha = 0.55; line(sx, sy, d.hx, d.hy, d.phase === 'back' ? PURPLE : RED, 5);
+        ctx.globalAlpha = 0.55; line(sx, sy, d.hx, d.hy, dc, 5);
       }
     }
     ctx.globalAlpha = 1;
   }
   function drawLances() {
     for (const l of S.lances) {
-      const c = Math.cos(l.angle), s = Math.sin(l.angle);
-      ctx.globalAlpha = l.returning ? 0.9 : 0.35; jcircle(l.x, l.y, 92 * l.c.rad, BLUE, 2);
-      ctx.globalAlpha = 1; line(l.x - c * 65, l.y - s * 65, l.x + c * 65, l.y + s * 65, BLUE, 6);
-      line(l.x + c * 65, l.y + s * 65, l.x + c * 48 - s * 9, l.y + s * 48 + c * 9, RED, 3);
-      line(l.x + c * 65, l.y + s * 65, l.x + c * 48 + s * 9, l.y + s * 48 - c * 9, RED, 3);
+      const c = Math.cos(l.angle), s = Math.sin(l.angle), lc = l.c.col || attrOf('spinlance');
+      ctx.globalAlpha = l.returning ? 0.9 : 0.35; jcircle(l.x, l.y, 92 * l.c.rad, lc, 2);
+      ctx.globalAlpha = 1; line(l.x - c * 65, l.y - s * 65, l.x + c * 65, l.y + s * 65, lc, 6);
+      line(l.x + c * 65, l.y + s * 65, l.x + c * 48 - s * 9, l.y + s * 48 + c * 9, ICE_LIGHT, 3);
+      line(l.x + c * 65, l.y + s * 65, l.x + c * 48 + s * 9, l.y + s * 48 - c * 9, ICE_LIGHT, 3);
+      drawIceCrystal(l.x, l.y, 25, l.angle * 0.45, 0.9);
+      for (let i = 0; i < 4; i++) {
+        const a = l.angle * 0.35 + i * Math.PI / 2;
+        drawIceCrystal(l.x + Math.cos(a) * 76 * l.c.rad, l.y + Math.sin(a) * 76 * l.c.rad, 8, a, 0.7);
+      }
     }
     ctx.globalAlpha = 1;
   }
   function drawShieldRush() {
     const d = S.shieldRush; if (!d) return;
+    const dc = d.c.col || attrOf('shieldrush');
     ctx.globalAlpha = d.t > d.duration - 0.6 ? 0.5 + Math.sin(d.t * 28) * 0.3 : 0.9;
     ctx.beginPath(); ctx.arc(player.x, player.y, 52, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - d.t / d.duration));
-    ctx.strokeStyle = BLUE; ctx.lineWidth = 2; ctx.stroke();
+    ctx.strokeStyle = dc; ctx.lineWidth = 2; ctx.stroke();
     for (let i = 0; i < d.layers; i++) {
       const a = d.angle + d.t * 0.55 + (i - (d.layers - 1) / 2) * 0.9;
       const x = player.x + Math.cos(a) * 48, y = player.y + Math.sin(a) * 48;
       const c = Math.cos(a), s = Math.sin(a), nx = -s, ny = c;
-      polygon([[x + c * 13, y + s * 13], [x + nx * 11, y + ny * 11], [x - c * 15, y - s * 15], [x - nx * 11, y - ny * 11]], BLUE, 5);
-      line(x - c * 7, y - s * 7, x + c * 7, y + s * 7, BLUE, 2);
+      polygon([[x + c * 13, y + s * 13], [x + nx * 11, y + ny * 11], [x - c * 15, y - s * 15], [x - nx * 11, y - ny * 11]], dc, 5);
+      line(x - c * 7, y - s * 7, x + c * 7, y + s * 7, dc, 2);
     }
     ctx.globalAlpha = 1;
   }
   function drawShields() {
     for (const s of S.shields) {
-      line(s.px, s.py, s.x, s.y, BLUE, 7);
+      const sc = s.c.col || attrOf('ricoshield');
+      line(s.px, s.py, s.x, s.y, sc, 7);
       const points = [];
       for (let i = 0; i < 3; i++) { const a = s.angle + i / 3 * Math.PI * 2; points.push([s.x + Math.cos(a) * 17, s.y + Math.sin(a) * 17]); }
-      polygon(points, BLUE, 4); jcircle(s.x, s.y, 5, RED, 2);
+      polygon(points, sc, 4); jcircle(s.x, s.y, 5, ICE_LIGHT, 2);
+      drawIceCrystal(s.x, s.y, 23, s.angle * 0.5, 0.8);
     }
   }
   function drawCharges() {
     for (const charge of S.charges) {
+      const cc = charge.c.col || attrOf('perfectarrow');
       const p = Math.min(1, charge.age / 0.58), c = Math.cos(charge.angle), s = Math.sin(charge.angle);
-      ctx.globalAlpha = 0.35 + p * 0.6; line(player.x, player.y, player.x + c * 520, player.y + s * 520, RED, 1 + p * 3);
-      ctx.beginPath(); ctx.arc(player.x, player.y, 25, charge.angle - 1.2, charge.angle + 1.2); ctx.strokeStyle = RED; ctx.lineWidth = 3; ctx.stroke();
-      line(player.x - s * 22, player.y + c * 22, player.x + c * (35 - p * 20), player.y + s * (35 - p * 20), RED, 2);
-      if (p > 0.65) jcircle(player.x + c * 35, player.y + s * 35, 8 + p * 5, RED, 3);
+      ctx.globalAlpha = 0.35 + p * 0.6; line(player.x, player.y, player.x + c * 520, player.y + s * 520, cc, 1 + p * 3);
+      ctx.beginPath(); ctx.arc(player.x, player.y, 25, charge.angle - 1.2, charge.angle + 1.2); ctx.strokeStyle = cc; ctx.lineWidth = 3; ctx.stroke();
+      line(player.x - s * 22, player.y + c * 22, player.x + c * (35 - p * 20), player.y + s * (35 - p * 20), cc, 2);
+      if (p > 0.65) { jcircle(player.x + c * 35, player.y + s * 35, 8 + p * 5, ICE_LIGHT, 3); drawIceCrystal(player.x + c * 35, player.y + s * 35, 13, charge.age * 3, p); }
     }
     ctx.globalAlpha = 1;
   }
   function drawBolts() {
     for (const b of S.bolts) {
+      const color = b.c.col || attrOf(b.skill);
       if (b.delay > 0) {
         const count = 8 + (has('focus_more') ? 4 : 0), spread = 45 + count * 2, a = -Math.PI + b.hoverIndex / Math.max(1, count - 1) * Math.PI;
         const x = player.x + Math.cos(a) * spread, y = player.y - 35 + Math.sin(a) * 28;
         const target = byId(b.targetId), ang = target ? Math.atan2(target.y - y, target.x - x) : 0;
-        line(x - Math.cos(ang) * 9, y - Math.sin(ang) * 9, x + Math.cos(ang) * 9, y + Math.sin(ang) * 9, RED, 2.5); continue;
+        line(x - Math.cos(ang) * 9, y - Math.sin(ang) * 9, x + Math.cos(ang) * 9, y + Math.sin(ang) * 9, color, 2.5); continue;
       }
-      const color = b.kind === 'focus' ? RED : (b.kind === 'final' ? DARK_RED : (b.skill === 'heatrail' ? RED : BLUE));
       const length = b.kind === 'perfect' ? 38 : (b.kind === 'final' ? 34 : 15);
       line(b.x - Math.cos(b.angle) * length, b.y - Math.sin(b.angle) * length, b.x, b.y, color, b.kind === 'final' ? 9 : (b.kind === 'perfect' ? 5 : 2.5));
       if (b.kind === 'perfect' || b.kind === 'final') jcircle(b.x, b.y, b.radius, color, 2.5);
+      if (b.skill === 'perfectarrow') drawIceCrystal(b.x, b.y, b.kind === 'perfect' ? 15 : 8, b.angle, 0.85);
     }
   }
   function drawFists() {
     for (const f of S.fists) {
-      const target = byId(f.targetId);
+      const fc = f.c.col || attrOf('magfist'), target = byId(f.targetId);
       if (f.age < 0.28) {
-        ctx.globalAlpha = 0.45; jcircle(f.x, f.y, 150 * f.c.rad * (1 - f.age / 0.34), PURPLE, 3);
+        ctx.globalAlpha = 0.45; jcircle(f.x, f.y, 150 * f.c.rad * (1 - f.age / 0.34), fc, 3);
         for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2 + f.age * 4; line(f.x + Math.cos(a) * 95,
-          f.y + Math.sin(a) * 95, f.x + Math.cos(a) * 42, f.y + Math.sin(a) * 42, PURPLE, 3); }
+          f.y + Math.sin(a) * 95, f.x + Math.cos(a) * 42, f.y + Math.sin(a) * 42, fc, 3); }
       }
-      if (target && f.upper && !f.slam) { ctx.globalAlpha = 0.8; jcircle(target.x, target.y - 28, 22, PURPLE, 6); }
+      if (target && f.upper && !f.slam) { ctx.globalAlpha = 0.8; jcircle(target.x, target.y - 28, 22, fc, 6); }
     }
     ctx.globalAlpha = 1;
   }
   function drawGrenades() {
     for (const g of S.grenades) {
+      const gc = g.c.col || attrOf('inkgrenade');
       const p = Math.min(1, g.age / g.duration);
-      ctx.globalAlpha = 0.2 + p * 0.45; jcircle(g.tx, g.ty, g.radius * (1 - p * 0.45), RED, 3);
-      ctx.globalAlpha = 1; jcircle(g.x, g.y - g.z, g.main ? 12 : 6, DARK_RED, g.main ? 5 : 3);
-      line(g.x, g.y - g.z, g.x, g.y, DARK_RED, 1.5);
-      if (g.main) { line(g.x - 5, g.y - g.z - 10, g.x + 5, g.y - g.z - 16, RED, 2); }
+      ctx.globalAlpha = 0.2 + p * 0.45; jcircle(g.tx, g.ty, g.radius * (1 - p * 0.45), gc, 3);
+      ctx.globalAlpha = 1; jcircle(g.x, g.y - g.z, g.main ? 12 : 6, gc, g.main ? 5 : 3);
+      line(g.x, g.y - g.z, g.x, g.y, gc, 1.5);
+      if (g.main) { line(g.x - 5, g.y - g.z - 10, g.x + 5, g.y - g.z - 16, PAPER, 2); }
     }
     ctx.globalAlpha = 1;
   }
   function drawRail() {
     const r = S.rail; if (!r) return;
-    const c = Math.cos(r.angle), s = Math.sin(r.angle);
-    line(player.x, player.y - 5, player.x + c * 34, player.y + s * 34 - 5, r.heat > 0.65 ? RED : BLUE, 7);
-    ctx.globalAlpha = r.heat * 0.5; jcircle(player.x + c * 28, player.y + s * 28 - 5, 9 + r.heat * 10, RED, 3); ctx.globalAlpha = 1;
+    const rc = r.c.col || attrOf('heatrail'), c = Math.cos(r.angle), s = Math.sin(r.angle);
+    line(player.x, player.y - 5, player.x + c * 34, player.y + s * 34 - 5, rc, 7);
+    ctx.globalAlpha = r.heat * 0.5; jcircle(player.x + c * 28, player.y + s * 28 - 5, 9 + r.heat * 10, rc, 3); ctx.globalAlpha = 1;
   }
   function drawMarks() {
     for (const e of enemies) {
       if (e.dead || !(e.weaponMarkT > 0)) continue;
+      const mc = e.weaponMarkC || attrOf('arrowfocus');
       const y = e.y - e.r - 19, hits = Math.min(6, e.weaponMarkHits || 0);
-      jcircle(e.x, y, 11, RED, 2); line(e.x - 8, y - 8, e.x + 8, y + 8, RED, 2); line(e.x + 8, y - 8, e.x - 8, y + 8, RED, 2);
-      for (let i = 0; i < hits; i++) line(e.x - 9 + i * 3.5, y + 13, e.x - 7 + i * 3.5, y + 17, RED, 2);
+      jcircle(e.x, y, 11, mc, 2); line(e.x - 8, y - 8, e.x + 8, y + 8, mc, 2); line(e.x + 8, y - 8, e.x - 8, y + 8, mc, 2);
+      for (let i = 0; i < hits; i++) line(e.x - 9 + i * 3.5, y + 13, e.x - 7 + i * 3.5, y + 17, mc, 2);
     }
   }
   function draw() {

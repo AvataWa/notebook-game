@@ -44,7 +44,7 @@ const BATTLE = typeof BATTLE_CONFIG !== 'undefined' ? BATTLE_CONFIG : {
     trailFreshCharge: 0.003, trailCoverCharge: 0.005, trailChargePerSecond: 6,
     captureCellDivisor: 180, captureSingleCap: 2, captureInkPerSecond: 2
   },
-  dive: { ownCost: 12, otherCost: 36, speed: 1.55 },
+  dive: { ownCost: 12, otherCost: 36, speed: 1.55, offOwnSpeed: 0.2 },
   absorb: { duration: 0.35, ownDuration: 0.4, cooldown: 1.2, successCooldown: 0.5, radius: 65, ownRadius: 100, maxGain: 12, bulletInk: 3, meleeInk: 8, charge: 20, hitStop: 0.3, slowScale: 0.15, meleeRadius: 120, meleeDamage: 27.5 },
   surge: { radius: 168, chargeTime: 1.2, minScale: 0.6, maxScale: 1.2, damage: 55, visual: 0.35 },
   skills: { closeRadius: 125, colaRadius: 150, vortexCap: 6, vortexPerCast: 2, vortexDuration: 5, projectileSize: 1.2, ballistaBulletSpeed: 620 },
@@ -110,6 +110,26 @@ function jrect(x, y, w, h, color, lw) {
   jline(x, y, x + w, y, color, lw); jline(x + w, y, x + w, y + h, color, lw);
   jline(x + w, y + h, x, y + h, color, lw); jline(x, y + h, x, y, color, lw);
 }
+// 冰系统一符号：六向手绘冰晶 + 分叉 + 浅蓝高光，不再只靠换颜色区分。
+function drawIceCrystal(x, y, r, angle = 0, alpha = 1) {
+  if (r <= 0 || alpha <= 0) return;
+  const oldAlpha = ctx.globalAlpha;
+  ctx.globalAlpha = oldAlpha * alpha;
+  for (let i = 0; i < 6; i++) {
+    const a = angle + i * Math.PI / 3, c = Math.cos(a), s = Math.sin(a);
+    const ex = x + c * r, ey = y + s * r;
+    jline(x, y, ex, ey, ICE_DARK, Math.max(1.2, r * 0.11));
+    jline(x + c * r * 0.18, y + s * r * 0.18, ex, ey, ICE_LIGHT, Math.max(0.8, r * 0.055));
+    for (const side of [-1, 1]) {
+      const ba = a + Math.PI + side * Math.PI / 4;
+      jline(x + c * r * 0.62, y + s * r * 0.62,
+        x + c * r * 0.62 + Math.cos(ba) * r * 0.3,
+        y + s * r * 0.62 + Math.sin(ba) * r * 0.3, ATTR_COLOR.ice, Math.max(1, r * 0.07));
+    }
+  }
+  jcircle(x, y, Math.max(2, r * 0.2), ICE_LIGHT, Math.max(1, r * 0.07));
+  ctx.globalAlpha = oldAlpha;
+}
 function scribbleFill(x, y, w, h, color) {
   ctx.strokeStyle = color; ctx.lineWidth = 1.3; ctx.beginPath();
   for (let yy = y + 2; yy < y + h - 1; yy += 3.2) {
@@ -134,21 +154,21 @@ const SKILL_DEFS = {
   cyclone:  { name: '旋转蜡笔',   desc: '蜡笔环绕切割身边敌人' },
   volcanic: { name: '火山压痕',   desc: '重击纸面，裂缝朝最近的怪物连续喷发' },
   tornado:  { name: '分叉纸飞机', desc: '纸飞机命中后向四周分裂' },
-  chainclip:{ name: '链条回形针', desc: '回形针在敌人之间连锁弹跳' },
+  chainclip:{ name: '链条回形针', desc: '连锁弹跳；无新目标时以 45% 伤害续击原目标' },
   arc:      { name: '电弧荧光笔', desc: '闪电在敌群间自动连锁' },
-  spark:    { name: '慢速墨滴',   desc: '喷出一圈慢速墨滴，撞到纸边会反弹' },
-  ballista: { name: '图钉炮台',   desc: '钉下炮台自动射击周围敌人' },
-  boomerang:{ name: '回力橡皮擦', desc: '掷出橡皮擦，飞出去再旋回来' },
+  spark:    { name: '慢速墨滴',   desc: '前两颗瞄准敌人；反弹后增伤 50% 并弱追踪' },
+  ballista: { name: '图钉炮台',   desc: '自动射击；集火同一目标时逐发加速' },
+  boomerang:{ name: '回力橡皮擦', desc: '返程伤害 +35%；接回后当前冷却 -35%' },
   vortex:   { name: '涂改带刀阵', desc: '六枚碎片组成连续整圈刀阵，越叠越多' },
-  candle:   { name: '蜡烛头',     desc: '头顶点起蜡烛，持续灼烧周围敌人' },
-  icespear: { name: '冰锥图钉',   desc: '射出贯穿冰锥，命中减速' },
+  candle:   { name: '蜡烛头',     desc: '持续灼烧周围敌人，单圈伤害提升' },
+  icespear: { name: '冰锥图钉',   desc: '优先 Boss/精英；对减速目标伤害 +25%' },
   inkrain:  { name: '毒墨雨',     desc: '召唤数片毒墨云，持续淋伤下方敌人' },
   ruler:    { name: '裂地直尺',   desc: '直尺劈落，地刺成排刺出并余震' },
-  chalk:    { name: '流星粉笔头', desc: '粉笔头从天而降，砸出大坑' },
+  chalk:    { name: '流星粉笔头', desc: '0.45 秒快速落下，末段修正落点并砸出大坑' },
   pinburst: { name: '蜂群大头钉', desc: '扇形射出一把大头钉，钉尖爆裂' },
-  absolve:  { name: '赦免粉笔',   desc: '光柱劈最强的敌人，劈死则化为己方小鬼' },
-  brand:    { name: '橡皮筋烙印', desc: '给敌人套上橡皮筋，持续电击并弹向周围' },
-  cola:     { name: '冰可乐新星', desc: '冰可乐炸开，冻慢身边一圈敌人' }
+  absolve:  { name: '赦免粉笔',   desc: '标记最强敌人 3 秒，期间击杀转化为己方小鬼' },
+  brand:    { name: '橡皮筋烙印', desc: '持续电击并连锁；每跳伤害 +8%，最多 +40%' },
+  cola:     { name: '冰可乐新星', desc: '冻慢周围敌人；命中已减速目标追加碎冰' }
 };
 const SKILL_EVOLUTIONS = {
   cyclone:  { 3: '质变：增加反向旋转的外圈笔迹', 5: '觉醒：三重蜡笔风暴，范围和频率提升' },
@@ -170,18 +190,20 @@ const SKILL_TAGS = {
   ruler: ['area', 'strike'], chalk: ['area'], pinburst: ['proj'], absolve: ['strike'],
   brand: ['area'], cola: ['area']
 };
-/* 技能属性：phys 物理灰 / fire 火橙 / ice 冰浅蓝 / thunder 雷蓝紫 */
+/* 技能属性：物理=打击/武器，火=爆炸/持续区域，冰=控制/贯穿/回旋，雷=连锁/分裂/追踪/印记 */
 const SKILL_ATTR = {
   cyclone: 'phys', ballista: 'phys', vortex: 'phys', ruler: 'phys',
   volcanic: 'fire', candle: 'fire', chalk: 'fire', inkrain: 'fire', pinburst: 'fire',
-  tornado: 'ice', spark: 'ice', boomerang: 'ice', icespear: 'ice', cola: 'ice',
+  tornado: 'thunder', spark: 'ice', boomerang: 'ice', icespear: 'ice', cola: 'ice',
   chainclip: 'thunder', arc: 'thunder', absolve: 'thunder', brand: 'thunder'
 };
-const ATTR_COLOR = { phys: '#6b6b6b', fire: '#e67e22', ice: '#7ec8e3', thunder: '#5b5bd6' };
+const ATTR_COLOR = { phys: '#554361', fire: '#D99A36', ice: '#3f9fca', thunder: '#5b5bd6' };
+const PHYS_TRAIL = '#4a3958';
+const ICE_LIGHT = '#c9f2ff', ICE_DARK = '#286d9b';
 const ATTR_NAME = { phys: '物理', fire: '火', ice: '冰', thunder: '雷' };
 const TAG_NAME = { proj: '子弹', area: '范围', strike: '打击' };
 function attrOf(aid) { return ATTR_COLOR[SKILL_ATTR[aid]] || INK; }
-function trailColorOf(aid) { return SKILL_ATTR[aid] === 'phys' ? INK : attrOf(aid); }
+function trailColorOf(aid) { return SKILL_ATTR[aid] === 'phys' ? PHYS_TRAIL : attrOf(aid); }
 
 const SUPPORTS = {
   // tag: all=全部 / proj=子弹 / area=范围 / strike=打击；skills=额外白名单（可选）
@@ -398,7 +420,7 @@ let player, enemies, bullets, ebullets, drops, floats, lightnings, erupts, minio
 let spawnAcc, nextId, bossStageSpawned, curStage, nextHordeT, hordeIndex, killChain, killChainT, enemyTrailT;
 let gestureDraw, pendingGesture, redrawOutlines, gestureNoticeT, drawMode, drawModeT;
 let inkSurgePainting;
-const HOSTILE_INK = '#70645e';
+const HOSTILE_INK = '#9a8872'; // 浅暖灰褐，与灰深紫物理技能保持明度和色相差
 /* ---------- 固定墨迹场：网格既负责显示也负责判定，不保存历史墨团对象 ---------- */
 const INK_CELL = 2, INK_GW = Math.ceil(WORLD_W / INK_CELL), INK_GH = Math.ceil(WORLD_H / INK_CELL);
 const INK_COUNT = INK_GW * INK_GH;
@@ -412,7 +434,7 @@ const inkCutChecks = new Set(), inkOrphanCells = new Set(), inkOrphanCounts = ne
 const inkVisit = new Uint32Array(INK_COUNT), inkSearchQueue = new Int32Array(INK_COUNT);
 let inkVisitStamp = 0;
 let inkPaintedCount = 0, inkFriendlyColor = INK, inkFriendlyRgb = [26, 43, 143];
-const inkHostileRgb = [112, 100, 94];
+const inkHostileRgb = [154, 136, 114];
 function makeInkLayer() {
   if (typeof document.createElement !== 'function') return { canvas: null, ctx: null, image: null };
   const layer = document.createElement('canvas'); layer.width = INK_GW; layer.height = INK_GH;
@@ -445,7 +467,15 @@ function syncInkPixel(i) {
     const d = hostileInkLayer.image.data;
     if (owner === 2) {
       const orphan = inkCutDeadline[i] > 0;
-      d[p] = orphan ? 154 : inkHostileRgb[0]; d[p + 1] = orphan ? 143 : inkHostileRgb[1]; d[p + 2] = orphan ? 133 : inkHostileRgb[2]; d[p + 3] = 255;
+      // 固定稀疏噪点：明暗颗粒中混入纸白点，不闪动、不影响碰撞与覆盖判定
+      const hash = (Math.imul(i, 1664525) + 1013904223) >>> 0;
+      const paperFleck = hash % 29 === 0;
+      const grain = paperFleck ? 0 : (hash % 11 === 0 ? -46 : (hash % 17 === 0 ? 32 : 0));
+      const r = paperFleck ? 245 : (orphan ? 154 : inkHostileRgb[0]) + grain;
+      const g = paperFleck ? 241 : (orphan ? 143 : inkHostileRgb[1]) + grain;
+      const b = paperFleck ? 230 : (orphan ? 133 : inkHostileRgb[2]) + grain;
+      d[p] = Math.max(0, Math.min(255, r)); d[p + 1] = Math.max(0, Math.min(255, g));
+      d[p + 2] = Math.max(0, Math.min(255, b)); d[p + 3] = 255;
     } else d[p + 3] = 0;
   }
 }
@@ -759,6 +789,7 @@ function resetGame() {
     captureInkBudget: BATTLE.ink.captureInkPerSecond,
     absorbT: 0, absorbDuration: ABSORB_RULE.duration, absorbRadius: ABSORB_RULE.radius, absorbCd: 0, absorbGain: 0, absorbHeal: 0, absorbInkUsed: false,
     diveT: 0, diveCd: 0, diveSpent: 0, diveFreeT: 0, diveEntryT: 0, diveDecoyT: 0, diveWashT: 0, diveBurstT: 0, diveShieldCd: 0, diveChargeAcc: 0,
+    diveStartCdT: 0, diveWashProcT: 0, diveDashDamageT: 0, diveEchoDist: 0, diveEchoStacks: 0, bulletInkProcT: 0,
     exitShieldT: 0, parryShieldT: 0, itemAmbushT: 0, itemSurgeT: 0, itemParryT: 0, itemArmorCd: 0,
     itemInkCd: 0, itemInkCdT: 0, itemBurstN: 0, itemBurstT: 0, itemRerolls: 0, moveT: 0, stillT: 0,
     level: 1, xp: 0, xpNext: xpForNextLevel(1), xpMul: 1, ink: BATTLE.player.maxInk, maxInk: BATTLE.player.maxInk, bonusHp: 0,
@@ -1208,6 +1239,13 @@ function xpForNextLevel(level) {
 function killEnemy(e) {
   if (e.dead) return;
   e.dead = true; kills++;
+  // 赦免粉笔：命中后三秒内由任意来源击杀都可转化，不再要求光柱抢最后一击
+  if (!e.boss && e.absolveUntil >= gameTime && e.absolveC) {
+    const c = e.absolveC;
+    minions.push({ x: e.x, y: e.y, t: 8 * c.areaT, atkCd: 0, dmg: 9 * c.dmg, dot: c.dot,
+      walk: 0, rad: c.rad, vuln: c.vuln, ghost: true, c });
+    novas.push({ x: e.x, y: e.y, t: 0.35, max: 55 * c.rad, col: c.col, c });
+  }
   killChain++; killChainT = 1.25;
   if (killChain === 10 || killChain === 25 || killChain === 50 || killChain === 100) toast(killChain + ' 连擦！');
   if (killChain % 10 === 0) shakeT = Math.max(shakeT, 0.09);
@@ -1380,14 +1418,23 @@ function convertGrayDisk(x, y, radius) {
 }
 function enterDive() {
   player.diving = true; player.diveT = 0; player.diveSpent = 0; player.diveEntryT = 0.6;
+  player.diveEchoDist = 0; player.diveEchoStacks = 0;
   player.lastSeenX = player.x; player.lastSeenY = player.y;
+  if (hasAffix('dive', 'divepaint') && gameTime >= player.diveStartCdT) {
+    player.diveStartCdT = gameTime + 2;
+    for (const a of player.actives) a.t = Math.max(0, a.t - 0.35);
+    floats.push({ x: player.x, y: player.y - 30, txt: '起笔 -0.35 秒', t: 0.65, color: inkFriendlyColor });
+  }
   if (hasAffix('dive', 'freeentry') && gameTime >= player.diveFreeT) { player.diveFreeT = gameTime + 4; player.diveEntryFreeT = 0.45; }
   else player.diveEntryFreeT = 0;
   if (hasAffix('dive', 'decoy') && gameTime >= player.diveDecoyT) {
     player.diveDecoyT = gameTime + 4; diveDecoys.push({ x: player.x, y: player.y, t: 1.5 });
   }
   if (hasAffix('dive', 'entrywash') && gameTime >= player.diveWashT) {
-    player.diveWashT = gameTime + 2; convertGrayDisk(player.x, player.y, 35 * player.radMul);
+    player.diveWashT = gameTime + 2;
+    const covered = convertGrayDisk(player.x, player.y, 65 * player.radMul);
+    chargeTurf(5); if (covered) chargeTurf(10);
+    novas.push({ x: player.x, y: player.y, t: 0.25, max: 65 * player.radMul, col: inkFriendlyColor });
   }
   toast('潜墨：无敌位移 · 当前耗墨 ' + diveInkCost().toFixed(1) + '/秒');
 }
@@ -1407,6 +1454,14 @@ function exitDive() {
       if (!e.dead) { e.kbx *= 2.5; e.kby *= 2.5; e.stunT = Math.max(e.stunT || 0, e.boss ? 0.1 : 0.3); }
     }
   }
+  if (hasAffix('dive', 'widetrail') && player.diveEchoStacks > 0) {
+    const stacks = Math.min(4, player.diveEchoStacks), echoRadius = 90 * player.radMul;
+    novas.push({ x: ox, y: oy, t: 0.3, max: echoRadius, col: inkFriendlyColor });
+    floats.push({ x: ox, y: oy - 34, txt: '墨路回响 ×' + stacks, t: 0.7, color: inkFriendlyColor, crit: stacks === 4 });
+    for (const e of enemies) if (!e.dead && Math.hypot(e.x - ox, e.y - oy) < echoRadius + e.r)
+      hurtEnemy(e, 20 * stacks * player.dmgMul * (1 + player.eqAtk / 100) * (player.metaDiveMul || 1), 0, ox, oy, 0, 0, 0, inkFriendlyColor, false, 'dive');
+  }
+  player.diveEchoDist = 0; player.diveEchoStacks = 0;
   if (hasAffix('dive', 'ambush')) player.itemAmbushT = 2;
   if (hasAffix('dive', 'exitshield') && gameTime >= player.diveShieldCd) {
     player.diveShieldCd = gameTime + 3; player.exitShieldT = 1;
@@ -1415,6 +1470,17 @@ function exitDive() {
     player.x = clampW(player.x + Math.cos(player.faceA) * 55, 14);
     player.y = clampH(player.y + Math.sin(player.faceA) * 55, 14);
     addInkStroke(ox, oy, player.x, player.y, inkFriendlyColor, false);
+    if (gameTime >= player.diveDashDamageT) {
+      player.diveDashDamageT = gameTime + 1;
+      const dx = player.x - ox, dy = player.y - oy, len2 = dx * dx + dy * dy || 1;
+      for (const e of enemies) {
+        if (e.dead) continue;
+        const t = Math.max(0, Math.min(1, ((e.x - ox) * dx + (e.y - oy) * dy) / len2));
+        if (Math.hypot(e.x - (ox + dx * t), e.y - (oy + dy * t)) >= e.r + 18) continue;
+        hurtEnemy(e, 45 * player.dmgMul * (1 + player.eqAtk / 100) * (player.metaDiveMul || 1), 0, ox, oy, 0, 0, 0, inkFriendlyColor, false, 'dive');
+        if (!e.dead) { e.kbx *= 2; e.kby *= 2; }
+      }
+    }
   }
 }
 function toggleDive() {
@@ -1499,7 +1565,7 @@ function castInkSurge(radius = BATTLE.surge.radius, full = false) {
     if (e.dead || d >= radius + e.r) continue;
     let hitDamage = damage;
     if (hasAffix('surge', 'outerdamage') && d >= radius * 0.7) hitDamage *= 1.5;
-    if (hasAffix('surge', 'surgeseed')) e.surgeSeedT = 0.2;
+    if (hasAffix('surge', 'surgeseed')) { e.surgeSeedT = 0.2; e.surgeSeedDamage = damage * 0.35; }
     hurtEnemy(e, hitDamage, 0, player.x, player.y, 0, 0, 0, col, false, 'surge');
     if (!e.dead) {
       e.surgeSeedT = 0;
@@ -1521,6 +1587,9 @@ function castInkSurge(radius = BATTLE.surge.radius, full = false) {
   if (hasAffix('surge', 'washink')) {
     const covered = convertGrayDisk(player.x, player.y, radius);
     if (covered) refundInk(Math.min(15, covered / 80), player.x, player.y - 30, '洗地');
+    let longest = null;
+    for (const a of player.actives) if (!longest || a.t > longest.t) longest = a;
+    if (longest) longest.t = Math.max(0, longest.t - 1);
   }
   addInkStain(player.x, player.y, 28, radius, col, false, false);
   if (full && hasAffix('surge', 'outerink')) {
@@ -1530,6 +1599,8 @@ function castInkSurge(radius = BATTLE.surge.radius, full = false) {
       paintInkSegment(player.x + Math.cos(a) * ringR, player.y + Math.sin(a) * ringR,
         player.x + Math.cos(b) * ringR, player.y + Math.sin(b) * ringR, 22.5, 4, col, false, false, 0);
     }
+    erupts.push({ x: player.x, y: player.y, delay: 0.25, dmg: damage * 0.5, r: radius + 45,
+      ringInner: radius, c: { col, hadesSkill: 'surge' }, done: false, t: 0, warn: true });
   }
   inkSurgePainting = false;
   if (hasAffix('surge', 'surgeecho')) chargeTurf(BATTLE.traits.surgeRetain);
@@ -1563,6 +1634,7 @@ function castAbsorb() {
   player.absorbT = player.absorbDuration;
   player.absorbCd = Math.max(0.45, ABSORB_RULE.cooldown * player.cdMul * (hasAffix('absorb', 'fastabsorb') ? 0.8 : 1));
   player.absorbGain = 0; player.absorbHeal = 0; player.absorbInkUsed = false;
+  player.absorbParryCount = 0;
   if (player.diving) exitDive();
   sparks.push({ x: player.x, y: player.y, t: 0.2, color: inkFriendlyColor });
   return true;
@@ -1577,6 +1649,12 @@ function rewardAbsorb(amount) {
   if (gained > 0) player.absorbInkUsed = true;
   player.absorbGain += gained;
   return gained;
+}
+function parryHitStop() {
+  // 同一次吸墨内每次成功弹反，时停时长减半：0.3 → 0.15 → 0.075……
+  const duration = ABSORB_RULE.hitStop * Math.pow(0.5, player.absorbParryCount || 0);
+  player.absorbParryCount = (player.absorbParryCount || 0) + 1;
+  return duration;
 }
 function chargeParry() {
   let amount = ABSORB_RULE.charge * (hasAffix('absorb', 'parrycharge') ? BATTLE.traits.parryChargeMul : 1);
@@ -1594,7 +1672,7 @@ function chargeParry() {
 }
 function reflectEnemyBullet(eb) {
   if (player.absorbT <= 0 || eb.reflectable === false || eb.life <= 0) return false;
-  hitStopT = Math.max(hitStopT, ABSORB_RULE.hitStop);
+  hitStopT = Math.max(hitStopT, parryHitStop());
   eb.life = 0;
   if (eb.sourceId && !eb.inkConverted) inkCutChecks.add(eb.sourceId);
   const source = enemies.find(e => e.id === eb.sourceId && !e.dead);
@@ -1611,9 +1689,24 @@ function reflectEnemyBullet(eb) {
       hits: 1 + (hasAffix('absorb', 'reflectpierce') ? 2 : 0), life: 2, col: inkFriendlyColor,
       reflected: true, homing: hasAffix('absorb', 'reflecthoming') ? 7 : 0, inkWide: hasAffix('absorb', 'reflecttrail') ? 1.8 : 1
     });
+    if (hasAffix('absorb', 'reflecttrail')) for (let j = 0; j < 3; j++) {
+      const distance = speed * (0.28 + j * 0.28);
+      erupts.push({ x: eb.x + Math.cos(shotA) * distance, y: eb.y + Math.sin(shotA) * distance,
+        delay: 0.25 + j * 0.08, dmg: damage * 0.2, r: 35,
+        c: { col: inkFriendlyColor, hadesSkill: 'absorb' }, done: false, t: 0 });
+    }
   }
   addInkStain(eb.x, eb.y, 4, 28, inkFriendlyColor, false, true);
-  if (hasAffix('absorb', 'bulletink')) addInkStain(player.x, player.y, 8, 55, inkFriendlyColor, false, false);
+  if (hasAffix('absorb', 'bulletink')) {
+    addInkStain(player.x, player.y, 8, 55, inkFriendlyColor, false, false);
+    if (gameTime >= player.bulletInkProcT) {
+      player.bulletInkProcT = gameTime + 0.8;
+      const radius = 100 * player.radMul;
+      novas.push({ x: player.x, y: player.y, t: 0.28, max: radius, col: inkFriendlyColor });
+      for (const e of enemies) if (!e.dead && Math.hypot(e.x - player.x, e.y - player.y) < radius + e.r)
+        hurtEnemy(e, 30 * player.dmgMul * (1 + player.eqAtk / 100) * (player.metaAbsorbMul || 1), 0, player.x, player.y, 0, 0, 0, inkFriendlyColor, false, 'absorb');
+    }
+  }
   rewardAbsorb(ABSORB_RULE.bulletInk);
   chargeParry();
   floats.push({ x: player.x, y: player.y - 45, txt: '弹反！', t: 0.65, color: inkFriendlyColor, crit: true });
@@ -1631,7 +1724,7 @@ function reflectMeleeSwing(e) {
     return false;
   }
   if (d >= enemySwingRange(e) + player.absorbRadius) return false;
-  hitStopT = Math.max(hitStopT, ABSORB_RULE.hitStop);
+  hitStopT = Math.max(hitStopT, parryHitStop());
   hurtEnemy(e, e.dmg * 1.5 * (player.metaAbsorbMul || 1), 0, player.x, player.y, 0, 0, 0, inkFriendlyColor, false, 'absorb');
   if (!e.dead) {
     e.stunT = Math.max(e.stunT || 0, e.elite ? 0.2 : 0.5);
@@ -1659,7 +1752,7 @@ function reflectHazard(hz) {
   const source = enemies.find(e => e.id === hz.sourceId && !e.dead);
   if (!source || !source.boss) return false;
   hz.done = true; hz.t = 0;
-  hitStopT = Math.max(hitStopT, ABSORB_RULE.hitStop);
+  hitStopT = Math.max(hitStopT, parryHitStop());
   hurtEnemy(source, hz.dmg * 1.5 * (player.metaAbsorbMul || 1), 0, player.x, player.y, 0, 0, 0, inkFriendlyColor, false, 'absorb');
   rewardAbsorb(ABSORB_RULE.meleeInk);
   chargeParry();
@@ -1875,11 +1968,14 @@ function fireSkill(a, c) {
     }
     sparks.push({ x: px, y: py - 10, t: 0.18, color: c.col });  // 笔尖端口亮一下
   } else if (a.id === 'spark') {
-    // 真环形发射 + 撞纸边反弹
+    // 两颗提供基础瞄准保障，其余保持环形；反弹后强化并弱追踪
     const n = 5 + 2 * c.count, off = Math.random() * Math.PI * 2;
+    const aimed = nearestEnemy(px, py, 520);
+    const aimA = aimed ? Math.atan2(aimed.y - py, aimed.x - px) : off;
     for (let i = 0; i < n; i++) {
-      fireBullet(px, py, off + i / n * Math.PI * 2 + (Math.random() - 0.5) * 0.15, 130 * c.proj, 12 * c.dmg * (1 + c.bdmg), 'ink',
-        Object.assign(projOpts(c, 2.6), { hits: 2 + c.pierce, bounce: 2 }));
+      const angle = i < 2 && aimed ? aimA + (i ? 0.12 : -0.12) : off + i / n * Math.PI * 2 + (Math.random() - 0.5) * 0.15;
+      fireBullet(px, py, angle, 160 * c.proj, 12 * c.dmg * (1 + c.bdmg), 'ink',
+        Object.assign(projOpts(c, 2.6), { hits: 2 + c.pierce, bounce: 2, reboundMul: 1.5 }));
     }
   } else if (a.id === 'ballista') {
     const cap = 2 + c.count;
@@ -1887,15 +1983,16 @@ function fireSkill(a, c) {
       totems.push({
         x: px + (Math.random() - 0.5) * 30, y: py + 18,
         t: 8 * c.areaT, fireCd: 0.4, dmg: 12 * c.dmg * (1 + c.bdmg), dot: c.dot,
-        pierce: c.pierce, proj: c.proj, rad: c.rad, vuln: c.vuln, shots: 1 + c.count, ex: projOpts(c, 1.2)
+        pierce: c.pierce, proj: c.proj, rad: c.rad, vuln: c.vuln, shots: 1 + c.count, ex: projOpts(c, 1.2),
+        sameId: 0, ramp: 0
       });
     }
-  } else if (a.id === 'boomerang') {   // 回力橡皮擦：飞出后旋回来，往返都能刮人
+  } else if (a.id === 'boomerang') {   // 回力橡皮擦：返程增伤，接住可缩短当前冷却
     const t0 = nearestEnemy(px, py, 460);
     const base = t0 ? Math.atan2(t0.y - py, t0.x - px) : player.faceA, n = 1 + c.count;
     for (let i = 0; i < n; i++) {
       fireBullet(px, py, base + (i - (n - 1) / 2) * 0.35, 330 * c.proj, 18 * c.dmg * (1 + c.bdmg), 'boom',
-        Object.assign(projOpts(c, 2.4), { hits: 999, traveled: 0 }));
+        Object.assign(projOpts(c, 2.4), { hits: 999, traveled: 0, returning: false }));
     }
   } else if (a.id === 'vortex') {      // 涂改带刀阵：均匀整圈分布，施放一次补两枚
     const cap = BATTLE.skills.vortexCap + c.count;
@@ -1906,24 +2003,28 @@ function fireSkill(a, c) {
         y: py + Math.sin(ang) * BATTLE.skills.closeRadius * c.rad });
     }
     while (blades.length > cap) blades.shift();
-  } else if (a.id === 'candle') {      // 蜡烛头：常驻灼烧光环（高频小伤害）
+  } else if (a.id === 'candle') {      // 0.4 秒一次：约 17.5 秒伤、2.5 墨/秒，避免拖垮墨水循环
     const rad = BATTLE.skills.closeRadius * c.rad;
     for (const e of enemies) {
       const d = Math.hypot(e.x - px, e.y - py);
-      if (!e.dead && d < rad + e.r) areaHit(e, 4 * c.dmg, c, px, py, rad, d);
+      if (!e.dead && d < rad + e.r) areaHit(e, 7 * c.dmg, c, px, py, rad, d);
     }
-  } else if (a.id === 'icespear') {    // 冰锥图钉：射最远的敌人，命中减速
-    let best = null, bd = -1;
+  } else if (a.id === 'icespear') {    // Boss/精英优先，其次才是最远普通怪；攻击已减速目标增伤
+    let best = null, bd = -1, bestPriority = -1;
     for (const e of enemies) {
       if (e.dead) continue;
       const d2 = (e.x - px) ** 2 + (e.y - py) ** 2;
-      if (d2 > bd && d2 < 620 * 620) { bd = d2; best = e; }
+      if (d2 >= 620 * 620) continue;
+      const priority = e.boss ? 2 : (e.elite ? 1 : 0);
+      if (priority > bestPriority || (priority === bestPriority && d2 > bd)) {
+        best = e; bd = d2; bestPriority = priority;
+      }
     }
     if (!best) return;
     const base = Math.atan2(best.y - py, best.x - px), n = 1 + c.count;
     for (let i = 0; i < n; i++) {
       fireBullet(px, py - 10, base + (i - (n - 1) / 2) * 0.14, 460 * c.proj, 30 * c.dmg * (1 + c.bdmg), 'ice',
-        Object.assign(projOpts(c, 1.5), { hits: 3 + c.pierce, slow: 2 }));
+        Object.assign(projOpts(c, 1.5), { hits: 3 + c.pierce, slow: 2, slowBonus: 1.25 }));
     }
   } else if (a.id === 'inkrain') {     // 毒墨雨：数片毒墨云落向敌群，持续淋伤
     const n = 3 + c.count;
@@ -1944,14 +2045,15 @@ function fireSkill(a, c) {
       erupts.push({ x: px + Math.cos(va) * (40 + k * 44), y: py + Math.sin(va) * (40 + k * 44),
         delay: 0.55 + k * 0.07, dmg: 22 * c.dmg * 0.6, r: 26 * c.rad * (1 + c.sweep), c, done: false, t: 0 });
     }
-  } else if (a.id === 'chalk') {       // 流星粉笔头：延迟落点 AoE 大坑
+  } else if (a.id === 'chalk') {       // 流星粉笔头：更快落下，并在最后 0.1 秒修正一次落点
     const n = 1 + c.count;
     for (let i = 0; i < n; i++) {
       const t1 = nearestEnemy(px + (Math.random() - 0.5) * 200, py + (Math.random() - 0.5) * 200, 550);
       erupts.push({
         x: t1 ? t1.x : px + Math.cos(player.faceA) * 150,
         y: t1 ? t1.y : py + Math.sin(player.faceA) * 150,
-        delay: 0.7, dmg: 35 * c.dmg, r: 70 * c.rad, c, done: false, t: 0, warn: true
+        delay: 0.45, dmg: 45 * c.dmg, r: 70 * c.rad, c, done: false, t: 0, warn: true,
+        aimTarget: t1 || null, aimLocked: false
       });
     }
   } else if (a.id === 'pinburst') {    // 蜂群大头钉：锥形散射，钉尖小爆裂
@@ -1962,7 +2064,7 @@ function fireSkill(a, c) {
       fireBullet(px, py - 8, base + (i - (n - 1) / 2) * 0.16, 430 * c.proj, 12 * c.dmg * (1 + c.bdmg), 'pin',
         Object.assign(projOpts(c, 0.9), { hits: 1 + c.pierce, aoe: 8 * c.dmg * (1 + c.bdmg), aoeR: 40 * c.rad }));
     }
-  } else if (a.id === 'absolve') {     // 赦免粉笔：光柱劈血最厚的，劈死化为己方小鬼
+  } else if (a.id === 'absolve') {     // 赦免粉笔：标记 3 秒，期间任意来源击杀都会转化为己方小鬼
     let best = null, bh = -1;
     for (const e of enemies) {
       if (e.dead) continue;
@@ -1970,16 +2072,15 @@ function fireSkill(a, c) {
       if (d2 < 400 * 400 && e.hp > bh) { bh = e.hp; best = e; }
     }
     if (!best) return;
+    best.absolveUntil = gameTime + 3;
+    best.absolveC = c;
     lightnings.push({ x1: best.x, y1: best.y - 260, x2: best.x, y2: best.y, t: 0.3, delay: 0, prog: 1, pillar: true, c });
-    areaHit(best, 30 * c.dmg, c, best.x, best.y - 100);
-    if (best.dead) {
-      minions.push({ x: best.x, y: best.y, t: 6 * c.areaT, atkCd: 0, dmg: 9 * c.dmg, dot: c.dot, walk: 0, rad: c.rad, vuln: c.vuln, ghost: true, c });
-    }
-  } else if (a.id === 'brand') {       // 橡皮筋烙印：套上持续电击并弹向周围
+    areaHit(best, 30 * c.dmg * (best.boss ? 1.4 : 1), c, best.x, best.y - 100);
+  } else if (a.id === 'brand') {       // 橡皮筋烙印：同一烙印连续电击逐步增伤，转移不丢层数
     const t0 = nearestEnemy(px, py, 350 * c.rad);
     if (!t0) return;
-    brands.push({ tgt: t0, t: 4 * (1 + c.lingerT), tick: 0, dmg: 9 * c.dmg, chain: 1 + c.chain, c });
-  } else if (a.id === 'cola') {        // 冰可乐新星：冻慢身边一圈
+    brands.push({ tgt: t0, t: 4 * (1 + c.lingerT), tick: 0, dmg: 9 * c.dmg, chain: 1 + c.chain, c, pulse: 0 });
+  } else if (a.id === 'cola') {        // 冰可乐新星：冻慢身边一圈，命中已减速目标会碎冰
     const rad = BATTLE.skills.colaRadius * c.rad;
     novas.push({ x: px, y: py, t: 0.35, max: rad, col: c.col, c });
     if (a.lvl >= 3) fields.push({ kind: 'ice', x: px, y: py, r: rad * 0.9, t: 2.8, tick: 0.2, dmg: 4 * c.dmg, c });
@@ -1987,19 +2088,29 @@ function fireSkill(a, c) {
     for (const e of enemies) {
       const d = Math.hypot(e.x - px, e.y - py);
       if (!e.dead && d < rad + e.r) {
-        e.slowT = Math.max(e.slowT || 0, a.lvl >= 5 ? 2.5 : 1.5);
-        if (a.lvl >= 5 && !e.boss) e.stunT = Math.max(e.stunT || 0, 0.75);
-        areaHit(e, 20 * c.dmg, c, px, py, rad, d);
+        colaHit(e, 20 * c.dmg, c, a, px, py, rad, d);
         if (a.lvl >= 5 && !e.dead && shatters++ < 18) erupts.push({
           x: e.x, y: e.y, delay: 0.55 + shatters * 0.025, dmg: 16 * c.dmg, r: 48 * c.rad,
-          c: Object.assign({}, c, { reburst: 0 }), done: false, t: 0
+          c: Object.assign({}, c, { reburst: 0, followup: 0 }), done: false, t: 0
         });
       }
     }
     if (c.reburst) {   // 二次晕染：新星后再爆发一次
       erupts.push({ x: px, y: py, delay: 0.5, dmg: 20 * c.dmg * (0.5 + c.reburst), r: rad,
-        c: Object.assign({}, c, { reburst: 0 }), done: false, t: 0 });
+        c: Object.assign({}, c, { reburst: 0, followup: 0 }), done: false, t: 0 });
     }
+  }
+}
+function colaHit(e, damage, c, a, sx, sy, radius, distance) {
+  const wasSlowed = e.slowT > 0;
+  e.slowT = Math.max(e.slowT || 0, a.lvl >= 5 ? 2.5 : 1.5);
+  if (a.lvl >= 5 && !e.boss) e.stunT = Math.max(e.stunT || 0, 0.75);
+  areaHit(e, damage, c, sx, sy, radius, distance);
+  if (wasSlowed && !e.dead && gameTime >= (e.colaShatterCd || 0)) {
+    e.colaShatterCd = gameTime + 1;
+    const shatterC = Object.assign({}, c, { followup: 0, reburst: 0 });
+    areaHit(e, 8 * c.dmg, shatterC, e.x, e.y);
+    novas.push({ x: e.x, y: e.y, t: 0.35, max: 42 * c.rad, col: ICE_LIGHT, c: shatterC });
   }
 }
 const INK_COST = {
@@ -2175,7 +2286,8 @@ function buildOptions() {
   for (const p of PASSIVES) {
     if (p.once && player.taken[p.id]) continue;
     if (p.available && !p.available()) continue;
-    pool.push({ kind: 'passive', id: p.id, tag: '[被动]', tagColor: DARK, name: p.name, desc: p.desc });
+    pool.push({ kind: 'passive', id: p.id, tag: p.form ? '[形态]' : '[被动]',
+      tagColor: p.form ? (ATTR_COLOR[SKILL_ATTR[p.skill]] || INK) : DARK, name: p.name, desc: p.desc });
   }
   const opNames = { dive: '潜墨', surge: '墨潮', absorb: '吸墨' };
   const opColors = { dive: INK, surge: ARC, absorb: PURPLE };
@@ -2504,17 +2616,23 @@ function update(dt) {
   player.hurtBoostT = Math.max(0, player.hurtBoostT - dt);
   player.leechT += dt;
   if (player.leechT >= 1) { player.leechT %= 1; player.leechN = 0; }
+  // 潜墨看移动方向身前 28 像素：向外探索减速并铺墨，朝己方墨迹回游立即恢复
+  const lookAhead = BATTLE.dive.lookAhead || 28;
+  const diveOffInkPath = player.diving && ml > 0.1 && !inkCircleHas(
+    player.x + mx * lookAhead, player.y + my * lookAhead, 4, false);
   const routeBoost = player.diving ? BATTLE.dive.speed : (ground.own ? BATTLE.ink.ownSpeed : 1);
   const hostileSlow = ground.hostile ? BATTLE.ink.hostileSpeed : 1;
-  const spdNow = player.speed * player.eqSpd * routeBoost * hostileSlow * (hasItem('shoes') && player.hurtBoostT > 0 ? 1.3 : 1);
+  const diveOffInkSlow = diveOffInkPath ? (hasAffix('dive', 'grayboat') ? 0.6 : BATTLE.dive.offOwnSpeed) : 1;
+  const spdNow = player.speed * player.eqSpd * routeBoost * hostileSlow * diveOffInkSlow * (hasItem('shoes') && player.hurtBoostT > 0 ? 1.3 : 1);
   player.x += mx * spdNow * dt;
   player.y += my * spdNow * dt;
   player.x = clampW(player.x, 14); player.y = clampH(player.y, 14);
   if (typeof CreatureGameRuntime !== 'undefined') CreatureGameRuntime.updatePlayer(player, dt);
   if (ml > 0.1) {
     player.walk += dt * 10; player.faceA = Math.atan2(my, mx);
-    if ((!player.diving || player.taken.divepaint) && player.actives.length) {
-      addLinkedTrail(player, player.x, player.y, trailColorOf(player.actives[0].id), false,
+    if (!player.diving || diveOffInkPath) {
+      const trailCol = player.actives.length ? trailColorOf(player.actives[0].id) : INK;
+      addLinkedTrail(player, player.x, player.y, trailCol, false,
         14, 1.2, 12, 'trailX', 'trailY', 'trailS');
     }
   }
@@ -2556,6 +2674,7 @@ function update(dt) {
     e.squash = Math.max(0, e.squash - dt);
     e.vulnT = Math.max(0, (e.vulnT || 0) - dt);
     e.slowT = Math.max(0, (e.slowT || 0) - dt);
+    e.spinSlowT = Math.max(0, (e.spinSlowT || 0) - dt);
     e.boomCd = Math.max(0, (e.boomCd || 0) - dt);
     e.vorCd = Math.max(0, (e.vorCd || 0) - dt);
     e.areaVulnT = Math.max(0, (e.areaVulnT || 0) - dt);
@@ -2575,7 +2694,8 @@ function update(dt) {
       if (e.inkCd <= 0) { e.inkCd = 2.8; addHostileInk(e.x, e.y, 8, 27, e.id); }
     }
     const inkFactor = enemyInkFactor(e);
-    const sf = (e.slowT > 0 ? 0.5 : 1) * inkFactor;   // 彩墨阻碍怪物，灰墨帮助怪物
+    const spinFactor = e.spinSlowT > 0 ? 0.8 : 1;
+    const sf = (e.slowT > 0 ? 0.5 : 1) * spinFactor * inkFactor;   // 彩墨与冰旋枪阻碍怪物，灰墨帮助怪物
     if (e.dotT > 0) {
       const dealt = Math.min(Math.max(0, e.hp), e.dotDps * dt);
       recordSkillDamage(e.dotSkill, dealt);
@@ -2584,9 +2704,9 @@ function update(dt) {
     }
     if (e.stunT <= 0 && !(e.impactFreezeT > 0)) {   // 重击局部顿帧：只停当前怪物，不冻结整场战斗
       if (e.shade) updateInkShade(e, dt * sf);
-      else if (e.boss) updateBoss(e, dt * (e.slowT > 0 ? 0.55 : 1) * inkFactor);
+      else if (e.boss) updateBoss(e, dt * (e.slowT > 0 ? 0.55 : 1) * spinFactor * inkFactor);
       else if (isShooter(e)) updateShooter(e, dt * sf);
-      else if (isInkEater(e) && updateInkEater(e, dt * inkFactor)) { /* 吸墨怪优先抢墨 */ }
+      else if (isInkEater(e) && updateInkEater(e, dt * inkFactor * spinFactor)) { /* 吸墨怪优先抢墨 */ }
       else if (e.type === 'plane') { e.x += e.vx * e.sp * sf * dt; e.y += e.vy * e.sp * sf * dt; }
       else {
         const hidden = player.diving && Math.hypot(player.x - e.x, player.y - e.y) > 85;
@@ -2633,17 +2753,27 @@ function update(dt) {
     }
     const spd = Math.hypot(b.vx, b.vy) || 1;
     b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
-    if (b.kind === 'boom') {   // 回力橡皮擦：飞出 260 后旋回；有弹射次数时优先弹向其他敌人
+    if (b.kind === 'boom') {   // 回力橡皮擦：飞出 260 后旋回；返程增伤，接回缩短当前冷却
       b.traveled = (b.traveled || 0) + spd * dt;
       if (b.traveled > 260) {
+        b.returning = true;
         const bt = b.chainN > 0 ? nearestEnemy(b.x, b.y, 400) : null;
         const ra = bt ? Math.atan2(bt.y - b.y, bt.x - b.x) : Math.atan2(player.y - b.y, player.x - b.x);
         b.vx = Math.cos(ra) * spd; b.vy = Math.sin(ra) * spd;
+        if (!bt && Math.hypot(player.x - b.x, player.y - b.y) < 22) {
+          b.life = 0;
+          const active = getActive('boomerang');
+          if (active) active.t *= 0.65;
+          novas.push({ x: player.x, y: player.y, t: 0.35, max: 30, col: b.col });
+          continue;
+        }
       }
     }
-    if (b.kind === 'ink' && b.bounce > 0) {   // 墨滴撞纸边反弹
-      if (b.x < WORLD_L + 6 || b.x > WORLD_R - 6) { b.vx = -b.vx; b.bounce--; b.x = clampW(b.x, 6); }
-      if (b.y < WORLD_T + 6 || b.y > WORLD_B - 6) { b.vy = -b.vy; b.bounce--; b.y = clampH(b.y, 6); }
+    if (b.kind === 'ink' && b.bounce > 0) {   // 墨滴撞纸边反弹：反弹后增伤并弱追踪
+      let bounced = false;
+      if (b.x < WORLD_L + 6 || b.x > WORLD_R - 6) { b.vx = -b.vx; b.bounce--; b.x = clampW(b.x, 6); bounced = true; }
+      if (b.y < WORLD_T + 6 || b.y > WORLD_B - 6) { b.vy = -b.vy; b.bounce--; b.y = clampH(b.y, 6); bounced = true; }
+      if (bounced) { b.rebounded = true; b.homing = Math.max(b.homing || 0, 2.4); }
     }
     if (b.col) {
       addLinkedTrail(b, b.x, b.y, b.col, false, 9, 0.55, 16, 'inkX', 'inkY', 'inkS');
@@ -2667,23 +2797,34 @@ function update(dt) {
           break;
         }
         if (b.kind === 'chain' && b.chainLeft > 0) {
-          hurtEnemy(e, b.dmg, b.dmg * b.dot, b.x, b.y, b.vuln, b.critAdd, 0, b.col, false, b.hadesSkill);
-          b.chainLeft--; b.dmg *= 0.7;
+          const rawDmg = b.dmg;
+          hurtEnemy(e, rawDmg, rawDmg * b.dot, b.x, b.y, b.vuln, b.critAdd, 0, b.col, false, b.hadesSkill);
+          b.chainLeft--;
           const nxt = nearestEnemy(b.x, b.y, 170, e);
           if (nxt) {
+            b.dmg *= 0.7;
             const a = Math.atan2(nxt.y - b.y, nxt.x - b.x), s = Math.hypot(b.vx, b.vy);
             b.vx = Math.cos(a) * s; b.vy = Math.sin(a) * s;
             lightnings.push({ x1: b.x, y1: b.y, x2: nxt.x, y2: nxt.y, t: 0.12, col: b.col });
-          } else b.life = 0;
+          } else {
+            b.life = 0;
+            const repeatC = Object.assign({}, b.c, { col: b.col, hadesSkill: 'chainclip', followup: 0, reburst: 0 });
+            for (let k = 0; k < b.chainLeft; k++) lightnings.push({
+              x1: e.x, y1: e.y, x2: e.x, y2: e.y, t: 0.12, delay: 0.15 * (k + 1), prog: 0,
+              tgt: e, dmg: rawDmg * 0.45, c: repeatC, col: b.col, chainRepeat: true
+            });
+          }
           break;
         }
         if (b.kind === 'boom') {
           e.boomCd = 0.4;
-          hurtEnemy(e, b.dmg, b.dmg * b.dot, b.x, b.y, b.vuln, b.critAdd, 0, b.col, false, b.hadesSkill);
+          const damage = b.dmg * (b.returning ? 1.35 : 1);
+          hurtEnemy(e, damage, damage * b.dot, b.x, b.y, b.vuln, b.critAdd, 0, b.col, false, b.hadesSkill);
           if (b.chainN > 0) b.chainN--;
           continue;
         }
-        hurtEnemy(e, b.dmg, b.dmg * b.dot, b.x, b.y, b.vuln, b.critAdd, 0, b.col, false, b.hadesSkill);
+        const damage = b.dmg * (e.slowT > 0 ? (b.slowBonus || 1) : 1) * (b.rebounded ? (b.reboundMul || 1) : 1);
+        hurtEnemy(e, damage, damage * b.dot, b.x, b.y, b.vuln, b.critAdd, 0, b.col, false, b.hadesSkill);
         if (b.slow) e.slowT = Math.max(e.slowT || 0, b.slow);
         if (b.blast) {   // 爆裂笔尖：命中溅射墨花
           for (const e2 of enemies) {
@@ -2730,12 +2871,17 @@ function update(dt) {
   for (const er of erupts) {
     if (!er.done) {
       er.delay -= dt;
+      if (er.aimTarget && !er.aimLocked && er.delay <= 0.1) {
+        er.aimLocked = true;
+        if (!er.aimTarget.dead) { er.x = er.aimTarget.x; er.y = er.aimTarget.y; }
+      }
       if (er.delay <= 0) {
         er.done = true; er.t = 0.3;
         addAttackPath(er.x, er.y, er.c && er.c.col, false);
         for (const e of enemies) {
           const d = Math.hypot(e.x - er.x, e.y - er.y);
-          if (!e.dead && d < er.r + e.r) areaHit(e, er.dmg, er.c, er.x, er.y, er.r, d);
+          if (!e.dead && d < er.r + e.r && (er.ringInner === undefined || d >= er.ringInner - e.r))
+            areaHit(e, er.dmg, er.c, er.x, er.y, er.r, d);
         }
       }
     } else {
@@ -2822,13 +2968,15 @@ function update(dt) {
     if (tt.fireCd <= 0) {
       const t0 = nearestEnemy(tt.x, tt.y, 380 * (tt.rad || 1));
       if (t0) {
-        tt.fireCd = 0.9;
+        if (tt.sameId === t0.id) tt.ramp = Math.min(5, (tt.ramp || 0) + 1);
+        else { tt.sameId = t0.id; tt.ramp = 0; }
+        tt.fireCd = Math.max(0.65, 0.9 - tt.ramp * 0.05);   // 集火同一目标时逐发射击加速
         const base = Math.atan2(t0.y - tt.y, t0.x - tt.x), n = tt.shots || 1;
         for (let i = 0; i < n; i++) {
           fireBullet(tt.x, tt.y - 14, base + (i - (n - 1) / 2) * 0.13,
             BATTLE.skills.ballistaBulletSpeed * tt.proj, tt.dmg, 'nib', Object.assign({ hits: 1 + tt.pierce }, tt.ex));
         }
-      } else tt.fireCd = 0.2;
+      } else { tt.fireCd = 0.2; tt.sameId = 0; tt.ramp = 0; }
     }
   }
   totems = totems.filter(tt => tt.t > 0);
@@ -2885,7 +3033,7 @@ function update(dt) {
   }
   clouds = clouds.filter(c => c.t > 0);
 
-  // 觉醒区域：电弧雷网 / 可乐冰面
+  // 觉醒区域：电弧雷网 / 可乐冰面；冰面后续跳伤同样能触发碎冰
   for (const f of fields) {
     f.t -= dt; f.tick -= dt;
     if (f.tick <= 0) {
@@ -2893,8 +3041,8 @@ function update(dt) {
       for (const e of enemies) {
         const d = Math.hypot(e.x - f.x, e.y - f.y);
         if (!e.dead && d < f.r + e.r) {
-          if (f.kind === 'ice') e.slowT = Math.max(e.slowT || 0, 0.7);
-          areaHit(e, f.dmg, f.c, f.x, f.y, f.r, d);
+          if (f.kind === 'ice') colaHit(e, f.dmg, f.c, getActive('cola') || { lvl: 3 }, f.x, f.y, f.r, d);
+          else areaHit(e, f.dmg, f.c, f.x, f.y, f.r, d);
         }
       }
     }
@@ -2902,7 +3050,7 @@ function update(dt) {
   fields = fields.filter(f => f.t > 0);
   if (fields.length > 60) fields.splice(0, fields.length - 60);
 
-  // 橡皮筋烙印：周期电击并连锁，目标死亡则跳向附近敌人
+  // 橡皮筋烙印：周期电击并连锁，目标死亡则跳向附近敌人并保留增伤层数
   for (const br of brands) {
     br.t -= dt; br.tick -= dt;
     if (br.tgt.dead) {
@@ -2919,8 +3067,9 @@ function update(dt) {
     }
     if (br.tick <= 0) {
       br.tick = 0.7 / (1 + (br.c.retick || 0));
-      const t0 = br.tgt;
-      areaHit(t0, br.dmg, br.c, t0.x, t0.y);
+      const t0 = br.tgt, pulseMul = 1 + Math.min(5, br.pulse || 0) * 0.08;
+      br.pulse = Math.min(5, (br.pulse || 0) + 1);
+      areaHit(t0, br.dmg * pulseMul, br.c, t0.x, t0.y);
       let sx = t0.x, sy = t0.y;
       const hitSet = [t0];
       for (let j = 0; j < br.chain; j++) {
@@ -2932,7 +3081,7 @@ function update(dt) {
         }
         if (!nxt) break;
         lightnings.push({ x1: sx, y1: sy, x2: nxt.x, y2: nxt.y, t: 0.12, delay: 0, col: br.c.col });
-        areaHit(nxt, br.dmg * 0.7, br.c, sx, sy);
+        areaHit(nxt, br.dmg * 0.7 * pulseMul, br.c, sx, sy);
         hitSet.push(nxt); sx = nxt.x; sy = nxt.y;
       }
     }
@@ -3336,9 +3485,9 @@ function drawEnemyFull(e) {
     ctx.translate(e.x + (srand() - 0.5) * 3 * k, e.y + (srand() - 0.5) * 2.5 * k);
     if (e.impactT > 0 && Number.isFinite(e.impactAngle)) {
       // 沿来招方向压短、垂直方向撑开；预警在上方已画完，不会跟随身体变形。
-      ctx.translate(e.x, e.y); ctx.rotate(e.impactAngle);
+      ctx.rotate(e.impactAngle);
       ctx.scale(1 - 0.25 * k, 1 + 0.28 * k);
-      ctx.rotate(-e.impactAngle); ctx.translate(-e.x, -e.y);
+      ctx.rotate(-e.impactAngle);
     } else ctx.scale(1 + 0.5 * k, 1 - 0.42 * k);
     ctx.translate(-e.x, -e.y);
   }
@@ -3807,19 +3956,32 @@ function render() {
       drawCoreDamageZone(er.x, er.y, er.r, er.c, !eruptionCoreLabeled);
       eruptionCoreLabeled = true;
     }
-    if (!er.done && er.warn) {   // 粉笔头落点：属性色涂鸦预警圈（随延迟收缩）
+    if (!er.done && er.warn) {   // 落点与溢墨外圈预警
       ctx.globalAlpha = 0.4 + 0.3 * Math.sin(er.delay * 20);
-      jcircle(er.x, er.y, er.r * (0.5 + er.delay), ec, 1.8);
-      jline(er.x - 8, er.y, er.x + 8, er.y, ec, 1.5);
-      jline(er.x, er.y - 8, er.x, er.y + 8, ec, 1.8);
+      if (er.ringInner !== undefined) {
+        jcircle(er.x, er.y, er.r, ec, 2.2); jcircle(er.x, er.y, er.ringInner, ec, 1.6);
+      } else {
+        jcircle(er.x, er.y, er.r * (0.5 + er.delay), ec, 1.8);
+        jline(er.x - 8, er.y, er.x + 8, er.y, ec, 1.5);
+        jline(er.x, er.y - 8, er.x, er.y + 8, ec, 1.8);
+      }
       ctx.globalAlpha = 1;
     }
     if (er.done) {   // 火山压痕无预警，直接喷发
       ctx.globalAlpha = er.t / 0.3;
       jcircle(er.x, er.y, er.r * (1.3 - er.t), ec, 2.5);
-      for (let i = 0; i < 5; i++) {
+      if (er.ringInner !== undefined) jcircle(er.x, er.y, er.ringInner, ec, 2.2);
+      else for (let i = 0; i < 5; i++) {
         const a = i / 5 * Math.PI * 2;
         jline(er.x, er.y, er.x + Math.cos(a) * er.r, er.y + Math.sin(a) * er.r, ec, 1.5);
+      }
+      if (er.c && SKILL_ATTR[er.c.hadesSkill] === 'ice') {
+        drawIceCrystal(er.x, er.y, er.r * 0.82, er.x * 0.01, 0.95);
+        for (let i = 0; i < 3; i++) {
+          const a = i * Math.PI * 2 / 3 + er.y * 0.01;
+          drawIceCrystal(er.x + Math.cos(a) * er.r * 0.58, er.y + Math.sin(a) * er.r * 0.58,
+            er.r * 0.28, a, 0.85);
+        }
       }
       ctx.globalAlpha = 1;
     }
@@ -3928,19 +4090,22 @@ function render() {
   // 雷网与冰面：持续存在的觉醒领域
   let fieldCoreLabeled = false;
   for (const f of fields) {
-    setSeed(7350 + Math.floor(f.x)); const fc = f.kind === 'ice' ? '#7ec8e3' : (f.c.col || ARC);
+    setSeed(7350 + Math.floor(f.x)); const fc = f.kind === 'ice' ? ATTR_COLOR.ice : (f.c.col || ARC);
     if (f.c.core) {
       drawCoreDamageZone(f.x, f.y, f.r, f.c, !fieldCoreLabeled);
       fieldCoreLabeled = true;
     }
     ctx.globalAlpha = Math.min(0.65, f.t * 0.5);
-    jcircle(f.x, f.y, f.r, fc, f.kind === 'ice' ? 2 : 2.5);
+    jcircle(f.x, f.y, f.r, fc, f.kind === 'ice' ? 2.8 : 2.5);
     jcircle(f.x, f.y, f.r * 0.72, fc, 1.2);
     for (let i = 0; i < 6; i++) {
       const a = i / 6 * Math.PI * 2;
       jline(f.x + Math.cos(a) * f.r * 0.25, f.y + Math.sin(a) * f.r * 0.25,
         f.x + Math.cos(a + 0.35) * f.r * 0.9, f.y + Math.sin(a + 0.35) * f.r * 0.9, fc, 1.2);
+      if (f.kind === 'ice') drawIceCrystal(f.x + Math.cos(a) * f.r * 0.68, f.y + Math.sin(a) * f.r * 0.68,
+        Math.min(22, f.r * 0.16), a + boilT * 0.02, 0.95);
     }
+    if (f.kind === 'ice') drawIceCrystal(f.x, f.y, Math.min(48, f.r * 0.38), boilT * 0.015, 0.85);
     ctx.globalAlpha = 1;
   }
   // 涂改带刀阵：淡整圈轨迹 + 均匀分布的锯齿碎片
@@ -3967,7 +4132,7 @@ function render() {
     jcircle(br.tgt.x, br.tgt.y, br.tgt.r + 5 + Math.sin(br.t * 10) * 2, br.c.col || PURPLE, 2.5);
     ctx.globalAlpha = 1;
   }
-  // 冰可乐新星：扩散的泡泡圈
+  // 冰可乐新星：扩散泡泡圈 + 六向冰晶；其它新星保持原有笔迹。
   for (const nv of novas) {
     const k = 1 - nv.t / 0.35;
     if (nv.c && nv.c.core) drawCoreDamageZone(nv.x, nv.y, nv.max, nv.c);
@@ -3977,6 +4142,14 @@ function render() {
     const radius = nv.preciseDive ? 24 + (nv.max - 24) * k : nv.max * (0.3 + 0.7 * k);
     jcircle(nv.x, nv.y, radius, nv.col || ARC, nv.preciseDive ? 4 : 3);
     jcircle(nv.x, nv.y, nv.preciseDive ? Math.max(0, radius - 9) : nv.max * (0.2 + 0.6 * k), nv.col || INK, 1.5);
+    if (nv.c && SKILL_ATTR[nv.c.hadesSkill || 'cola'] === 'ice') {
+      drawIceCrystal(nv.x, nv.y, Math.max(16, radius * 0.45), k * 0.8, 0.95);
+      for (let i = 0; i < 6; i++) {
+        const a = i * Math.PI / 3 + k * 0.35;
+        drawIceCrystal(nv.x + Math.cos(a) * radius * 0.78, nv.y + Math.sin(a) * radius * 0.78,
+          Math.max(7, Math.min(18, nv.max * 0.12)), a, 0.9);
+      }
+    }
     ctx.globalAlpha = 1;
   }
   // 不可弹反攻击击碎吸墨圆环：蓝色手绘线段径向飞散并淡出
@@ -4023,17 +4196,19 @@ function render() {
       jline(b.x + c1 * 6 + s1 * 4, b.y + s1 * 6 - c1 * 4, b.x - c1 * 6 + s1 * 4, b.y - s1 * 6 - c1 * 4, bc, 2.5);
       jline(b.x - c1 * 6 + s1 * 4, b.y - s1 * 6 - c1 * 4, b.x - c1 * 6 - s1 * 4, b.y - s1 * 6 + c1 * 4, bc, 2.5);
       jline(b.x - s1 * 4, b.y + c1 * 4, b.x + s1 * 4, b.y - c1 * 4, bc, 1.2);
-    } else if (b.kind === 'ice') {   // 冰锥：尖三角碎片
+    } else if (b.kind === 'ice') {   // 冰锥：尖三角碎片 + 六向冰晶尾迹
       const c1 = Math.cos(a), s1 = Math.sin(a);
-      jline(b.x + c1 * 11, b.y + s1 * 11, b.x - c1 * 6 - s1 * 5, b.y - s1 * 6 + c1 * 5, bc, 2.5);
-      jline(b.x + c1 * 11, b.y + s1 * 11, b.x - c1 * 6 + s1 * 5, b.y - s1 * 6 - c1 * 5, bc, 2.5);
+      jline(b.x + c1 * 11, b.y + s1 * 11, b.x - c1 * 6 - s1 * 5, b.y - s1 * 6 + c1 * 5, ICE_DARK, 3);
+      jline(b.x + c1 * 11, b.y + s1 * 11, b.x - c1 * 6 + s1 * 5, b.y - s1 * 6 - c1 * 5, ICE_LIGHT, 2.5);
       jline(b.x - c1 * 6 - s1 * 5, b.y - s1 * 6 + c1 * 5, b.x - c1 * 6 + s1 * 5, b.y - s1 * 6 - c1 * 5, bc, 1.5);
+      drawIceCrystal(b.x - c1 * 12, b.y - s1 * 12, 8, a, 0.85);
     } else if (b.kind === 'pin') {   // 大头钉：圆头 + 针尖
       jcircle(b.x - Math.cos(a) * 4, b.y - Math.sin(a) * 4, 2.8, bc, 2);
       jline(b.x - Math.cos(a) * 3, b.y - Math.sin(a) * 3, b.x + Math.cos(a) * 7, b.y + Math.sin(a) * 7, bc, 1.8);
     } else {
       jline(b.x, b.y, b.x - Math.cos(a) * 10, b.y - Math.sin(a) * 10, bc, 3);
     }
+    if (b.kind === 'ink' || b.kind === 'boom') drawIceCrystal(b.x, b.y, b.kind === 'boom' ? 12 : 8, a, 0.78);
     ctx.restore();
   }
   for (const eb of ebullets) {  // 敌方墨弹：普通红笔点；尾棘使用有飞行方向的笔尖

@@ -10,7 +10,7 @@ eval(src + `
   get player() { return player; }, get enemies() { return enemies; }, get ebullets() { return ebullets; },
   get bullets() { return bullets; }, get floats() { return floats; }, get novas() { return novas; }, get hazards() { return hazards; },
   get hitStop() { return hitStopT; }, get time() { return gameTime; },
-  set state(v) { state = v; }, set hitStop(v) { hitStopT = v; }, set last(v) { last = v; }
+  set state(v) { state = v; }, set hitStop(v) { hitStopT = v; }, set last(v) { last = v; }, set time(v) { gameTime = v; }
 };`);
 let failed = 0;
 function test(name, fn) { try { fn(); console.log('OK  ' + name); } catch (e) { failed++; console.log('ERR ' + name + ': ' + e.message); } }
@@ -118,6 +118,17 @@ test('吸墨将敌弹转为飞向发射者的己方高伤返还弹', () => {
   assert(G.player.hp === hp, '弹反慢放期间仍受到其他伤害');
   assert(G.floats.some(f => f.txt === '弹反！'), '缺少弹反反馈');
   assert(G.floats.every(f => f.txt === '弹反！' || /^\d+!?$/.test(f.txt)), '弹反出现了额外资源或墨潮跳字');
+});
+test('单次吸墨可连续弹反，时停逐次减半并在下次吸墨重置', () => {
+  fresh(); const e = enemy('pencilthrower', 100, 0);
+  const shot = () => ({ x: 0, y: 0, vx: -100, vy: 0, dmg: 10, life: 2, sourceId: e.id, reflectable: true });
+  G.castAbsorb();
+  assert(G.reflectEnemyBullet(shot()) && near(G.hitStop, 0.3), '首次弹反时停不是 0.3 秒');
+  assert(G.player.absorbT > 0 && G.player.absorbParryCount === 1, '首次成功后错误关闭了弹反窗口');
+  G.hitStop = 0; assert(G.reflectEnemyBullet(shot()) && near(G.hitStop, 0.15), '第二次弹反时停没有减半');
+  G.hitStop = 0; assert(G.reflectEnemyBullet(shot()) && near(G.hitStop, 0.075), '第三次弹反时停没有继续减半');
+  G.player.absorbCd = 0; G.hitStop = 0; G.castAbsorb();
+  assert(G.reflectEnemyBullet(shot()) && near(G.hitStop, 0.3), '下一次吸墨没有重置时停倍率');
 });
 test('吸墨反弹挥击伤害并僵直攻击者，玩家不受伤', () => {
   fresh(); G.player.ink = 50; G.player.special = 37;
@@ -246,5 +257,5 @@ test('子弹与近战弹反成功后吸墨冷却均为 0.5 秒', () => {
   assert(melee.swingT === 0, '近战弹反未成功');
   assert(near(G.player.absorbCd, 0.5) && !G.castAbsorb(), '近战弹反后的吸墨冷却不是 0.5 秒');
 });
-console.log(failed ? 'PARRY_TEST_FAILURES: ' + failed : 'PARRY_TEST_OK (24/24)');
+console.log(failed ? 'PARRY_TEST_FAILURES: ' + failed : 'PARRY_TEST_OK (25/25)');
 process.exit(failed ? 1 : 0);

@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  const RED = '#b84747', BLUE = '#315fa8', PURPLE = '#76519b';
+  // 所有辅助表现沿用所属主动技能的属性色，避免与敌方红色预警混淆。
   const IDS = [
     'slash_charge', 'slash_crack', 'pierce_ramp', 'pierce_pin', 'spin_spear', 'spin_blast',
     'shield_ink', 'shield_charge', 'ricoshield_ramp', 'ricoshield_orbit', 'perfect_mark', 'perfect_rain',
@@ -18,7 +18,7 @@
   passive('slash_charge', '斩弹蓄锋', '断页斩每斩断 1 枚敌弹，下一斩伤害 +6%，最多 +30%；释放后清空', 'pageslash');
   passive('slash_crack', '裂口封路', '断页斩留下 2 秒斩痕，经过的敌人每 0.6 秒受到 25% 伤害', 'pageslash');
   passive('pierce_ramp', '串页', '交叉贯枪每道枪影各自累计贯穿，对后续目标伤害 +8%，每道最多 +40%', 'piercerush');
-  passive('pierce_pin', '钉足红圈', '双枪终点普通怪定身 0.6 秒，精英/Boss 减速 35%，持续 1 秒', 'piercerush');
+  passive('pierce_pin', '钉足纸钉', '双枪终点普通怪定身 0.6 秒，精英/Boss 减速 35%，持续 1 秒', 'piercerush');
   passive('spin_spear', '旋枪飞刺', '钉页旋枪每 0.8 秒发射一枚 40% 伤害飞刺', 'spinlance');
   passive('spin_blast', '钉点爆页', '旋枪开始返回时，原钉点爆炸并造成 60% 伤害', 'spinlance');
   passive('shield_ink', '格挡回墨', '盾印每格挡 1 枚敌弹回复 2 墨，每次施放最多回复 12', 'shieldrush');
@@ -49,7 +49,7 @@
     return best;
   }
   function fx(type, x, y, r, col, t, extra) {
-    return cap(S.fx, Object.assign({ type, x, y, r, col: col || RED, t, total: t }, extra || {}), 48);
+    return cap(S.fx, Object.assign({ type, x, y, r, col: col || INK, t, total: t }, extra || {}), 48);
   }
   function hit(e, damage, c, skill, x, y) {
     if (!e || e.dead) return;
@@ -80,7 +80,7 @@
   }
   function onDashEnd(dash, back) {
     if (back || !has('pierce_pin')) return;
-    fx('pin', dash.x1, dash.y1, 62, RED, 0.6);
+    fx('pin', dash.x1, dash.y1, 62, dash.c.col, 0.6);
     for (const e of enemies) {
       if (e.dead || Math.hypot(e.x - dash.x1, e.y - dash.y1) > 62 + e.r) continue;
       if (e.elite || e.boss) e.expPinSlowT = Math.max(e.expPinSlowT || 0, 1);
@@ -90,10 +90,11 @@
   function onLanceReturn(lance) {
     if (!has('spin_blast') || lance.expReturnBlast) return;
     lance.expReturnBlast = true;
-    const runtime = W(); if (runtime) runtime.blast(lance.x, lance.y, 92 * lance.c.rad, lance.damage * 0.6, lance.c, 'spinlance', BLUE);
+    const runtime = W(); if (runtime) runtime.blast(lance.x, lance.y, 92 * lance.c.rad, lance.damage * 0.6, lance.c, 'spinlance', lance.c.col);
   }
   function onShieldBlock(dash) {
     dash.expBlocks = (dash.expBlocks || 0) + 1;
+    dash.counters = (dash.counters || 0) + 1;   // 敌弹格挡同样累计基础盾震强化
     if (has('shield_ink') && (dash.expInk || 0) < 12) {
       const gained = dash.expInk || 0, amount = Math.min(2, 12 - gained);
       dash.expInk = gained + amount;
@@ -119,8 +120,8 @@
   }
   function onBoltHit(bolt, enemy) {
     if (bolt.kind === 'perfect' && has('perfect_mark') && !bolt.expMainMarked) {
-      bolt.expMainMarked = true; enemy.perfectMainT = 4;
-      fx('mark', enemy.x, enemy.y, enemy.r + 13, RED, 0.35);
+      bolt.expMainMarked = true; enemy.perfectMainT = 4; enemy.perfectMainC = bolt.c.col || attrOf('perfectarrow');
+      fx('mark', enemy.x, enemy.y, enemy.r + 13, bolt.c.col, 0.35);
     }
   }
 
@@ -159,7 +160,7 @@
         const target = byId(b.targetId) || nearest(p.x, p.y, 520);
         if (target) b.targetId = target.id;
         b.x = p.x; b.y = p.y; b.px = p.x; b.py = p.y;
-        fx('ring', p.x, p.y, 25, BLUE, 0.24);
+        fx('ring', p.x, p.y, 25, b.c.col || attrOf('arrowfocus'), 0.24);
         break;
       }
     }
@@ -202,7 +203,7 @@
           z.tick += 0.5;
           for (const e of enemies) if (!e.dead && Math.hypot(e.x - z.x, e.y - z.y) < z.r + e.r)
             hit(e, z.damage, z.c, z.kind === 'fist' ? 'magfist' : 'inkgrenade', z.x, z.y);
-          fx('ring', z.x, z.y, z.r, z.kind === 'fist' ? PURPLE : RED, 0.3);
+          fx('ring', z.x, z.y, z.r, z.c.col, 0.3);
         }
       }
     }
@@ -231,7 +232,7 @@
           spawnBolt({ kind: 'rain', skill: 'perfectarrow', x, y, angle: b.angle, speed: 540 * b.c.proj,
             damage: b.damage * 0.4, c: b.c, radius: 5, life: 0.42, pierce: 0, _noExpand: true });
         }
-        fx('ring', b.x, b.y, 36, RED, 0.24);
+        fx('ring', b.x, b.y, 36, b.c.col, 0.24);
       }
     }
     if (has('grenade_burn') || has('grenade_bounce')) {
@@ -272,7 +273,7 @@
       spawnBolt({ kind: 'chase', skill: 'heatrail', x: e.x, y: e.y, angle, speed: 900 * rail.c.proj,
         damage: 44 * 0.4 * rail.c.dmg * (1 + rail.c.bdmg), c: rail.c, radius: 8, life: 0.65,
         pierce: 0, heat: rail.heat, _noExpand: true });
-      fx('ring', e.x, e.y, 32, RED, 0.22);
+      fx('ring', e.x, e.y, 32, rail.c.col, 0.22);
     }
     baseKillEnemy(e);
   };
@@ -304,25 +305,29 @@
 
   function draw() {
     for (const z of S.zones) {
+      const zc = z.c.col || INK;
       if (z.kind === 'slash') {
         ctx.globalAlpha = Math.min(0.42, z.t * 0.25); jline(z.x - Math.cos(z.angle) * z.r * 0.65,
           z.y - Math.sin(z.angle) * z.r * 0.65, z.x + Math.cos(z.angle) * z.r * 0.65,
-          z.y + Math.sin(z.angle) * z.r * 0.65, BLUE, 5);
+          z.y + Math.sin(z.angle) * z.r * 0.65, zc, 5);
       } else {
-        ctx.globalAlpha = Math.min(0.2, z.t * 0.09); jcircle(z.x, z.y, z.r, z.kind === 'fist' ? PURPLE : RED, z.kind === 'fist' ? 2 : 7);
+        ctx.globalAlpha = Math.min(0.2, z.t * 0.09); jcircle(z.x, z.y, z.r, zc, z.kind === 'fist' ? 2 : 7);
       }
     }
     for (const o of S.orbiters) {
-      ctx.globalAlpha = Math.min(1, o.t * 2); jcircle(o.x, o.y, 18, BLUE, 5);
+      const oc = o.c.col || attrOf('ricoshield');
+      ctx.globalAlpha = Math.min(1, o.t * 2); jcircle(o.x, o.y, 18, oc, 5);
       jline(o.x - Math.cos(o.angle) * 22, o.y - Math.sin(o.angle) * 22,
-        o.x + Math.cos(o.angle) * 22, o.y + Math.sin(o.angle) * 22, BLUE, 4);
+        o.x + Math.cos(o.angle) * 22, o.y + Math.sin(o.angle) * 22, oc, 4);
+      if (typeof drawIceCrystal === 'function') drawIceCrystal(o.x, o.y, 13, o.angle, 0.8);
     }
     for (const e of enemies) {
       if (e.dead || !(e.perfectMainT > 0)) continue;
+      const mc = e.perfectMainC || attrOf('perfectarrow');
       ctx.globalAlpha = 0.85; const r = e.r + 12;
-      jcircle(e.x, e.y - e.r - 18, 8, RED, 2);
-      jline(e.x - r, e.y - r, e.x - r + 9, e.y - r, RED, 2); jline(e.x - r, e.y - r, e.x - r, e.y - r + 9, RED, 2);
-      jline(e.x + r, e.y + r, e.x + r - 9, e.y + r, RED, 2); jline(e.x + r, e.y + r, e.x + r, e.y + r - 9, RED, 2);
+      jcircle(e.x, e.y - e.r - 18, 8, mc, 2);
+      jline(e.x - r, e.y - r, e.x - r + 9, e.y - r, mc, 2); jline(e.x - r, e.y - r, e.x - r, e.y - r + 9, mc, 2);
+      jline(e.x + r, e.y + r, e.x + r - 9, e.y + r, mc, 2); jline(e.x + r, e.y + r, e.x + r, e.y + r - 9, mc, 2);
     }
     for (const f of S.fx) {
       const p = 1 - f.t / f.total; ctx.globalAlpha = Math.max(0, 1 - p);

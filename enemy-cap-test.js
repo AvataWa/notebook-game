@@ -50,13 +50,13 @@ test('普通怪与精英合计严格停在当前关卡上限', () => {
   assert(G.enemies.length === 30, '怪物数组仍继续增长：' + G.enemies.length);
 });
 
-test('逐个召唤补到上限后停止，Boss 可额外生成 1 只', () => {
+test('逐个召唤补到上限后停止，Boss 登场清空小怪并独立保留', () => {
   fresh(); fill(19);
   assert(G.summonMob('spider', 100, 100) !== null, '第 20 只召唤物未生成');
   assert(G.summonMob('spider', 110, 110) === null, '第 21 只普通怪未被拦截');
   G.spawnBoss(1);
-  assert(G.normalEnemyCount() === 20, 'Boss 被错误计入普通怪上限');
-  assert(G.enemies.length === 21 && G.enemies.filter(e => e.boss).length === 1, 'Boss 没有额外保留 1 个位置');
+  assert(G.normalEnemyCount() === 0, 'Boss 登场没有清空普通怪');
+  assert(G.enemies.length === 1 && G.enemies.filter(e => e.boss).length === 1, 'Boss 没有独立保留');
 });
 
 test('满员时墨债生成失败且不改造已有怪物', () => {
@@ -67,13 +67,17 @@ test('满员时墨债生成失败且不改造已有怪物', () => {
   assert(G.enemies.every((e, i) => e.id === before[i].id && e.name === before[i].name && e.shade === before[i].shade), '已有怪物被误改成墨债');
 });
 
-test('Boss 批量召唤逐只截断，只补足剩余空位', () => {
+test('Boss 登场清空小怪后，召唤仍逐只补至上限', () => {
   fresh(); fill(18); G.spawnBoss(1);
+  assert(G.normalEnemyCount() === 0, 'Boss 登场后仍残留普通怪');
   const boss = G.enemies[G.enemies.length - 1];
   assert(boss.arch === 'charger', '测试 Boss 不是召唤冲锋原型');
   boss.summonT = 0; G.updateBoss(boss, 0.01);
-  assert(G.normalEnemyCount() === 20, '一批 4 只召唤没有只补 2 个空位：' + G.normalEnemyCount());
-  assert(G.enemies.length === 21, '批量召唤后的总数不是 20 普通怪 + 1 Boss');
+  assert(G.normalEnemyCount() === 4, 'Boss 登场后第一批召唤数不正确：' + G.normalEnemyCount());
+  while (G.normalEnemyCount() < G.normalEnemyCap()) G.summonMob('spider', 100, 100);
+  assert(G.summonMob('spider', 110, 110) === null, '召唤超过普通怪上限时未被拦截');
+  assert(G.normalEnemyCount() === 20, '连续召唤后普通怪数量不是 20：' + G.normalEnemyCount());
+  assert(G.enemies.length === 21 && G.enemies.filter(e => e.boss).length === 1, '总数不是 20 普通怪 + 1 Boss');
 });
 
 console.log(failed ? 'ENEMY_CAP_TEST_FAILURES: ' + failed : 'ENEMY_CAP_TEST_OK (5/5)');

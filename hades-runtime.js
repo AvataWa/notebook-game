@@ -1,4 +1,4 @@
-/* 《哈迪斯》式构筑第一批：红芯回收、虚弱与死线。 */
+/* 《哈迪斯》式构筑第一批：红芯回收与死线。 */
 (() => {
   'use strict';
 
@@ -6,19 +6,17 @@
   const CORE_RETURN_DELAY = 3, CORE_RETURN_SPEED = 460;
   const WALL_COL = '#45506d';
   const hadesState = { shots: [], shards: [], walls: [], lines: [], nextId: 1, casting: null };
-  const IDS = ['bloodcore', 'weakmark', 'doommark'];
+  const IDS = ['bloodcore', 'doommark'];
 
   Object.assign(SKILL_DEFS, {
     bloodcore: { name: '红芯投枪', desc: '默认 3 枚红芯，可分别嵌入怪物；死亡或到期后落地，3 秒后自动飞回，也可走近提前回收' },
-    weakmark: { name: '红笔减分', desc: '给最多 3 个高威胁敌人打上红叉，使其造成伤害 -30%，持续 5 秒' },
     doommark: { name: '死线红勾', desc: '给 620 范围内最多 4 个高生命目标添加死线，1.5 秒后结算高伤；结算前不能重复添加' }
   });
   Object.assign(SKILL_TAGS, {
-    bloodcore: ['proj'], weakmark: ['area'], doommark: ['strike']
+    bloodcore: ['proj'], doommark: ['strike']
   });
-  Object.assign(SKILL_ATTR, { bloodcore: 'phys', weakmark: 'phys', doommark: 'phys' });
-  Object.assign(INK_COST, { bloodcore: 3, weakmark: 3, doommark: 4 });
-  if (SUPPORTS.linger.skills && !SUPPORTS.linger.skills.includes('weakmark')) SUPPORTS.linger.skills.push('weakmark');
+  Object.assign(SKILL_ATTR, { bloodcore: 'phys', doommark: 'thunder' });
+  Object.assign(INK_COST, { bloodcore: 3, doommark: 4 });
 
   function has(id) { return !!(player && player.taken && player.taken[id]); }
   function active(id) { return player && player.actives.some(a => a.id === id); }
@@ -40,9 +38,7 @@
   });
   passive('hcorewound', '拔芯创口', '红芯自然到期脱落时，对当前宿主造成一次高伤；死亡掉落不触发', ['bloodcore']);
   passive('hshardguard', '遗留守护', '地面上每枚未拾取红芯使你受伤 -6%，最多 -18%', ['bloodcore']);
-  passive('hweakspread', '虚弱余波', '虚弱敌人死亡时，将剩余时间一半的虚弱传给附近最多 2 个敌人', ['weakmark']);
   passive('hdoomhaste', '催命批注', '死线目标被两个不同主动命中后提前结算，但本次伤害降为 80%', ['doommark']);
-  passive('hdoublequestion', '双重审问', '目标同时处于虚弱与死线时，攻击前摇额外 +30%', ['weakmark', 'doommark']);
 
   function highTarget(x, y, range, withoutCore) {
     let best = null, hp = -1;
@@ -71,23 +67,6 @@
     });
     return true;
   }
-  function applyWeak(e, duration, c) {
-    if (!e || e.dead) return;
-    e.hadesWeakT = Math.max(e.hadesWeakT || 0, duration);
-    e.hadesWeakC = c || e.hadesWeakC;
-    if (c) e.hadesWeakMul = Math.max(0.5, 0.7 - (c.weakPower || 0));
-    else if (!e.hadesWeakMul) e.hadesWeakMul = 0.7;
-  }
-  function fireWeak(a, c) {
-    const candidates = enemies.filter(e => !e.dead && Math.hypot(e.x - player.x, e.y - player.y) < 430 * c.rad);
-    candidates.sort((a0, b0) => (b0.dmg + (b0.boss ? 30 : 0) + (b0.elite ? 12 : 0)) - (a0.dmg + (a0.boss ? 30 : 0) + (a0.elite ? 12 : 0)));
-    const duration = 5 * (1 + c.lingerT);
-    for (const e of candidates.slice(0, 3 + c.count)) applyWeak(e, duration, c);
-    if (candidates.length) {
-      floats.push({ x: candidates[0].x, y: candidates[0].y - candidates[0].r - 20, txt: '虚弱', t: 0.6, color: CORE_COL, weak: true });
-      novas.push({ x: player.x, y: player.y, t: 0.35, max: 90 * c.rad, col: CORE_COL, c });
-    }
-  }
   function fireDoom(a, c) {
     const candidates = enemies.filter(e => !e.dead && !e.hadesDoom && Math.hypot(e.x - player.x, e.y - player.y) <= 620 * c.rad);
     candidates.sort((a0, b0) => b0.hp - a0.hp);
@@ -95,10 +74,10 @@
     if (!marked.length) return false;
     for (const target of marked) {
       target.hadesDoom = { t: 1.5, total: 1.5, dmg: 48 * c.dmg, c, sources: Object.create(null) };
-      floats.push({ x: target.x, y: target.y - target.r - 28, txt: '死线', t: 0.7, color: CORE_COL, crit: true });
-      sparks.push({ x: target.x, y: target.y, t: 0.24, color: CORE_COL });
+      floats.push({ x: target.x, y: target.y - target.r - 28, txt: '死线', t: 0.7, color: c.col, crit: true });
+      sparks.push({ x: target.x, y: target.y, t: 0.24, color: c.col });
     }
-    novas.push({ x: player.x, y: player.y, t: 0.45, max: 130 * c.rad, col: CORE_COL, c });
+    novas.push({ x: player.x, y: player.y, t: 0.45, max: 130 * c.rad, col: c.col, c });
     return true;
   }
   function fireRam(a, c) {
@@ -150,16 +129,16 @@
     const doom = e.hadesDoom;
     if (!doom || e.dead) return;
     e.hadesDoom = null;
-    const x = e.x, y = e.y;
+    const x = e.x, y = e.y, col = doom.c.col || ATTR_COLOR.thunder;
     // 死线也是打击：统一走 areaHit，确保暴击、连段、追加一笔、回锋等辅助真实生效。
     areaHit(e, doom.dmg * multiplier, doom.c, x, y - 30);
-    novas.push({ x, y, t: 0.48, max: 82 * doom.c.rad, col: CORE_COL, c: doom.c });
-    novas.push({ x, y, t: 0.28, max: 48 * doom.c.rad, col: '#f08a80', c: doom.c });
+    novas.push({ x, y, t: 0.48, max: 82 * doom.c.rad, col, c: doom.c });
+    novas.push({ x, y, t: 0.28, max: 48 * doom.c.rad, col: ICE_LIGHT, c: doom.c });
     for (let i = 0; i < 10; i++) {
       const angle = i * Math.PI * 0.2, radius = 16 + (i % 3) * 9;
-      sparks.push({ x: x + Math.cos(angle) * radius, y: y + Math.sin(angle) * radius, t: 0.3, color: CORE_COL });
+      sparks.push({ x: x + Math.cos(angle) * radius, y: y + Math.sin(angle) * radius, t: 0.3, color: col });
     }
-    floats.push({ x, y: y - e.r - 34, txt: '死线！', t: 0.7, color: CORE_COL, crit: true });
+    floats.push({ x, y: y - e.r - 34, txt: '死线！', t: 0.7, color: col, crit: true });
     shakeT = Math.max(shakeT, 0.08);
   }
   function registerHit(e, skillId) {
@@ -228,7 +207,6 @@
     hadesState.casting = a.id;
     try {
       if (a.id === 'bloodcore') return fireCore(a, c);
-      if (a.id === 'weakmark') return fireWeak(a, c);
       if (a.id === 'doommark') return fireDoom(a, c);
       return baseFireSkill(a, c);
     } finally { hadesState.casting = null; }
@@ -247,31 +225,15 @@
   };
   const baseKillEnemy = killEnemy;
   killEnemy = function(e) {
-    const core = e.hadesCoreT > 0, weak = e.hadesWeakT || 0;
+    const core = e.hadesCoreT > 0;
     if (core) { dropShard(e.x, e.y); e.hadesCoreT = 0; }
     baseKillEnemy(e);
-    if (weak > 0 && has('hweakspread')) {
-      const nearby = enemies.filter(other => !other.dead && other !== e && Math.hypot(other.x - e.x, other.y - e.y) < 190)
-        .sort((a0, b0) => Math.hypot(a0.x - e.x, a0.y - e.y) - Math.hypot(b0.x - e.x, b0.y - e.y)).slice(0, 2);
-      for (const other of nearby) applyWeak(other, weak * 0.5, e.hadesWeakC);
-    }
   };
   const baseHurtPlayer = hurtPlayer;
   hurtPlayer = function(dmg, kind, source) {
-    if (source && source.hadesWeakT > 0) dmg *= source.hadesWeakMul || 0.7;
     if (has('hshardguard')) dmg *= 1 - Math.min(0.18, hadesState.shards.length * 0.06);
     return baseHurtPlayer(dmg, kind, source);
   };
-
-  function slowWindup(e, dt, winding) {
-    return winding && has('hdoublequestion') && e.hadesWeakT > 0 && e.hadesDoom ? dt / 1.3 : dt;
-  }
-  const baseMelee = updateMeleeSwing;
-  updateMeleeSwing = function(e, dt) { baseMelee(e, slowWindup(e, dt, e.swingT > 0)); };
-  const baseShooter = updateShooter;
-  updateShooter = function(e, dt) { baseShooter(e, slowWindup(e, dt, e.shotWindup > 0)); };
-  const baseBoss = updateBoss;
-  updateBoss = function(e, dt) { baseBoss(e, slowWindup(e, dt, true)); };
 
   function updateShots(dt) {
     for (const shot of hadesState.shots) {
@@ -291,7 +253,6 @@
   function updateCurses(dt) {
     for (const e of enemies) {
       if (e.dead) continue;
-      e.hadesWeakT = Math.max(0, (e.hadesWeakT || 0) - dt);
       e.hadesRamT = Math.max(0, (e.hadesRamT || 0) - dt);
       if (e.hadesDoom) {
         e.hadesDoom.t -= dt;
@@ -425,10 +386,6 @@
     for (const e of enemies) {
       if (e.dead) continue;
       const y = e.y - e.r - 12;
-      if (e.hadesWeakT > 0) {
-        jline(e.x - 6, y - 5, e.x + 6, y + 5, CORE_COL, 2.2);
-        jline(e.x + 6, y - 5, e.x - 6, y + 5, CORE_COL, 2.2);
-      }
       if (e.hadesCoreT > 0) {
         const pulse = 0.5 + Math.sin(gameTime * 8 + e.id) * 0.5;
         ctx.globalAlpha = 0.28 + pulse * 0.2;
@@ -441,19 +398,20 @@
         jline(sx - 6, sy + 2, sx + 3, sy - 5, '#f08a80', 2);
       }
       if (e.hadesDoom) {
-        const progress = 1 - e.hadesDoom.t / e.hadesDoom.total;
+        const doom = e.hadesDoom, doomCol = doom.c.col || ATTR_COLOR.thunder;
+        const progress = 1 - doom.t / doom.total;
         const pulse = 1 + Math.sin(progress * Math.PI * 6) * 0.08;
         const size = (13 + e.r * 0.18) * pulse, cy = y - 10;
         ctx.globalAlpha = 0.3 + progress * 0.4;
-        jcircle(e.x, e.y, e.r + 11 + progress * 5, CORE_COL, 2.2);
+        jcircle(e.x, e.y, e.r + 11 + progress * 5, doomCol, 2.2);
         ctx.globalAlpha = 0.95;
         ctx.beginPath(); ctx.arc(e.x, cy, size + 6, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
-        ctx.strokeStyle = CORE_COL; ctx.lineWidth = 2; ctx.stroke();
-        jline(e.x - size * 0.78, cy, e.x - size * 0.2, cy + size * 0.48, CORE_COL, 3.4);
-        jline(e.x - size * 0.2, cy + size * 0.48, e.x + size * 0.88, cy - size * 0.68, CORE_COL, 3.4);
+        ctx.strokeStyle = doomCol; ctx.lineWidth = 2; ctx.stroke();
+        jline(e.x - size * 0.78, cy, e.x - size * 0.2, cy + size * 0.48, doomCol, 3.4);
+        jline(e.x - size * 0.2, cy + size * 0.48, e.x + size * 0.88, cy - size * 0.68, doomCol, 3.4);
         ctx.globalAlpha = 0.32;
-        jline(e.x - size * 0.72, cy + 2, e.x - size * 0.15, cy + size * 0.48 + 2, '#f08a80', 1.3);
-        jline(e.x - size * 0.15, cy + size * 0.48 + 2, e.x + size * 0.94, cy - size * 0.62, '#f08a80', 1.3);
+        jline(e.x - size * 0.72, cy + 2, e.x - size * 0.15, cy + size * 0.48 + 2, ICE_LIGHT, 1.3);
+        jline(e.x - size * 0.15, cy + size * 0.48 + 2, e.x + size * 0.94, cy - size * 0.62, ICE_LIGHT, 1.3);
       }
     }
     ctx.globalAlpha = 1;
@@ -462,7 +420,7 @@
   window.__drawWorldExtras = function() { if (previousExtras) previousExtras(); draw(); };
 
   window.__hadesRuntime = {
-    state: hadesState, reset, maxAmmo, dropShard, fireWall, wallHit, applyWeak, settleDoom, destroyWall,
+    state: hadesState, reset, maxAmmo, dropShard, fireWall, wallHit, settleDoom, destroyWall,
     updateShots, updateCurses, updateWallCollisions, updateLines, updatePickups,
     get ids() { return IDS.slice(); }
   };

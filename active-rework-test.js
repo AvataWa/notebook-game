@@ -62,14 +62,14 @@ test('子弹技能 Lv2、Lv4 各加一弹，冰锥图钉真实扇形多发', () 
   }
 });
 
-test('炮台弹速 620，升级弹数会传给每座炮台', () => {
+test('炮台使用统一配置弹速，升级弹数会传给每座炮台', () => {
   fresh('ballista', 4); const a = G.player.actives[0];
   G.fireSkill(a, G.skillCalc(a)); target(110, 0);
   assert(G.totems.length === 1 && G.totems[0].shots === 3, '炮台没有保存三弹射击');
   G.update(0.5);
   const shots = G.bullets.filter(b => b.kind === 'nib');
   assert(shots.length === 3, '炮台没有实际发射三颗子弹');
-  assert(shots.every(b => near(Math.hypot(b.vx, b.vy), 620)), '炮台弹速不是 620');
+  assert(shots.every(b => near(Math.hypot(b.vx, b.vy), G.BATTLE.skills.ballistaBulletSpeed)), '炮台没有读取统一弹速配置');
 });
 
 test('刀阵每次两枚、上限六枚，并严格均匀分布在 125 像素整圈', () => {

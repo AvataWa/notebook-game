@@ -77,6 +77,8 @@ const BATTLE_CONFIG = {
     ownCost: 24,            // 己方墨迹潜墨耗墨/秒（原 6）
     otherCost: 36,          // 非己方墨迹潜墨耗墨/秒（原 18）
     speed: 1.55,            // 潜墨移速倍率
+    offOwnSpeed: 0.2,       // 潜墨朝非己方墨迹移动时的最终移速倍率（降低 80%）
+    lookAhead: 28,          // 沿移动方向检测己方墨迹的身前距离（像素）
     cooldown: 1             // 退出潜墨后的基础冷却/秒
   },
 
@@ -118,7 +120,7 @@ const BATTLE_CONFIG = {
     ballista: 5,        // 图钉炮台
     boomerang: 2.2,     // 回力橡皮擦
     vortex: 1.5,        // 涂改带刀阵
-    candle: 0.25,       // 蜡烛头
+    candle: 0.4,        // 蜡烛头
     icespear: 1.1,      // 冰锥图钉
     inkrain: 2.8,       // 毒墨雨
     ruler: 2,           // 裂地直尺
@@ -129,7 +131,6 @@ const BATTLE_CONFIG = {
     cola: 1.8,          // 冰可乐新星
 
     // 哈迪斯机制技能
-    weakmark: 4,        // 红笔减分
     doommark: 3,        // 死线红勾
 
     // 哈迪斯武器启发技能

@@ -35,10 +35,19 @@
 
   const baseLinkedTrail = addLinkedTrail;
   addLinkedTrail = function(owner, x, y, col, hostile, r, amount, spacing, xKey, yKey, refKey) {
-    if (owner === player && player.diving && hasAffix('dive', 'widetrail')) r *= 1.6;
     if (owner && owner.kind === 'reflect' && owner.inkWide) r *= owner.inkWide;
     const covered = baseLinkedTrail(owner, x, y, col, hostile, r, amount, spacing, xKey, yKey, refKey);
-    if (owner === player && player.diving && hasAffix('dive', 'washregen')) player.diveWashCover = (player.diveWashCover || 0) + covered;
+    if (owner === player && player.diving && covered > 0 && hasAffix('dive', 'washregen') && gameTime >= player.diveWashProcT) {
+      player.diveWashProcT = gameTime + 0.4;
+      refundInk(1, x, y - 18, '洗墨');
+      const target = nearestEnemy(x, y, 480);
+      if (target) {
+        const angle = Math.atan2(target.y - y, target.x - x);
+        fireBullet(x, y, angle, 360, 25 * player.dmgMul * (1 + player.eqAtk / 100) * (player.metaDiveMul || 1), 'dive',
+          { life: 1.4, col: inkFriendlyColor, hadesSkill: 'dive' });
+        sparks.push({ x, y, t: 0.2, color: inkFriendlyColor });
+      }
+    }
     return covered;
   };
 
@@ -67,11 +76,6 @@
       const paid = player.diveEntryFreeT > 0 ? 0 : Math.min(player.ink, cost);
       player.ink = Math.max(0, player.ink - paid);
       player.diveSpent += paid;
-      if (hasAffix('dive', 'washregen') && player.diveWashCover > 0) {
-        const back = Math.min(cost * 0.5, player.diveWashCover * 0.025);
-        player.ink = Math.min(player.maxInk, player.ink + back);
-      }
-      player.diveWashCover = 0;
       if (hasAffix('dive', 'divecharge')) {
         player.diveChargeAcc += dt;
         while (player.diveChargeAcc >= 1) {
@@ -124,6 +128,7 @@
     if (e.vulnT > 0) dmg *= 1 + e.vuln;
     if (e.areaVulnT > 0) dmg *= 1 + e.areaVuln;
     if (e.paperVulnT > 0) dmg *= 1.2;
+    if (e.surgeSlowT > 0 && inkCircleHas(e.x, e.y, e.r * 0.35, false)) dmg *= 1.2;
     if (e.boss && bossMul) dmg *= 1 + bossMul;
     if (vuln) { e.vuln = vuln; e.vulnT = 2; }
     let crit = false;
@@ -154,7 +159,12 @@
     baseKillEnemy(e);
     hasItem = savedHasItem;
     for (let i = oldDropCount; i < drops.length; i++) if (drops[i].rarity === undefined) drops[i].rarity = rollRarity();
-    if (seeded) addInkStain(e.x, e.y, 6, 35, inkFriendlyColor, false, false);
+    if (seeded) {
+      addInkStain(e.x, e.y, 6, 35, inkFriendlyColor, false, false);
+      erupts.push({ x: e.x, y: e.y, delay: 0.08,
+        dmg: e.surgeSeedDamage || BATTLE.surge.damage * player.dmgMul * (1 + player.eqAtk / 100) * 0.35,
+        r: 55, c: { col: inkFriendlyColor, hadesSkill: 'surge' }, done: false, t: 0 });
+    }
     if (hasItem('shredglove') && player.itemInkCd < itemV('shredglove', 'cap')) {
       let longest = null;
       for (const a of player.actives) if (!longest || a.t > longest.t) longest = a;
@@ -171,6 +181,10 @@
     for (const a of player.actives) {
       a.t -= dt;
       if (a.t > 0) continue;
+      if (a.id === 'shieldrush' && window.__weaponRuntime && window.__weaponRuntime.state.shieldRush) {
+        a.t = 0.2;   // 旧盾印仍在时不重复施放，也不消耗墨水
+        continue;
+      }
       let cost = INK_COST[a.id] || 2;
       if (player.itemParryT > 0 && hasItem('parrygrip')) cost *= 1 - itemV('parrygrip', 'discount') / 100;
       if (!spendSkillInk(a, cost)) {
@@ -190,12 +204,6 @@
     }
   };
 
-  const baseEnemyInkFactor = enemyInkFactor;
-  enemyInkFactor = function(e) {
-    let factor = baseEnemyInkFactor(e);
-    if (e.surgeSlowT > 0 && inkCircleHas(e.x, e.y, e.r * 0.35, false)) factor *= 0.82;
-    return factor;
-  };
   const baseUpdateShooter = updateShooter;
   updateShooter = function(e, dt) {
     if (!(e.sealT > 0)) return baseUpdateShooter(e, dt);
@@ -296,7 +304,6 @@
       e.surgeSlowT = Math.max(0, (e.surgeSlowT || 0) - dt);
       e.sealT = Math.max(0, (e.sealT || 0) - dt);
     }
-    if (hasAffix('dive', 'divepaint')) player.taken.divepaint = true;
 
     const nearDrop = drops.find(dr => Math.hypot(player.x - dr.x, player.y - dr.y) < equipmentRule().pickupRadius);
     if (nearDrop) {
@@ -323,9 +330,17 @@
       BATTLE.ink.hostileSpeed = 1 - (1 - BATTLE.ink.hostileSpeed) * (1 - itemV('blotarmor', 'graydr') / 100);
     }
     player.eqSpd *= speedFactor;
+    const oldX = player.x, oldY = player.y;
     baseUpdate(dt);
     player.eqSpd /= speedFactor;
     BATTLE.ink.ownSpeed = oldOwnSpeed; BATTLE.ink.hostileSpeed = oldHostileSpeed;
+    if (player.diving && hasAffix('dive', 'widetrail')) {
+      player.diveEchoDist += Math.hypot(player.x - oldX, player.y - oldY);
+      while (player.diveEchoDist >= 90 && player.diveEchoStacks < 4) {
+        player.diveEchoDist -= 90; player.diveEchoStacks++;
+      }
+      if (player.diveEchoStacks >= 4) player.diveEchoDist = 0;
+    }
 
     if (player.level > oldLevel) applyLevelEquipment();
     if (player.diving && hasAffix('dive', 'paperpass')) {

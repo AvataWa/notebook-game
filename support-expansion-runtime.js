@@ -8,8 +8,7 @@
   const NEW_SUPPORT_IDS = [
     'areastorm', 'areaspikes', 'areaouter', 'areagravity', 'areadeath', 'areastack',
     'projrepeat', 'projreturn', 'projendsplit', 'projpierceramp', 'projaccel', 'projback',
-    'strikecross', 'strikethird', 'strikeaftershock', 'strikecrowd', 'strikeback', 'strikeexecute',
-    'weakcount', 'weakpower'
+    'strikecross', 'strikethird', 'strikeaftershock', 'strikecrowd', 'strikeback', 'strikeexecute'
   ];
   Object.assign(SUPPORTS, {
     areastorm: { name: '落雷批注', tag: 'area' }, areaspikes: { name: '墨刺丛生', tag: 'area' },
@@ -20,8 +19,7 @@
     projaccel: { name: '逐笔加速', tag: 'proj' }, projback: { name: '背稿反射', tag: 'proj' },
     strikecross: { name: '交叉复审', tag: 'strike' }, strikethird: { name: '三段收笔', tag: 'strike' },
     strikeaftershock: { name: '落点余震', tag: 'strike' }, strikecrowd: { name: '破阵重笔', tag: 'strike' },
-    strikeback: { name: '纸背反冲', tag: 'strike' }, strikeexecute: { name: '红笔收尾', tag: 'strike' },
-    weakcount: { name: '红笔连批', tag: 'area' }, weakpower: { name: '扣分加重', tag: 'area' }
+    strikeback: { name: '纸背反冲', tag: 'strike' }, strikeexecute: { name: '红笔收尾', tag: 'strike' }
   });
 
   const baseSupDesc = supDesc;
@@ -45,18 +43,14 @@
       case 'strikecrowd': return '命中至少 3 敌时追加 ' + (40 + 20 * (l - 1)) + '% 伤害';
       case 'strikeback': return '向目标背后溅射 ' + (20 + 15 * (l - 1)) + '% 伤害';
       case 'strikeexecute': return '低血普通怪增伤 ' + (70 + 30 * (l - 1)) + '%，精英/Boss 增伤 ' + (25 + 10 * (l - 1)) + '%';
-      case 'weakcount': return '虚弱目标数量 +' + l;
-      case 'weakpower': return '虚弱减伤额外 +' + 4 * l + '%，总减伤最高 50%';
       default: return baseSupDesc(id, l);
     }
   };
 
   const baseSupportUsable = supportUsable;
   supportUsable = function(sid, aid) {
-    if (aid === 'weakmark') return ['swift', 'wide', 'sheath', 'linger', 'weakcount', 'weakpower'].includes(sid);
     if (sid === 'chain' && (aid === 'arc' || aid === 'brand')) return true;
     if (sid === 'dur' && aid === 'ballista') return true;
-    if (sid === 'weakcount' || sid === 'weakpower') return aid === 'weakmark';
     if (NEW_SUPPORT_IDS.includes(sid)) {
       const tags = SKILL_TAGS[aid] || [];
       if (sid.startsWith('area')) return AREA_SKILLS.has(aid) && tags.includes('area');
@@ -93,8 +87,6 @@
         case 'strikecrowd': c.crowdStrike = l; break;
         case 'strikeback': c.backSplash = l; break;
         case 'strikeexecute': c.executeStrike = l; break;
-        case 'weakcount': c.count += l; break;
-        case 'weakpower': c.weakPower = 0.04 * l; break;
       }
     }
     return c;

@@ -38,6 +38,22 @@ test('潜墨提供 55% 移速且移动不铺新轨迹', () => {
   assert(G.toggleDive() && G.player.diving, '己方墨迹上无法潜墨'); G.keys.d = true; G.update(0.1);
   assert(near(G.player.x / normal, 1.55), '潜墨移速倍率错误'); assert(G.inkStats().friendly === before, '潜墨生成了新领地');
 });
+test('潜墨朝非己方向移动时铺设己方轨迹并减速 80%', () => {
+  fresh(); G.keys.d = true; G.update(0.1); const normal = G.player.x;
+  fresh(); G.player.ink = 100; assert(G.toggleDive(), '空白区域无法开启潜墨');
+  G.keys.d = true; G.update(0.1);
+  assert(near(G.player.x / normal, 1.55 * 0.2), '空白区域潜墨移速不是原潜墨速度的 20%');
+  assert(G.inkCircleHas(G.player.x, G.player.y, 0, false), '非己方区域潜墨没有留下己方墨迹');
+  const firstX = G.player.x; G.update(0.1);
+  assert(near((G.player.x - firstX) / normal, 1.55 * 0.2), '继续向外潜墨时错误恢复了移速');
+});
+test('潜墨身前已是己方墨迹时恢复速度，包括回游方向', () => {
+  fresh(); G.keys.d = true; G.update(0.1); const normal = G.player.x;
+  fresh(); G.player.x = 50; G.addInkStain(90, 0, 10, 35, '#1a2b8f');
+  assert(!G.playerOnOwnInk(), '测试起点应位于己方墨迹外');
+  G.toggleDive(); G.keys.d = true; G.update(0.1);
+  assert(near((G.player.x - 50) / normal, 1.55), '朝己方墨迹回游时仍被减速');
+});
 test('新涂地与覆盖灰墨充能，重复涂同色不充能', () => {
   fresh(); G.addInkStain(0, 0, 10, 40, '#6b6b6b'); assert(near(G.player.special, 12), '新区域充能错误');
   const charged = G.player.special; G.addInkStain(0, 0, 10, 40, '#6b6b6b'); assert(G.player.special === charged, '重复涂地仍充能');
@@ -61,7 +77,7 @@ test('灰墨仍减速，潜墨不会被打断或退出', () => {
   G.player.ink = 50; assert(G.toggleDive(), '灰墨中无法开启潜墨');
   const hp = G.player.hp; G.keys.d = true; G.update(0.55);
   assert(G.player.diving && G.player.hp === hp, '灰墨仍然打断潜墨或造成伤害');
-  assert(near(G.player.x / normal, 0.58 * 1.55 * 5.5), '灰墨中的潜墨移速错误');
+  assert(near(G.player.x / normal, 0.58 * 1.55 * 0.2 * 5.5), '灰墨中的潜墨没有降低 80% 移速');
 });
 test('怪物逐帧移动留下灰墨，彩墨与灰墨分别改变速度', () => {
   fresh(); G.spawnEnemy('stick', 0, 0); const e = G.enemies[0]; e.x = 50; G.updateEnemyTrails();
@@ -86,5 +102,5 @@ test('长线段中点属于真实墨迹范围，远端不会误判', () => {
   fresh(); G.addPlayerTrail(30, 0, '#1a2b8f', { x: -30, y: 0 }); G.player.x = 0; G.player.y = 0;
   assert(G.playerOnOwnInk(), '线段中点没有识别为墨迹'); G.player.x = 90; assert(!G.playerOnOwnInk(), '墨迹范围被错误扩大');
 });
-console.log(failed ? 'INK_ROUTE_TEST_FAILURES: ' + failed : 'INK_ROUTE_TEST_OK (11/11)');
+console.log(failed ? 'INK_ROUTE_TEST_FAILURES: ' + failed : 'INK_ROUTE_TEST_OK (13/13)');
 process.exit(failed ? 1 : 0);

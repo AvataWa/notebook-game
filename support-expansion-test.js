@@ -1,6 +1,6 @@
 // 通用辅助扩展：匹配、范围派生、弹道行为、打击派生与虚弱专项测试
 const fs = require('fs');
-const src = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'main.js', 'build-runtime.js', 'hades-runtime.js', 'hades-weapons-runtime.js', 'weapon-passives-expansion.js', 'support-expansion-runtime.js']
+const src = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'main.js', 'build-runtime.js', 'hades-runtime.js', 'hades-weapons-runtime.js', 'weapon-passives-expansion.js', 'form-passives-runtime.js', 'support-expansion-runtime.js', 'elemental-support-runtime.js', 'trigger-support-runtime.js']
   .map(f => fs.readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
 const fakeCtx = new Proxy({}, { get(t, k) {
   if (k === 'measureText') return txt => ({ width: String(txt).length * 10 });
@@ -33,13 +33,12 @@ function target(x, y) {
 function calc() { const a = G.player.actives[0]; return G.skillCalc(a); }
 function cast() { return G.fireSkill(G.player.actives[0], calc()); }
 
-test('二十条扩展辅助均有描述，匹配修复与排斥关系正确', () => {
-  fresh(); assert(Object.keys(G.SUPPORTS).length === 56 && G.E.ids.length === 20, '扩展辅助数量错误');
-  for (const id of G.E.ids) assert(G.supDesc(id, 1).length > 0, id + ' 缺少描述');
-  for (const id of ['swift','wide','sheath','linger','weakcount','weakpower']) assert(G.supportUsable(id, 'weakmark'), '红笔减分丢失 ' + id);
-  for (const id of ['brutal','areastorm','projrepeat','strikecross','chain','dur']) assert(!G.supportUsable(id, 'weakmark'), '红笔减分错配 ' + id);
+test('保留的扩展辅助均有描述，匹配修复与排斥关系正确', () => {
+  fresh(); assert(Object.keys(G.SUPPORTS).length === 70 && G.E.ids.filter(id => G.SUPPORTS[id]).length === 14, '扩展辅助数量错误：' + Object.keys(G.SUPPORTS).length);
+  for (const id of G.E.ids.filter(id => G.SUPPORTS[id])) assert(G.supDesc(id, 1).length > 0, id + ' 缺少描述');
+  assert(!G.SUPPORTS.weakcount && !G.SUPPORTS.weakpower && !G.SKILL_DEFS.weakmark, '红笔减分或专属辅助仍存在');
   assert(G.supportUsable('chain', 'arc') && G.supportUsable('chain', 'brand') && G.supportUsable('dur', 'ballista'), '连锁或炮台持续未开放');
-  for (const id of ['sharpen','longshot','fatpipe']) assert(G.supportUsable(id, 'ricoshield'), '飞盾缺少 ' + id);
+  for (const id of ['sharpen','fatpipe']) assert(G.supportUsable(id, 'ricoshield'), '飞盾缺少 ' + id);
   assert(!G.supportUsable('projrepeat', 'ricoshield') && !G.supportUsable('projreturn', 'boomerang'), '自然弹道被错误追加通用行为');
 });
 
@@ -76,11 +75,11 @@ test('逐层加深按区域停留层数提高后续伤害', () => {
   G.areaHit(e, 100, c, 0, 0); assert(Math.abs((hp - e.hp) - 112) < 0.001, '两层停留没有提供 12% 增伤：' + (hp - e.hp));
 });
 
-test('连发与背稿反射生成独立弹道的真实子弹', () => {
-  fresh('icespear', ['projrepeat','projback']); target(150, 0); cast();
-  assert(G.bullets.length === 1 && G.E.state.queue.length === 2, '连发和背射没有进入弹道队列');
-  G.E.preUpdate(0.11); assert(G.bullets.length === 3, '队列没有生成两颗追加子弹：' + G.bullets.length);
-  assert(G.bullets[1].dmg < G.bullets[0].dmg && G.bullets[2].vx < 0, '连发伤害或背射方向错误');
+test('连发生成独立弹道的真实子弹', () => {
+  fresh('icespear', ['projrepeat']); target(150, 0); cast();
+  assert(G.bullets.length === 1 && G.E.state.queue.length === 1, '连发没有进入弹道队列');
+  G.E.preUpdate(0.11); assert(G.bullets.length === 2, '队列没有生成追加子弹：' + G.bullets.length);
+  assert(G.bullets[1].dmg < G.bullets[0].dmg && G.bullets[1]._noExpand, '连发伤害或派生限制错误');
 });
 
 test('折返笔迹与末端分岔在弹道终止时真实生成', () => {
@@ -88,11 +87,6 @@ test('折返笔迹与末端分岔在弹道终止时真实生成', () => {
   b.x = 200; b.y = 0; G.E.preUpdate(0.01); G.bullets.splice(0); G.E.postUpdate(0.016);
   assert(G.E.state.queue.length === 3, '终止后没有生成一枚返程和两枚分岔');
   G.E.preUpdate(0); assert(G.bullets.length === 3, '终止派生弹没有进入战斗');
-});
-
-test('贯穿磨尖在真实贯穿计数下降后提高后续伤害', () => {
-  fresh('icespear', ['projpierceramp']); target(150, 0); cast(); const b = G.bullets[0], damage = b.dmg;
-  b.hits--; G.E.preUpdate(0.016); assert(b.dmg > damage, '贯穿后伤害没有递增');
 });
 
 test('逐笔加速每 0.2 秒提高速度和伤害', () => {
@@ -108,22 +102,10 @@ test('交叉复审与落点余震分别延迟结算', () => {
   G.E.updateDelayed(0.2); assert(G.E.state.delayed.length === 0, '落点余震没有结算');
 });
 
-test('三段收笔在同目标第三次打击时追加伤害', () => {
-  fresh('pageslash', ['strikethird']); const e = target(30, 0), c = calc();
-  G.areaHit(e, 10, c, 0, 0); G.areaHit(e, 10, c, 0, 0); const hp = e.hp;
-  G.areaHit(e, 10, c, 0, 0); assert(Math.abs((hp - e.hp) - 18) < 0.001 && G.floats.some(f => f.txt === '收笔！'), '第三次打击没有追加 80%');
-});
-
 test('破阵重笔在单次命中至少三个敌人时追加结算', () => {
   fresh('pageslash', ['strikecrowd']); const c = calc(), es = [target(20, 0), target(30, 0), target(40, 0)];
   for (const e of es) G.areaHit(e, 10, c, 0, 0);
   assert(es.every(e => Math.abs((9999 - e.hp) - 14) < 0.001), '三敌命中没有全部追加 40% 伤害');
-});
-
-test('纸背反冲只溅射目标背后的敌人', () => {
-  fresh('pageslash', ['strikeback']); const e = target(50, 0), behind = target(90, 0), front = target(20, 0), c = calc();
-  const hp = behind.hp, frontHp = front.hp; G.areaHit(e, 20, c, 0, 0);
-  assert(behind.hp < hp && front.hp === frontHp, '背后溅射方向或伤害错误');
 });
 
 test('红笔收尾对低血普通怪与精英使用不同增幅', () => {
@@ -133,24 +115,15 @@ test('红笔收尾对低血普通怪与精英使用不同增幅', () => {
   assert(Math.abs(normal.hp - 83) < 0.001 && Math.abs(elite.hp - 87.5) < 0.001, '低血增伤比例错误');
 });
 
-test('红笔连批增加目标，扣分加重提高真实减伤且封顶', () => {
-  fresh('weakmark', ['weakcount','weakpower']); for (let i = 0; i < 6; i++) target(60 + i * 20, 0); cast();
-  const weak = G.enemies.filter(e => e.hadesWeakT > 0); assert(weak.length === 4 && Math.abs(weak[0].hadesWeakMul - 0.66) < 1e-8,
-    '目标数或虚弱倍率错误：' + weak.length + ' / ' + (weak[0] && weak[0].hadesWeakMul) + ' / c=' + JSON.stringify(calc()));
-  G.player.hurtT = 0; G.player.goldT = 0; const hp = G.player.hp; G.hurtPlayer(100, 'enemy', weak[0]);
-  assert(Math.round(hp - G.player.hp) === 66, '加重虚弱没有作用于真实扣血');
-  const c = calc(); c.weakPower = 0.5; G.H.applyWeak(weak[0], 5, c); assert(weak[0].hadesWeakMul === 0.5, '减伤没有封顶 50%');
-});
-
 test('死线红勾的打击辅助进入统一结算', () => {
-  fresh('doommark', ['followup','shock','combo']); const e = target(80, 0); cast(); e.stunT = 0;
-  G.H.settleDoom(e, 1); assert(G.followups.length === 1 && e.stunT > 0 && e.comboN === 1, '死线未触发追加一笔、震荡或连段');
+  fresh('doommark', ['followup','shock']); const e = target(80, 0); cast(); e.stunT = 0;
+  G.H.settleDoom(e, 1); assert(G.followups.length === 1 && e.stunT > 0, '死线未触发追加一笔或震荡');
 });
 
-test('群箭数量、悬箭存活和飞盾三项数值辅助真实生效', () => {
-  fresh('arrowfocus', ['multi','longshot']); target(120, 0); cast();
-  assert(G.W.state.bolts.length === 9 && G.W.state.bolts.every(b => b.life > 1.6), '群箭弹数或长距墨水错误');
-  fresh('ricoshield', ['sharpen','longshot','fatpipe']); const e = target(100, 0); cast(); const shield = G.W.state.shields[0], hp = e.hp;
+test('群箭数量和飞盾数值辅助真实生效', () => {
+  fresh('arrowfocus', ['multi']); target(120, 0); cast();
+  assert(G.W.state.bolts.length === 9, '群箭弹数错误');
+  fresh('ricoshield', ['sharpen','fatpipe']); const e = target(100, 0); cast(); const shield = G.W.state.shields[0], hp = e.hp;
   G.W.updateRicoshields(0.2); assert(hp - e.hp > 29 && shield.bounces === 1, '飞盾削尖笔尖没有增伤');
 });
 

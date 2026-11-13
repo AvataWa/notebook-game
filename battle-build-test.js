@@ -65,11 +65,10 @@ test('余潮使墨潮释放后保留 20% 充能', () => {
   fresh(); G.player.taken.surgeecho = true; G.player.special = 100; G.player.specialAnnounced = true;
   assert(G.castInkSurge() && near(G.player.special, 20), '墨潮余潮保留充能错误');
 });
-test('潜行笔迹让潜墨移动铺设己方墨迹', () => {
-  fresh(); active(); G.addInkStain(0, 0, 5, 30, '#1a2b8f'); G.player.taken.divepaint = true;
-  const before = G.inkStats().friendly; assert(G.toggleDive(), '无法进入潜墨');
-  G.keys.d = true; G.update(0.1); G.keys.d = false;
-  assert(G.player.diving && G.inkStats().friendly > before, '潜墨移动没有铺墨');
+test('入墨起笔立即减少全部主动当前冷却', () => {
+  fresh(); active(); G.player.actives[0].t = 5; G.player.taken.divepaint = true;
+  assert(G.toggleDive(), '无法进入潜墨');
+  assert(near(G.player.actives[0].t, 4.65), '入墨起笔没有减少 0.35 秒冷却');
   G.render();
 });
 console.log(failed ? 'BATTLE_BUILD_TEST_FAILURES: ' + failed : 'BATTLE_BUILD_TEST_OK (8/8)');

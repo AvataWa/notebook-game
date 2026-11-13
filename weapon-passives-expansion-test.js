@@ -69,7 +69,8 @@ test('盾印格挡回墨封顶十二，守势蓄击按剩余三层强化结束�
   G.W.updateShieldRush(0.01); const d = G.W.state.shieldRush;
   assert(G.player.ink === 12 && d.expBlocks === 7 && d.layers === 3, '格挡回墨、计数或免耗层规则错误');
   G.W.updateShieldRush(3.6);
-  assert(near(9999 - e.hp, (38 + 42) * 1.48), '三层盾震没有按六层格挡上限增伤：' + (9999 - e.hp));
+  // 基础盾震按真实格挡额外 +36%（七发封顶），守势蓄击再 +48%。
+  assert(near(9999 - e.hp, (38 + 42) * 1.36 * 1.48), '三层盾震没有叠加真实格挡与六层守势增伤：' + (9999 - e.hp));
   assert(G.player.x === px && G.player.y === py, '盾震结算移动了角色');
 });
 
