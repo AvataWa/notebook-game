@@ -1,4 +1,4 @@
-// 部位装备经验、无浪费结算、跨局继承与拾取防误触专项测试
+// 部位装备经验、单局成长重置、装备继承与拾取防误触专项测试
 const fs = require('fs');
 const files = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'main.js', 'build-runtime.js', 'build-view.js', 'meta-config.js', 'meta-runtime.js', 'ui-copy.js', 'ui-detail-runtime.js'];
 const src = files.map(f => fs.readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
@@ -55,36 +55,39 @@ test('不同装备保留与替换都入账，0/499ms 拒绝且 500ms 解锁', ()
   } finally { Date.now = realNow; }
 });
 
-test('换装、下局继承和重铸共用同一部位等级', () => {
+test('本局换装共用部位等级，下局与重铸后成长归零但装备仍继承', () => {
   fresh(); M.recordEquipment({ item: 'glove', rarity: 0 }); M.settleRun(false); M.continueSettlement();
   M.toggleSettlement(M.settlement.found[0].uid); M.finishSettlement();
-  M.data.equipment.hands = { level: 4, xp: 1 };
   assert(M.setInherited('glove', 0), '继承设置失败');
   M.beginRun(false);
-  assert(G.player.equip.hands.key === 'glove' && G.player.equipGrowth.hands.level === 4 && G.player.equipGrowth.hands.xp === 1, '下局没有继承部位成长');
+  assert(G.player.equip.hands.key === 'glove', '下局没有穿上继承装备');
+  assert(G.player.equipGrowth.hands.level === 0 && G.player.equipGrowth.hands.xp === 0, '下局错误继承部位成长');
+  M.recordEquipment({ item: 'glove', rarity: 1 });
+  assert(G.player.equipGrowth.hands.level === 1 && G.player.equipGrowth.hands.xp === 0, '本局部位成长失效');
   M.settleRun(false); M.continueSettlement(); M.finishSettlement(); M.data.paper = 99;
-  assert(M.reforge('glove', 0) && M.data.equipment.hands.level === 4 && M.data.equipment.hands.xp === 1, '重铸改变了部位成长');
+  assert(M.reforge('glove', 0) && M.data.equipment.hands.level === 0 && M.data.equipment.hands.xp === 0, '重铸后部位成长未归零');
   const next = M.data.inherited.key;
   assert(next !== 'glove', '重铸没有同步继承装备');
   M.beginRun(false);
-  assert(G.player.equip.hands.key === next && G.player.equipGrowth.hands.level === 4 && G.player.equipGrowth.hands.xp === 1, '重铸后的下局继承成长错误');
+  assert(G.player.equip.hands.key === next && G.player.equipGrowth.hands.level === 0 && G.player.equipGrowth.hands.xp === 0, '重铸后的装备继承或成长重置错误');
 });
 
-test('失败结算永久保存经验，未装订不碎纸且装订不重复经验', () => {
+test('失败结算不保留部位经验，未装订不碎纸且装订不重复经验', () => {
   fresh(); M.recordEquipment({ item: 'glove', rarity: 1 }); M.settleRun(false);
-  assert(M.data.equipment.hands.level === 1 && M.data.equipment.hands.xp === 0 && M.data.paper === 0, '失败结算未保存经验或错误碎纸');
+  assert(M.settlement.growth.hands.level === 1 && M.settlement.growth.hands.xp === 0, '结算回顾没有保留本局成长');
+  assert(M.data.equipment.hands.level === 0 && M.data.equipment.hands.xp === 0 && M.data.paper === 0, '失败结算保留了经验或错误碎纸');
   M.continueSettlement(); M.toggleSettlement(M.settlement.found[0].uid);
   const before = JSON.stringify(M.data.equipment);
   M.finishSettlement();
   assert(JSON.stringify(M.data.equipment) === before && M.data.inventory.length === 1 && M.data.paper === 0, '装订重复发放经验或碎纸');
 });
 
-test('满级史诗溢出折算 25 碎纸，等级和经验保持满级状态', () => {
-  fresh(); M.data.equipment.hands = { level: 10, xp: 0 }; M.beginRun(false); G.state = 'play';
+test('本局满级史诗溢出折算 25 碎纸，结算后局外成长归零', () => {
+  fresh(); M.run.growth.hands = { level: 10, xp: 0 }; G.player.equipGrowth = M.run.growth;
   const found = M.recordEquipment({ item: 'glove', rarity: 3 });
   assert(found.xp === 5 && found.paper === 25 && found.levels === 0, '满级史诗溢出折算错误');
   M.settleRun(false);
-  assert(M.data.paper === 25 && M.data.equipment.hands.level === 10 && M.data.equipment.hands.xp === 0, '满级碎纸或成长结算错误');
+  assert(M.data.paper === 25 && M.data.equipment.hands.level === 0 && M.data.equipment.hands.xp === 0, '满级碎纸或成长重置错误');
 });
 
 test('装备拾取距离 39 生效、41 不生效', () => {
@@ -94,11 +97,11 @@ test('装备拾取距离 39 生效、41 不生效', () => {
   assert(G.drops.length === 1 && M.run.growth.hands.xp === 0 && !G.player.equip.hands, '距离 41 被错误拾取');
 });
 
-test('版本 2 存档持久化五部位成长数据', () => {
-  fresh(); M.data.equipment.body = { level: 3, xp: 2 }; M.save();
+test('版本 2 存档保留五部位结构且成长始终为零', () => {
+  fresh(); M.save();
   const parsed = JSON.parse(stored['notebook-meta-v1']);
-  assert(parsed.version === 2 && parsed.equipment.body.level === 3 && parsed.equipment.body.xp === 2, '存档版本或部位成长未持久化');
-  assert(['head', 'body', 'hands', 'feet', 'acc'].every(slot => parsed.equipment[slot]), '存档缺少部位');
+  assert(parsed.version === 2, '存档版本错误');
+  assert(['head', 'body', 'hands', 'feet', 'acc'].every(slot => parsed.equipment[slot] && parsed.equipment[slot].level === 0 && parsed.equipment[slot].xp === 0), '存档部位缺失或成长未归零');
 });
 
 console.log(failed ? 'EQUIPMENT_GROWTH_TEST_FAILURES: ' + failed : 'EQUIPMENT_GROWTH_TEST_OK (' + passed + '/' + passed + ')');

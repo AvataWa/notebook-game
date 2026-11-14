@@ -24,25 +24,18 @@
     d.rank = clampInt(raw.rank, 0, 18, 0);
     for (const b of C.basics) d.talents[b.id] = clampInt(raw.talents && raw.talents[b.id], 0, b.max, 0);
     for (const id of [...Object.keys(SKILL_DEFS), ...C.inkSpecs.map(s => s.id)]) d.specs[id] = clampInt(raw.specs && raw.specs[id], 0, 3, 0);
-    const seen = new Set(), legacy = createEquipmentGrowth();
+    const seen = new Set();
     if (Array.isArray(raw.inventory)) for (const eq of raw.inventory) {
       if (!validItem(eq)) continue;
       const clean = { key: eq.key, rarity: clampInt(eq.rarity, 0, 3, 0) }, id = clean.key + ':' + clean.rarity;
-      const slot = ITEM_DEFS[clean.key].slot;
-      legacy[slot].level = Math.max(legacy[slot].level, clampInt(eq.star, 0, equipmentRule().maxLevel, 0));
       if (seen.has(id)) continue;
       seen.add(id); d.inventory.push(clean);
     }
     if (validItem(raw.inherited)) {
-      const eq = { key: raw.inherited.key, rarity: clampInt(raw.inherited.rarity, 0, 3, 0) }, slot = ITEM_DEFS[eq.key].slot;
-      legacy[slot].level = Math.max(legacy[slot].level, clampInt(raw.inherited.star, 0, equipmentRule().maxLevel, 0));
+      const eq = { key: raw.inherited.key, rarity: clampInt(raw.inherited.rarity, 0, 3, 0) };
       if (d.inventory.some(x => x.key === eq.key && x.rarity === eq.rarity)) d.inherited = eq;
     }
-    for (const slot of SLOTS) {
-      const saved = raw.equipment && raw.equipment[slot];
-      d.equipment[slot].level = clampInt(saved && saved.level, 0, equipmentRule().maxLevel, legacy[slot].level);
-      grantEquipmentExperience(d.equipment, slot, clampInt(saved && saved.xp, 0, 9999, 0));
-    }
+    // 装备等级与部位经验只属于单局；旧存档中的成长数据读取时直接归零。
     d.firstStages = Array.isArray(raw.firstStages) ? [...new Set(raw.firstStages.map(x => clampInt(x, 1, 10, 1)))] : [];
     d.firstBosses = Array.isArray(raw.firstBosses) ? [...new Set(raw.firstBosses.map(x => clampInt(x, 1, 10, 1)))] : [];
     d.stats = { runs: clampInt(raw.stats && raw.stats.runs, 0, 999999, 0),
@@ -53,6 +46,7 @@
   try { meta = validate(JSON.parse(storage.get(C.storageKey) || 'null')); } catch (_) { meta = defaults(); }
   function save() { storage.set(C.storageKey, JSON.stringify(meta)); }
   let run = null, settlement = null, metaTab = 'basic', summaryTab = 'damage', metaPage = 0, inventorySlot = 'all', resetArmed = false, reforgePending = null, uiMessage = '';
+  let lastRenderState = '', defeatInputAfter = 0;
 
   function rankInfo(index = meta.rank) {
     const i = clampInt(index, 0, 18, 0);
@@ -82,7 +76,7 @@
     player.speed = BATTLE.player.speed * (1 + (t.speed || 0) * 0.015);
     player.metaEnemyAttackMul = 1; player.metaEliteEarly = 0;
     player.metaBossPhaseAt = 0.5; player.metaRegenMul = 1; player.metaNoRevive = false;
-    player.equipGrowth = run ? run.growth : clone(meta.equipment);
+    player.equipGrowth = run ? run.growth : createEquipmentGrowth();
     if (run && run.mode === 'ranked') {
       const m = rankMultipliers(run.rank);
       player.metaEnemyAttackMul = m.attack * (run.affixes.includes('急促铃') ? 0.9 : 1);
@@ -103,13 +97,14 @@
       while (affixes.length < 2 && pool.length) affixes.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
     }
     run = { mode: ranked ? 'ranked' : 'normal', rank: meta.rank, found: [], bossStages: [], affixes, settled: false, uid: 1,
-      growth: clone(meta.equipment), overflowPaper: 0 };
+      growth: createEquipmentGrowth(), overflowPaper: 0 };
     settlement = null; resetGame(); applyPlayer(); state = 'start';
+    lastRenderState = ''; defeatInputAfter = 0;
     if (ranked) toast('段位考核 · ' + rankInfo(run.rank).name + (affixes.length ? ' · ' + affixes.join(' / ') : ''));
     return true;
   }
   function beginBossTest(stage = 1) {
-    const bossStage = clampInt(stage, 1, 10, 1);
+    const bossStage = clampInt(stage, 1, BOSS_DEFS.length, 1);
     beginRun(false);
     run.mode = 'bossTest'; run.bossTestStage = bossStage;
     applyOption(0);   // 随机起手技能，跳过起手三选一，直接进入战斗。
@@ -121,7 +116,7 @@
     toast('Boss 挑战 · ' + BOSS_DEFS[bossStage - 1].name + ' · 不计入局外收益');
     return true;
   }
-  function openBossChallenge() { state = 'metaBossChallenge'; uiMessage = ''; }
+  function openBossChallenge() { state = 'metaBossChallenge'; metaPage = 0; uiMessage = ''; }
   function recordEquipment(dr) {
     if (!run || run.settled || !dr || !ITEM_DEFS[dr.item]) return false;
     const rarity = rarityIndex(dr), slot = ITEM_DEFS[dr.item].slot;
@@ -144,7 +139,7 @@
   function settleRun(win) {
     if (!run || run.settled) return false;
     run.settled = true;
-    meta.equipment = clone(run.growth); meta.paper += run.overflowPaper;
+    meta.equipment = createEquipmentGrowth(); meta.paper += run.overflowPaper;
     const waves = clampInt(player.level, 1, 100, 1), bossCount = run.bossStages.length;
     const base = waves + bossCount * 15 + (win ? 50 : 0);
     let firstBonus = 0;
@@ -166,6 +161,12 @@
       slots: run.mode === 'ranked' ? 0 : 1 + (run.bossStages.some(st => st >= 5) ? 1 : 0) + (win ? 1 : 0),
       promoted, oldRank, newRank: meta.rank, page: 0 };
     metaPage = 0; summaryTab = 'damage'; state = 'metaRunSummary'; save(); return true;
+  }
+  function confirmDefeat() {
+    if (state !== 'over' || !run || run.mode === 'bossTest' || run.settled) return false;
+    // 吸收死亡同一瞬间的战斗点击，避免失败提示一闪而过。
+    if (Date.now() < defeatInputAfter) return true;
+    settleRun(false); return true;
   }
   function continueSettlement() {
     if (!settlement || state !== 'metaRunSummary') return false;
@@ -330,20 +331,22 @@
       resetCancel: { x: 58, y: 360, w: 118, h: 38 }, resetConfirm: { x: 199, y: 360, w: 118, h: 38 } };
   }
   function bossChallengeRects() {
-    return BOSS_DEFS.map((def, i) => ({ x: i % 2 ? 193 : 24, y: 116 + Math.floor(i / 2) * 84, w: 158, h: 72 }));
+    return Array.from({ length: 10 }, (_, i) => ({ x: i % 2 ? 193 : 24, y: 116 + Math.floor(i / 2) * 84, w: 158, h: 72 }));
   }
   function drawBossChallenge() {
-    panel('Boss 挑战', '10 名 Boss'); button(backButton(), '返回');
+    panel('Boss 挑战', BOSS_DEFS.length + ' 名 Boss'); button(backButton(), '返回');
     text('练习模式 · 无收益', W / 2, 88, 12, INK, 'center');
-    const rects = bossChallengeRects(), archNames = { charger: '近战突袭', caster: '远程术式', blob: '区域压制' };
-    BOSS_DEFS.forEach((def, i) => {
-      const r = rects[i], cleared = meta.firstBosses.includes(i + 1);
+    const rects = bossChallengeRects(), per = 10, offset = metaPage * per;
+    const shown = BOSS_DEFS.slice(offset, offset + per), archNames = { charger: '近战突袭', caster: '远程术式', blob: '区域压制' };
+    shown.forEach((def, i) => {
+      const stage = offset + i + 1, r = rects[i], cleared = meta.firstBosses.includes(stage);
       ctx.fillStyle = 'rgba(255,250,238,0.96)'; ctx.fillRect(r.x, r.y, r.w, r.h);
       jrect(r.x, r.y, r.w, r.h, cleared ? INK : DARK, cleared ? 2.3 : 1.5);
-      text('第 ' + String(i + 1).padStart(2, '0') + ' 页', r.x + 12, r.y + 18, 9, GRAY);
+      text('第 ' + String(def.page || stage).padStart(2, '0') + ' 页' + (def.hexapod ? ' · 六足' : ''), r.x + 12, r.y + 18, 9, GRAY);
       text(def.name, r.x + r.w / 2, r.y + 40, 13, INK, 'center', true);
       text(archNames[def.arch] + (cleared ? ' · 已讨伐' : ''), r.x + r.w / 2, r.y + 59, 9, cleared ? PURPLE : GRAY, 'center');
     });
+    drawBossChallenge.pg = pager(BOSS_DEFS.length, per, 570);
   }
   function drawTalents() {
     panel('墨点天赋', '墨点 ' + meta.ink); button(backButton(), '返回');
@@ -474,13 +477,13 @@
     }
     if (!shown.length) text(summaryTab === 'skills' ? '本局没有主动技能' : (summaryTab === 'affixes' ? '本局没有选择词条' : (summaryTab === 'damage' ? '本局尚未造成伤害' : '本局没有装备')), W / 2, 310, 12, GRAY, 'center');
     const pg = pager(entries.length, per, 538); drawSummary.pg = pg;
-    if (settlement.mode === 'ranked') text('装备经验已入账 · 免装订', W / 2, 585, 10, GRAY, 'center');
+    if (settlement.mode === 'ranked') text('等级下局重置 · 免装订', W / 2, 585, 10, GRAY, 'center');
     button({ x: 62, y: 602, w: 251, h: 40 }, settlement.mode === 'ranked' ? '完成结算' : '下一步');
   }
   function drawSettlement() {
     if (!settlement) return;
     panel('装备装订', '墨点 +' + settlement.earned);
-    text('装备经验已全部入账 · 装订用于继承', W / 2, 84, 13, INK, 'center', true);
+    text('等级下局重置 · 装订仅继承装备', W / 2, 84, 13, INK, 'center', true);
     text('基础 ' + settlement.base + '　首次 +' + settlement.firstBonus, W / 2, 108, 11, DARK, 'center');
     text('装订 ' + settlement.selected.length + ' / ' + settlement.slots, W / 2, 130, 11, PURPLE, 'center');
     const per = 3, shown = settlement.found.slice(metaPage * per, metaPage * per + per);
@@ -507,6 +510,7 @@
     const r = testEndRects(); button(r.retry, '再次挑战'); button(r.select, '选择其他 Boss'); button(r.home, '返回局外手账');
   }
   function drawMeta() {
+    if (window.DesktopRuntime && DesktopRuntime.active && DesktopRuntime.drawMeta()) return;
     if (state === 'metaHome') drawHome();
     else if (state === 'metaBossChallenge') drawBossChallenge();
     else if (state === 'metaTalents') drawTalents();
@@ -518,14 +522,19 @@
   const baseRender = render;
   render = function() {
     // 胜利直接结算；失败先停在战斗失败页，由玩家点击后确认进入结算。
+    if (state === 'over' && lastRenderState !== 'over') defeatInputAfter = Date.now() + 500;
+    lastRenderState = state;
     if (state === 'win' && run && run.mode !== 'bossTest' && !run.settled) settleRun(true);
     baseRender(); drawMeta();
   };
   function hit(p, r) { return pointInRect(p, r); }
   canvas.addEventListener('pointerdown', e => {
     if (window.UIDetail && window.UIDetail.isOpen) return;
-    if (state === 'over' && run && run.mode !== 'bossTest' && !run.settled) {
-      e.preventDefault(); e.stopImmediatePropagation(); settleRun(false); return;
+    if (window.DesktopRuntime && DesktopRuntime.active && DesktopRuntime.handleMetaPointer(e)) {
+      e.preventDefault(); e.stopImmediatePropagation(); return;
+    }
+    if (confirmDefeat()) {
+      e.preventDefault(); e.stopImmediatePropagation(); return;
     }
     if ((state === 'over' || state === 'win') && run && run.mode === 'bossTest') {
       e.preventDefault(); e.stopImmediatePropagation();
@@ -554,8 +563,11 @@
     }
     if (state === 'metaBossChallenge') {
       if (hit(p, backButton())) { goHome(); return; }
-      const rects = bossChallengeRects();
-      for (let i = 0; i < rects.length; i++) if (hit(p, rects[i])) { beginBossTest(i + 1); return; }
+      const pg = drawBossChallenge.pg;
+      if (pg && hit(p, pg.prev)) { metaPage = Math.max(0, metaPage - 1); return; }
+      if (pg && hit(p, pg.next)) { metaPage = Math.min(pg.pages - 1, metaPage + 1); return; }
+      const rects = bossChallengeRects(), offset = metaPage * 10;
+      for (let i = 0; i < Math.min(10, BOSS_DEFS.length - offset); i++) if (hit(p, rects[i])) { beginBossTest(offset + i + 1); return; }
       return;
     }
     if (state === 'metaInventory' && reforgePending) {
@@ -627,7 +639,7 @@
   }, true);
 
   window.__metaRuntime = {
-    beginRun, beginBossTest, openBossChallenge, settleRun, recordEquipment, continueSettlement, finishSettlement, toggleSettlement, upgradeTalent, resetTalents,
+    beginRun, beginBossTest, openBossChallenge, settleRun, confirmDefeat, recordEquipment, continueSettlement, finishSettlement, toggleSettlement, upgradeTalent, resetTalents,
     setInherited, reforge, rankMultipliers, rankInfo, applyPlayer, save, goHome,
     get data() { return meta; }, get run() { return run; }, get settlement() { return settlement; },
     get tab() { return metaTab; }, set tab(v) { metaTab = v; metaPage = 0; },

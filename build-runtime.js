@@ -7,25 +7,6 @@
     return baseHasAffix(skill, id) || !!(player && player.taken && player.taken[id]);
   };
 
-  const baseChargeTurf = chargeTurf;
-  chargeTurf = function(amount) {
-    const lens = !player.noLensCharge && hasItem('inklens') ? 1 + itemV('inklens', 'charge') / 100 : 1;
-    baseChargeTurf(amount * lens);
-  };
-  const baseChargeParry = chargeParry;
-  chargeParry = function() {
-    player.noLensCharge = true;
-    baseChargeParry();
-    player.noLensCharge = false;
-  };
-  const baseCastInkSurge = castInkSurge;
-  castInkSurge = function(radius, full) {
-    player.noLensCharge = true;
-    const result = baseCastInkSurge(radius, full);
-    player.noLensCharge = false;
-    return result;
-  };
-
   const baseReflectEnemyBullet = reflectEnemyBullet;
   reflectEnemyBullet = function(eb) {
     const first = bullets.length, result = baseReflectEnemyBullet(eb);
@@ -53,14 +34,11 @@
 
   const baseSkillCalc = skillCalc;
   skillCalc = function(a) {
-    const c = baseSkillCalc(a), lowHp = player.hp < player.maxhp * 0.3;
+    const c = baseSkillCalc(a);
     if (hasItem('cap4')) {
       c.dmg /= 1 + 0.08 * player.actives.length;
       c.dmg *= 1 + itemV('cap4', 'dmg') / 100 * player.actives.length;
     }
-    if (hasItem('cloak') && lowHp) c.dmg *= (1 + itemV('cloak', 'dmg') / 100) / 1.4;
-    if (hasItem('blankcap')) c.dmg *= 1 + itemV('blankcap', 'dmg') / 100 * (MAX_ACTIVES - player.actives.length);
-    if (hasItem('lowink') && player.ink < 20) c.dmg *= 1 + itemV('lowink', 'dmg') / 100;
     if ((SKILL_TAGS[a.id] || []).includes('proj')) c.count += itemV('scatterband', 'count');
     c.rad *= 1 + itemV('widependant', 'radius') / 100;
     return c;
@@ -80,19 +58,15 @@
         player.diveChargeAcc += dt;
         while (player.diveChargeAcc >= 1) {
           player.diveChargeAcc -= 1;
-          player.noLensCharge = true; baseChargeTurf(4); player.noLensCharge = false;
+          chargeTurf(4);
         }
       }
       if (player.ink <= 0) { exitDive(); toast('墨水耗尽，退出潜墨'); }
     } else {
       player.diveT = 0; player.diveChargeAcc = 0; player.diveWashCover = 0;
       player.lastSeenX = player.x; player.lastSeenY = player.y;
-      let regen = BATTLE.ink.regenBase + itemV('pendant', 'regen');
+      let regen = BATTLE.ink.regenBase;
       if (own) regen += BATTLE.ink.regenOwnBonus;
-      if (own && hasItem('cliparmor')) {
-        const heal = player.maxhp * itemV('cliparmor', 'regen') / 100 * dt;
-        player.hp = Math.min(player.maxhp, player.hp + heal);
-      }
       if (hostile) regen = 0;
       player.ink = Math.min(player.maxInk, player.ink + regen * (player.metaRegenMul || 1) * dt);
     }
@@ -113,12 +87,6 @@
     baseHurtPlayer(adjusted);
     if (player.hp < oldHp && player.hurtT > 0) {
       player.hurtT = Math.max(player.hurtT, BATTLE.player.hitInvuln + itemV('stapler', 'invuln'));
-      if (hasItem('erasershoes')) player.eraserT = itemV('erasershoes', 'duration');
-      if (hasItem('inkarmor') && gameTime >= player.itemArmorCd) {
-        player.itemArmorCd = gameTime + itemV('inkarmor', 'cd');
-        addInkStain(player.x, player.y, 8, itemV('inkarmor', 'radius'), inkFriendlyColor, false, false);
-        novas.push({ x: player.x, y: player.y, t: 0.3, max: itemV('inkarmor', 'radius'), col: inkFriendlyColor });
-      }
     }
   };
 
@@ -132,10 +100,10 @@
     if (e.boss && bossMul) dmg *= 1 + bossMul;
     if (vuln) { e.vuln = vuln; e.vulnT = 2; }
     let crit = false;
-    const highscore = player.hp > player.maxhp * 0.8 ? itemV('highscore', 'crit') / 100 : 0;
-    const critChance = player.crit + player.eqCrit + highscore + (critAdd || 0);
+    const critChance = player.crit + player.eqCrit + (critAdd || 0);
     const critMul = hasItem('glove') ? itemV('glove', 'mul') : 2;
     if (critChance > 0 && Math.random() < critChance) { dmg *= critMul; crit = true; }
+    e.lastHitDamage = dmg; e.lastHitCrit = crit; e.lastHitSkill = skillId || 'other';
     recordSkillDamage(skillId, Math.min(Math.max(0, e.hp), dmg));
     e.hp -= dmg; e.flash = 0.12; e.squash = SQUASH_T;
     const kx = e.x - (sx === undefined ? player.x : sx), ky = e.y - (sy === undefined ? player.y : sy);
@@ -144,10 +112,6 @@
     if (dotDps) { e.dotDps = Math.max(e.dotDps, dotDps); e.dotT = 3; e.dotSkill = skillId || 'other'; }
     sparks.push({ x: e.x + (Math.random() - 0.5) * e.r, y: e.y + (Math.random() - 0.5) * e.r, t: 0.18, color: hitCol || INK });
     floats.push({ x: e.x + (Math.random() - 0.5) * 40, y: e.y - e.r - 8 - Math.random() * 18, txt: Math.round(dmg) + (crit ? '!' : ''), t: 0.7, color: hitCol || INK, crit, weak: !!weakFloat });
-    if (crit && hasItem('burstglove') && player.itemBurstN < 6) {
-      player.itemBurstN++;
-      addInkStain(e.x, e.y, 2, itemV('burstglove', 'radius'), inkFriendlyColor, false, true);
-    }
     if (e.hp <= 0) killEnemy(e);
   };
 
@@ -186,7 +150,6 @@
         continue;
       }
       let cost = INK_COST[a.id] || 2;
-      if (player.itemParryT > 0 && hasItem('parrygrip')) cost *= 1 - itemV('parrygrip', 'discount') / 100;
       if (!spendSkillInk(a, cost)) {
         a.t = 0.2;
         if (player.noInkT <= 0) { toast('墨水不足，潜入己方墨迹补墨'); player.noInkT = 2.2; }
@@ -237,7 +200,7 @@
       const hp = itemV('looseleaf', 'hp'); player.bonusHp += hp; recomputeEquip();
       player.hp = Math.min(player.maxhp, player.hp + hp);
     }
-    if (hasItem('bookmark')) { refundInk(itemV('bookmark', 'ink'), player.x, player.y - 30, '灵感'); player.absorbCd = 0; }
+    if (hasItem('bookmark') && window.__equipmentRework) window.__equipmentRework.onLevelUp();
     player.itemRerolls = itemV('rerollnote', 'reroll');
   }
   function recordFound(dr, duplicate) {
@@ -318,17 +281,10 @@
       if (player.hp < player.maxhp * 0.35 && hasAffix('dive', 'lowhpdive')) speedFactor *= 1.12;
     }
     if (player.surgeCharging && hasAffix('surge', 'chargemove')) speedFactor *= 1.2;
-    if (player.moveT >= 2 && hasItem('gridshoes')) speedFactor *= 1 + itemV('gridshoes', 'speed') / 100;
     const own = playerOnOwnInk(), hostile = playerOnHostileInk();
-    if (!own && !hostile && hasItem('blankshoes')) speedFactor *= 1 + itemV('blankshoes', 'speed') / 100;
     if (hasItem('shoes') && player.hurtBoostT > 0) speedFactor *= (1 + itemV('shoes', 'hurt') / 100) / 1.3;
     const oldOwnSpeed = BATTLE.ink.ownSpeed, oldHostileSpeed = BATTLE.ink.hostileSpeed;
-    if (hasItem('trackshoes')) BATTLE.ink.ownSpeed = 1 + itemV('trackshoes', 'speed') / 100;
-    if (hasItem('blankshoes')) BATTLE.ink.ownSpeed = 1;
     if (player.diving && hasAffix('dive', 'grayboat')) BATTLE.ink.hostileSpeed = 1;
-    if (hostile && hasItem('blotarmor')) {
-      BATTLE.ink.hostileSpeed = 1 - (1 - BATTLE.ink.hostileSpeed) * (1 - itemV('blotarmor', 'graydr') / 100);
-    }
     player.eqSpd *= speedFactor;
     const oldX = player.x, oldY = player.y;
     baseUpdate(dt);
@@ -366,7 +322,6 @@
       const angle = current + Math.max(-b.homing * dt, Math.min(b.homing * dt, turn));
       b.vx = Math.cos(angle) * speed; b.vy = Math.sin(angle) * speed;
     }
-    if (player.eraserT > 0) eraseGrayDisk(player.x, player.y, 13);
   };
 
   const baseApplyOption = applyOption;
@@ -439,19 +394,25 @@
     baseRender();
     if (state === 'levelup' && hasItem('rerollnote')) {
       const lastCard = cardRects[cardRects.length - 1];
+      if (window.DesktopRuntime && DesktopRuntime.active) rerollRect.x = W / 2 - rerollRect.w / 2;
+      else rerollRect.x = 122;
       rerollRect.y = Math.min(H - 45, (lastCard ? lastCard.y + lastCard.h : 532) + 12);
       ctx.fillStyle = 'rgba(255,250,238,0.9)'; ctx.fillRect(rerollRect.x, rerollRect.y, rerollRect.w, rerollRect.h);
       jrect(rerollRect.x, rerollRect.y, rerollRect.w, rerollRect.h, player.itemRerolls > 0 ? INK : GRAY, 2);
       ctx.fillStyle = player.itemRerolls > 0 ? INK : GRAY; ctx.textAlign = 'center'; ctx.font = 'bold 12px ' + FONT;
       ctx.fillText('刷新选项（' + player.itemRerolls + '）R', rerollRect.x + rerollRect.w / 2, rerollRect.y + 24);
     }
-    if (state === 'equipment' && pendingEquipment) drawEquipmentChoice();
+    if (state === 'equipment' && pendingEquipment) {
+      if (window.DesktopRuntime && DesktopRuntime.active) DesktopRuntime.drawEquipment();
+      else drawEquipmentChoice();
+    }
   };
 
   canvas.addEventListener('pointerdown', e => {
     const p = toLogical(e);
     if (state === 'equipment') {
       e.preventDefault(); e.stopImmediatePropagation();
+      if (window.DesktopRuntime && DesktopRuntime.active) { DesktopRuntime.handleEquipmentPointer(e); return; }
       if (pointInRect(p, equipmentReplaceRect)) resolveEquipment(true);
       else if (pointInRect(p, equipmentKeepRect)) resolveEquipment(false);
     } else if (state === 'levelup' && pointInRect(p, rerollRect)) {

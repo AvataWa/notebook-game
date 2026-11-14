@@ -119,12 +119,12 @@ test('刷新便利贴提供次数并实际刷新选项', () => {
   assert(G.rerollOptions() && G.player.itemRerolls === 1 && G.cards.length >= 3, '刷新未生效');
   assert(G.rerollOptions() && !G.rerollOptions(), '刷新次数没有正确耗尽');
 });
-test('活页背心与灵感书签在升级时结算', () => {
+test('活页背心升级成长保留，灵感书签旧回墨效果移除', () => {
   fresh(); equip('looseleaf', 0); equip('bookmark', 0);
   G.player.ink = 10; G.player.absorbCd = 3; const hp = G.player.maxhp;
   G.runtime.applyLevelEquipment();
   assert(G.player.maxhp === hp + 3, '活页背心未增加最大生命');
-  assert(G.player.ink === Math.min(G.player.maxInk, 60) && G.player.absorbCd === 0, '灵感书签未回墨或清冷却');
+  assert(G.player.ink === 10 && G.player.absorbCd === 3, '灵感书签旧回墨或清冷却仍然残留');
 });
 test('高品质修正带鞋按自身冷却再次抵挡致命伤', () => {
   fresh(); equip('tape', 3); G.player.hp = 10; G.gameTime = 100; G.player.lastRevive = 75;
@@ -182,11 +182,11 @@ test('装备运行层同样保留墨迹持续伤害弱跳字', () => {
   G.updateInkStains.dotT = 0; G.updateInkStains.poolT = 0; G.updateInkStains(0);
   assert(G.floats.length === 2 && G.floats.every(f => f.weak), '装备运行层覆盖了弱跳字标记');
 });
-test('普通吸墨纸甲将灰墨移速倍率由 0.58 提升至 0.832', () => {
+test('吸墨纸甲旧灰墨抗减速效果已移除', () => {
   fresh(); G.addHostileInk(10, 0, 10, 50); equip('blotarmor', 0);
-  assert(G.itemDescription('blotarmor', 0) === '灰墨减速惩罚 -60%', '装备说明未同步');
+  assert(G.itemDescription('blotarmor', 0).includes('减伤 35%'), '装备说明未同步');
   G.keys.d = true; G.update(0.1); G.keys.d = false;
-  const expected = G.BATTLE.player.speed * 0.832 * 0.1;
+  const expected = G.BATTLE.player.speed * 0.58 * 0.1;
   assert(Math.abs(G.player.x - expected) < 0.001, '灰墨抗减速效果错误：' + G.player.x + ' / ' + expected);
 });
 test('入墨起笔减少冷却且两秒内不重复触发', () => {

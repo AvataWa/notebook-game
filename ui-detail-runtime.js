@@ -24,6 +24,7 @@
   }
   function draw() {
     if (!detail) return;
+    if (window.DesktopRuntime && DesktopRuntime.active) { DesktopRuntime.drawDetail(detail); return; }
     ctx.fillStyle = 'rgba(25,23,22,0.72)'; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = PAPER; ctx.fillRect(24, 82, W - 48, 536);
     jrect(24, 82, W - 48, 536, detail.color, 2.4);
@@ -53,6 +54,10 @@
     if (!detail) return;
     e.preventDefault(); e.stopImmediatePropagation();
     const p = toLogical(e);
+    if (window.DesktopRuntime && DesktopRuntime.active) {
+      if (pointInRect(p, { x: W / 2 - 100, y: 566, w: 200, h: 42 }) || p.x < 250 || p.x > 1030 || p.y < 90 || p.y > 630) close();
+      return;
+    }
     if (pointInRect(p, closeRect) || p.y < 82 || p.y > 618 || p.x < 24 || p.x > W - 24) close();
   }, true);
   window.addEventListener('keydown', e => {

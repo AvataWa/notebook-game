@@ -41,7 +41,10 @@
     }
     return SLOTS.filter(slot => player.equip[slot]).map(slot => ({ slot, eq: player.equip[slot] }));
   }
-  function buildPerPage() { return buildTab === 'skills' ? 4 : (buildTab === 'affixes' ? 5 : 4); }
+  function buildPerPage() {
+    if (window.DesktopRuntime && DesktopRuntime.active) return buildTab === 'affixes' ? 6 : 4;
+    return buildTab === 'skills' ? 4 : (buildTab === 'affixes' ? 5 : 4);
+  }
   function buildPageCount() { return Math.max(1, Math.ceil(buildEntries().length / buildPerPage())); }
   function changeBuildPage(dir) { buildPage = Math.max(0, Math.min(buildPageCount() - 1, buildPage + dir)); }
   function visibleEntries() {
@@ -159,10 +162,19 @@
     }
   };
   const baseRenderForView = render;
-  render = function() { baseRenderForView(); if (state === 'build') drawBuildView(); };
+  render = function() {
+    baseRenderForView();
+    if (state === 'build') {
+      if (window.DesktopRuntime && DesktopRuntime.active) DesktopRuntime.drawBuild();
+      else drawBuildView();
+    }
+  };
 
   canvas.addEventListener('pointerdown', e => {
     if (window.UIDetail && window.UIDetail.isOpen) return;
+    if (window.DesktopRuntime && DesktopRuntime.active && state === 'build') {
+      e.preventDefault(); e.stopImmediatePropagation(); DesktopRuntime.handleBuildPointer(e); return;
+    }
     const p = toLogical(e);
     if ((state === 'play' || state === 'levelup' || state === 'start') && pointInRect(p, buildRect)) {
       e.preventDefault(); e.stopImmediatePropagation(); openBuildView(); return;

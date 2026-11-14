@@ -2,7 +2,8 @@
 const src = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'procedural-locomotion.js',
   'creature-designs.js', 'creature-bio-rig.js', 'creature-design-renderer.js',
   'biped-locomotion.js', 'biped-renderer.js', 'creature-game-runtime.js', 'main.js']
-  .map(f => require('fs').readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
+  .map(f => require('fs').readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n')
+  .replace(/function isDesktopLayout\(\) \{[\s\S]*?\r?\n\}/, 'function isDesktopLayout() { return false; }');
 const handlers = {};
 const drawTexts = [], drawRects = [], drawArcs = [], drawStrokes = [];
 const fakeCtx = new Proxy({}, { get(t, k) {
@@ -22,6 +23,8 @@ const fakeCanvas = {
 global.window = { addEventListener() {}, devicePixelRatio: 1, innerWidth: 375, innerHeight: 667 };
 global.document = { getElementById: () => fakeCanvas }; global.requestAnimationFrame = () => {};
 eval(src + `
+// 本套件专测移动布局；正式网页默认 PC，测试中显式切回触屏模式。
+isDesktopLayout = () => false; resize();
 ;globalThis.G = {
   resetGame, applyOption, update, render, floatPopScale, floatIsFlashing, drawPlayerResources,
   layoutCards, drawCards, drawCoreDamageZone, drawOuterSurgeDamageZone,

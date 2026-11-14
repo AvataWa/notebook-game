@@ -7,9 +7,14 @@
    破绽标记易伤 · 冰冻减速 · 回力镖往返 · 墨滴撞纸边反弹 · 刀阵/墨云/烙印/新星
    ============================================================ */
 
-const W = 375, H = 667;
+let W = 375, H = 667;
 const ZOOM = 0.8;
-const VIEW_W = W / ZOOM, VIEW_H = H / ZOOM;
+let VIEW_W = W / ZOOM, VIEW_H = H / ZOOM;
+function isDesktopLayout() {
+  // 桌面网页与 Windows 成品使用 PC 横屏；手机浏览器和小游戏使用竖屏触控。
+  const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  return window.innerWidth > 600 && !coarse;
+}
 // 地图 = 一本 16 开笔记本（184×260mm，高:宽 = 1.413），左装订三边纸边
 const WORLD_W = 950, WORLD_H = 1342;
 const WORLD_L = -WORLD_W / 2, WORLD_R = WORLD_W / 2, WORLD_T = -WORLD_H / 2, WORLD_B = WORLD_H / 2;
@@ -61,6 +66,9 @@ function renderDprCap() {
   return (mobile ? [1.5, 1.25, 1] : [2, 1.5, 1])[renderQuality];
 }
 function resize() {
+  const desktop = isDesktopLayout();
+  W = desktop ? 1280 : 375; H = desktop ? 720 : 667;
+  VIEW_W = W / ZOOM; VIEW_H = H / ZOOM;
   const dpr = Math.min(window.devicePixelRatio || 1, renderDprCap());
   const s = Math.min(window.innerWidth / W, window.innerHeight / H);
   viewScale = s * dpr; perfStats.dpr = dpr;
@@ -822,7 +830,7 @@ function recomputeEquip() {
   const hpRatio = player.maxhp > 0 ? player.hp / player.maxhp : 1;
   player.maxhp = BATTLE.player.hp + (player.metaHpBonus || 0) + hpBonus + player.bonusHp;
   player.hp = Math.max(1, Math.round(player.maxhp * hpRatio));
-  player.maxInk = BATTLE.player.maxInk + (player.metaInkBonus || 0) + itemV('pendant', 'ink', 25);
+  player.maxInk = BATTLE.player.maxInk + (player.metaInkBonus || 0);
   player.ink = Math.min(player.maxInk, player.ink + Math.max(0, player.maxInk - oldMaxInk));
 }
 function skillCalc(a) {
@@ -877,14 +885,12 @@ function skillCalc(a) {
   if (isStrike && rapid) cd /= 1 + rapid;
   const supportCount = a.supports.length;
   const compassRadius = Math.min(itemV('compass', 'cap', 20), itemV('compass', 'radius', 5) * supportCount) / 100;
-  const itemRadius = (player.itemSurgeT > 0 ? itemV('surgeglove', 'radius') / 100 : 0) + (player.stillT >= 1 ? itemV('rulerband', 'radius') / 100 : 0);
   const totalSupports = player.actives.reduce((n, sk) => n + sk.supports.length, 0);
   const coreCd = Math.min(itemV('multicore', 'cap'), Math.floor(totalSupports / 4) * itemV('multicore', 'cd')) / 100;
-  const fullInkCd = player.ink >= 80 ? itemV('fullink', 'cd') / 100 : 0;
   return {
     dmg: dmg * player.dmgMul * (1 + player.eqAtk / 100) * player.condDmg * (player.itemAmbushT > 0 ? 1.45 : 1),
-    cd: cd * player.cdMul * Math.max(0.35, 1 - coreCd - fullInkCd),
-    count, rad: rad * player.radMul * player.eqRad * (1 + compassRadius + itemRadius),
+    cd: cd * player.cdMul * Math.max(0.35, 1 - coreCd),
+    count, rad: rad * player.radMul * player.eqRad * (1 + compassRadius),
     pierce, chain, dot, proj, areaT, unleash, vuln,
     bdmg, bcrit, brad, lifeMul, homing: homing ? 2 + homing : 0, blast,
     admg, soak, bossMul, core, retick, lingerT, reburst, stain,
@@ -896,9 +902,9 @@ function toast(txt) { toasts.push({ txt, t: 2.8 }); if (toasts.length > 3) toast
 
 /* ---------- 敌人（基础生命/攻击在 enemy-config.js 中配置） ---------- */
 /* ---------- 关卡定义：10 页作业本 ---------- */
-const STAGE_NAMES = ['横线练习本', '数学方格本', '田字格本', '英语本', '米字格本', '作文本', '五线谱本', '点阵本', '坐标纸', '草稿纸'];
+const STAGE_NAMES = ['横线练习本', '数学方格本', '田字格本', '英语本', '米字格本', '作文本', '五线谱本', '点阵本', '坐标纸', '草稿纸', '纸缝荒原·样板'];
 // 每关纸色：米白/淡绿/米黄/淡蓝/暖黄/奶油/灰白/淡紫灰/淡青/旧黄
-const STAGE_PAPER = ['#f5f1e6', '#eaf2e6', '#f7efdc', '#ecf1f8', '#f6eeda', '#fdf4e8', '#f0eee8', '#efeff4', '#eaf2f6', '#eee2cc'];
+const STAGE_PAPER = ['#f5f1e6', '#eaf2e6', '#f7efdc', '#ecf1f8', '#f6eeda', '#fdf4e8', '#f0eee8', '#efeff4', '#eaf2f6', '#eee2cc', '#f5f1e6'];
 const BOSS_DEFS = [
   { name: '乱线魔王',       arch: 'charger', hp: 2200,  r: 51, dmg: 30, sp: 64 },
   { name: '涂改巨灵',       arch: 'blob',    hp: 3400,  r: 40, dmg: 32, sp: 36 },
@@ -909,7 +915,18 @@ const BOSS_DEFS = [
   { name: '折纸龙王',       arch: 'caster',  hp: 11500, r: 58, dmg: 48, sp: 50 },
   { name: '暴走橡皮',       arch: 'charger', hp: 13500, r: 42, dmg: 52, sp: 84 },
   { name: '万墨之渊',       arch: 'blob',    hp: 16500, r: 54, dmg: 55, sp: 36 },
-  { name: '笔记本之主',     arch: 'caster',  hp: 22000, r: 70, dmg: 60, sp: 46 }
+  { name: '笔记本之主',     arch: 'caster',  hp: 22000, r: 70, dmg: 60, sp: 46 },
+  // 内部挑战编号 11—20，对应扩展方案第 19—28 页；暂不改动原有关卡流程。
+  { name: '荒原六足狸',     arch: 'charger', hp: 69520,  r: 58, dmg: 125, sp: 88, page: 19, hexapod: 'feral' },
+  { name: '墨壳山龟',       arch: 'blob',    hp: 77800,  r: 72, dmg: 130, sp: 34, page: 20, hexapod: 'turtle' },
+  { name: '缚根捕笼花',     arch: 'caster',  hp: 87200,  r: 64, dmg: 136, sp: 38, page: 21, hexapod: 'flower' },
+  { name: '钉角六足犀',     arch: 'charger', hp: 97700,  r: 68, dmg: 142, sp: 70, page: 22, hexapod: 'rhino' },
+  { name: '百荚育母树',     arch: 'blob',    hp: 109500, r: 76, dmg: 149, sp: 30, page: 23, hexapod: 'tree' },
+  { name: '盲根泽兽',       arch: 'charger', hp: 122700, r: 61, dmg: 156, sp: 76, page: 24, hexapod: 'blind' },
+  { name: '折光羽蛇',       arch: 'caster',  hp: 137500, r: 57, dmg: 164, sp: 62, page: 25, hexapod: 'feather' },
+  { name: '百眼图腾兽',     arch: 'caster',  hp: 154100, r: 70, dmg: 172, sp: 28, page: 26, hexapod: 'totem' },
+  { name: '断线螳王',       arch: 'charger', hp: 172700, r: 63, dmg: 181, sp: 82, page: 27, hexapod: 'mantis' },
+  { name: '终页·混生母体',  arch: 'blob',    hp: 193500, r: 82, dmg: 190, sp: 58, page: 28, hexapod: 'mother' }
 ];
 function curSt() { return Math.min(10, Math.ceil(player.level / 10)); }
 function scaledEnemyStats(d0) {
@@ -1098,7 +1115,7 @@ function spawnBoss(st) {
   const def = BOSS_DEFS[st - 1];
   const a = Math.random() * Math.PI * 2;
   const e = {
-    id: nextId++, type: 'boss', boss: true, arch: def.arch, stage: st,
+    id: nextId++, type: 'boss', boss: true, arch: def.arch, stage: st, hexapod: def.hexapod || null,
     name: def.name, r: def.r, hp: def.hp * 1.1, sp: def.sp, dmg: def.dmg, xp: 20 + st * 6,
     x: clampW(player.x + Math.cos(a) * 400, def.r + 20), y: clampH(player.y + Math.sin(a) * 400, def.r + 20),
     walk: 0, hitCd: 0, flash: 0, squash: 0, dotT: 0, dotDps: 0,
@@ -1254,10 +1271,8 @@ function killEnemy(e) {
     player.xp = player.xpNext;
   } else {
     let xpGain = e.xp * player.xpMul;
-    if (hasItem('bookmark') && Math.random() < 0.08) xpGain += e.xp * player.xpMul * 0.5;
     player.xp += xpGain;
   }
-  if (hasItem('pendant') && kills % 10 === 0) player.hp = Math.min(player.maxhp, player.hp + 1);
   // 击杀爆开己方墨迹：输出会转化为下一片可潜行、补墨的领地
   const deathCol = player.actives.length ? trailColorOf(player.actives[0].id) : INK;
   addInkStain(e.x, e.y, e.boss ? 12 : 3, e.boss ? 55 : 23, deathCol, false, true);
@@ -1300,6 +1315,11 @@ function hurtEnemy(e, dmg, dotDps, sx, sy, vuln, critAdd, bossMul, hitCol, weakF
   if (e.vulnT > 0) dmg *= 1 + e.vuln;   // 破绽标记：受伤加深
   if (e.areaVulnT > 0) dmg *= 1 + e.areaVuln;   // 纸面浸透：区域易伤
   if (e.boss && bossMul) dmg *= 1 + bossMul;    // 压纸重涂：对 Boss 加伤
+  if (e.hexapod === 'turtle') {
+    const ax = sx === undefined ? player.x : sx, ay = sy === undefined ? player.y : sy;
+    const aa = Math.atan2(ay - e.y, ax - e.x), front = Math.abs(Math.atan2(Math.sin(aa - (e.faceA || 0)), Math.cos(aa - (e.faceA || 0)))) < Math.PI / 2;
+    if (front) dmg *= e.phase === 1 ? 0.55 : 0.8; // 背甲正面减伤，二阶段开裂后减弱
+  }
   if (e.huntBoss && (e.huntMode === 'fatigue' || e.huntMode === 'down')) dmg *= 1.2;
   if (vuln) { e.vuln = vuln; e.vulnT = 2; }
   let crit = false;
@@ -1604,7 +1624,6 @@ function castInkSurge(radius = BATTLE.surge.radius, full = false) {
   }
   inkSurgePainting = false;
   if (hasAffix('surge', 'surgeecho')) chargeTurf(BATTLE.traits.surgeRetain);
-  if (full && hasItem('surgeglove')) player.itemSurgeT = 3;
   player.surgeGrowth = 0;
   if (player.diving && !hasAffix('dive', 'divecast')) exitDive();
   return true;
@@ -1668,7 +1687,6 @@ function chargeParry() {
   }
   if (hasAffix('absorb', 'surgegrowth')) player.surgeGrowth = Math.min(5, player.surgeGrowth + 1);
   if (hasAffix('surge', 'chargeparry') && player.surgeCharging) player.surgeChargeT = Math.min(surgeChargeTime(), player.surgeChargeT + surgeChargeTime() * 0.25);
-  if (hasItem('parrygrip')) player.itemParryT = 2;
 }
 function reflectEnemyBullet(eb) {
   if (player.absorbT <= 0 || eb.reflectable === false || eb.life <= 0) return false;
@@ -2561,7 +2579,7 @@ canvas.addEventListener('pointerdown', e => {
   }
   if (pointInRect(p, diveRect)) { toggleDive(); return; }
   if (joy.active) return;
-  if (Math.hypot(p.x - JOY_HOME.x, p.y - JOY_HOME.y) <= JOY_HOME.r + 26) {
+  if (!isDesktopLayout() && Math.hypot(p.x - JOY_HOME.x, p.y - JOY_HOME.y) <= JOY_HOME.r + 26) {
     // 只有左下固定摇杆区域接管移动，右侧空白区域不会抢技能手指
     joy.active = true; joy.id = e.pointerId; joy.bx = JOY_HOME.x; joy.by = JOY_HOME.y; joy.dx = 0; joy.dy = 0;
   }
@@ -2596,7 +2614,6 @@ function update(dt) {
   if (player.level % 10 === 0 && bossStageSpawned < st) { bossStageSpawned = st; spawnBoss(st); }
 
   player.condDmg = 1;
-  if (hasItem('cloak') && player.hp < player.maxhp * 0.3) player.condDmg *= 1.4;
   if (hasItem('cap4')) player.condDmg *= 1 + 0.08 * player.actives.length;
   player.absorbT = Math.max(0, player.absorbT - dt);
   player.absorbCd = Math.max(0, player.absorbCd - dt);
@@ -2723,6 +2740,7 @@ function update(dt) {
     const d = Math.hypot(player.x - e.x, player.y - e.y);
     const onscreen = e.x >= camX - 70 && e.x <= camX + VIEW_W + 70 && e.y >= camY - 70 && e.y <= camY + VIEW_H + 70;
     if (e.type === 'spider') ProceduralLocomotion.updateSpiderLocomotionLOD(e, dt, d, onscreen);
+    else if (e.hexapod && typeof HexapodRuntime !== 'undefined') HexapodRuntime.update(e, dt);
     else if (typeof CreatureGameRuntime !== 'undefined') CreatureGameRuntime.updateEnemy(e, dt, d, onscreen);
     if (e.stunT <= 0 && !(e.impactFreezeT > 0) && !e.boss && !e.shade && !isShooter(e)) {
       updateMeleeSwing(e, dt);
@@ -2922,7 +2940,9 @@ function update(dt) {
   // 敌方墨弹（blob 系 Boss）
   for (const eb of ebullets) {
     if (eb.inkX === undefined) { eb.inkX = eb.x; eb.inkY = eb.y; }
-    eb.x += eb.vx * dt; eb.y += eb.vy * dt; eb.life -= dt;
+    const customBossProjectile = typeof BossStandardRuntime !== 'undefined' && BossStandardRuntime.updateProjectile(eb, dt);
+    if (!customBossProjectile) { eb.x += eb.vx * dt; eb.y += eb.vy * dt; }
+    eb.life -= dt;
     const trailCol = eb.inkConverted ? (player.actives.length ? trailColorOf(player.actives[0].id) : INK) : (eb.reflectable === false ? DARK : HOSTILE_INK);
     addLinkedTrail(eb, eb.x, eb.y, trailCol, !eb.inkConverted, 11, 0.8, 16, 'inkX', 'inkY', 'inkS');
     if (eb.life <= 0 && eb.sourceId && !eb.inkConverted) inkCutChecks.add(eb.sourceId);
@@ -3493,7 +3513,11 @@ function drawEnemyFull(e) {
   }
   // 飞扑只抬高 Boss 身体，地面预警与真实落点保持不动。
   if (e.huntBoss) ctx.translate(0, -(e.pounceHeight || 0));
-  if (typeof CreatureGameRuntime !== 'undefined' && CreatureGameRuntime.drawEnemyBody(ctx, e, c)) {
+  if (e.pod && typeof HexapodRuntime !== 'undefined') {
+    HexapodRuntime.drawPod(ctx, e, c, { line: jline, circle: jcircle });
+  } else if (e.hexapod && typeof HexapodRuntime !== 'undefined') {
+    HexapodRuntime.draw(ctx, e, c, { line: jline, circle: jcircle });
+  } else if (typeof CreatureGameRuntime !== 'undefined' && CreatureGameRuntime.drawEnemyBody(ctx, e, c)) {
     // 新程序化身体只替换外观；下方射击、精英、墨债与 DOT 公共层保持不变
   } else if (e.type === 'stick' || e.type === 'doodle') {
     const size = e.type === 'stick' ? 26 : 19;

@@ -1,9 +1,40 @@
 {
   "name": "notebook-game",
   "private": true,
-  "version": "0.1.0",
-  "description": "我穿越到笔记本了 - 圆珠笔涂鸦风幸存者like",
+  "version": "0.2.0",
+  "description": "我穿越到笔记本了 - 圆珠笔涂鸦风动作肉鸽",
+  "main": "electron-main.js",
+  "author": "AvataWa",
   "scripts": {
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "desktop": "electron .",
+    "dist:win": "node build-desktop.js"
+  },
+  "build": {
+    "appId": "com.avatawa.notebookgame",
+    "productName": "我穿越到笔记本了",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "index.html",
+      "*.js",
+      "assets/**/*",
+      "!*-test.js",
+      "!server.js",
+      "!build-desktop.js",
+      "!release/**/*"
+    ],
+    "win": {
+      "target": "portable",
+      "icon": "assets/icon.png"
+    },
+    "portable": {
+      "artifactName": "NotebookGame-Desktop-${version}.${ext}"
+    }
+  },
+  "devDependencies": {
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0"
   }
 }
