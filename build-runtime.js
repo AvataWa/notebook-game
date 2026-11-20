@@ -141,7 +141,7 @@
 
   updateSkills = function(dt) {
     cycAng += dt * 6;
-    if (player.diving) return;
+    if (player.diving && !(window.CharacterRuntime && CharacterRuntime.allowDiveCasting())) return;
     for (const a of player.actives) {
       a.t -= dt;
       if (a.t > 0) continue;
@@ -164,6 +164,7 @@
       a.uc = (a.uc || 0) + 1;
       const reps = c.unleash > 0 && a.uc % 3 === 0 ? 1 + c.unleash : 1;
       for (let r = 0; r < reps; r++) { fireSkill(a, c); addSkillStain(a, c, cost / reps); }
+      if (window.CharacterRuntime) CharacterRuntime.afterCast(a, c);
     }
   };
 
@@ -201,7 +202,8 @@
       player.hp = Math.min(player.maxhp, player.hp + hp);
     }
     if (hasItem('bookmark') && window.__equipmentRework) window.__equipmentRework.onLevelUp();
-    player.itemRerolls = itemV('rerollnote', 'reroll');
+    const characterRerolls = window.CharacterRuntime && CharacterRuntime.hasRerolls() ? player.itemRerolls : 0;
+    player.itemRerolls = Math.max(characterRerolls, itemV('rerollnote', 'reroll'));
   }
   function recordFound(dr, duplicate) {
     const xp = equipmentRule().rarityXp[rarityIndex(dr)] + (duplicate ? equipmentRule().duplicateXp : 0);
@@ -392,7 +394,7 @@
   };
   render = function() {
     baseRender();
-    if (state === 'levelup' && hasItem('rerollnote')) {
+    if (state === 'levelup' && (hasItem('rerollnote') || (window.CharacterRuntime && CharacterRuntime.hasRerolls()))) {
       const lastCard = cardRects[cardRects.length - 1];
       if (window.DesktopRuntime && DesktopRuntime.active) rerollRect.x = W / 2 - rerollRect.w / 2;
       else rerollRect.x = 122;

@@ -133,7 +133,7 @@
     player.actives.forEach((a, i) => {
       const y = 100 + i * 28;
       txt(SKILL_DEFS[a.id].name + '  Lv.' + a.lvl, 26, y, 14, attrOf(a.id), 'left', true);
-      txt('辅 ' + a.supports.length + '/' + MAX_SUPPORTS, 226, y, 11, PURPLE, 'right');
+      txt('辅 ' + a.supports.length + '/' + supportCap(), 226, y, 11, PURPLE, 'right');
     });
     const equipCount = SLOTS.filter(s => player.equip[s]).length;
     txt('装备 ' + equipCount + '/' + SLOTS.length, 26, 112 + player.actives.length * 28, 12, equipCount ? INK : GRAY);
@@ -160,14 +160,17 @@
     txt(m ? m.rankInfo().name : '', 64, 142, 28, INK, 'left', true);
     txt('圆珠笔涂鸦 × 动作肉鸽 × 技能构筑', 64, 177, 16, DARK);
     if (m) {
+      const character = CHARACTER_CONFIG.defs.find(c => c.id === m.data.character) || CHARACTER_CONFIG.defs[0];
       txt('墨点 ' + m.data.ink + '　碎纸 ' + m.data.paper, 64, 216, 15, DARK);
       txt('继承：' + (m.data.inherited ? ITEM_DEFS[m.data.inherited.key].name : '无'), 64, 246, 13, GRAY);
+      txt('出战：' + character.name + ' Lv.' + (m.data.characters[character.id] || 1), 64, 274, 14, character.color, 'left', true);
     }
-    button({ x: 64, y: 300, w: 360, h: 70 }, '开始游戏  →', () => m.beginRun(false), { size: 20 });
-    button({ x: 64, y: 390, w: 360, h: 58 }, m && m.data.rank >= 18 ? '大师考核' : '段位考核', () => m.beginRun(true), { size: 17 });
+    button({ x: 64, y: 310, w: 360, h: 70 }, '开始游戏  →', () => CharacterRuntime.requestRun(false), { size: 20 });
+    button({ x: 64, y: 400, w: 360, h: 58 }, m && m.data.rank >= 18 ? '大师考核' : '段位考核', () => CharacterRuntime.requestRun(true), { size: 17 });
     button({ x: 486, y: 300, w: 250, h: 58 }, '文具盒', () => { state = 'metaInventory'; });
     button({ x: 756, y: 300, w: 250, h: 58 }, '墨点天赋', () => { state = 'metaTalents'; });
-    button({ x: 486, y: 390, w: 520, h: 58 }, 'Boss 挑战', () => m.openBossChallenge());
+    button({ x: 486, y: 390, w: 250, h: 58 }, '角色', () => CharacterRuntime.openCharacters());
+    button({ x: 756, y: 390, w: 250, h: 58 }, 'Boss 挑战', () => m.openBossChallenge());
     ctx.save(); ctx.translate(1050, 180); ctx.rotate(-0.08); setSeed(744);
     jrect(-100, -70, 200, 170, INK, 3); jline(-70, -38, 68, -38, LINE, 2); jline(-70, 0, 68, 0, LINE, 2); jline(-70, 38, 68, 38, LINE, 2);
     drawStick(0, 30, 68, boilT * 0.05, INK); ctx.restore();
@@ -197,7 +200,7 @@
       txt(def.name, r.x + r.w / 2, r.y + 49, 18, INK, 'center', true, r.w - 24);
       txt(({ charger: '近战突袭', caster: '远程术式', blob: '区域压制' })[def.arch] || 'Boss', r.x + r.w / 2, r.y + 74, 12, GRAY, 'center');
       txt(cleared ? '已讨伐' : '未讨伐', r.x + r.w / 2, r.y + 95, 11, cleared ? PURPLE : GRAY, 'center');
-      hits.push({ rect: r, action: () => m.beginBossTest(i + 1), enabled: true });
+      hits.push({ rect: r, action: () => CharacterRuntime.requestBoss(i + 1), enabled: true });
     });
   }
 
@@ -284,7 +287,7 @@
     shown.forEach((entry, i) => {
       const col = i % 2, row = Math.floor(i / 2), r = { x: 48 + col * 602, y: 178 + row * 126, w: 570, h: 104 };
       let name = '', color = INK, desc = '', right = '';
-      if (m.summaryTab === 'skills') { name = SKILL_DEFS[entry.id].name + ' Lv.' + entry.lvl; color = attrOf(entry.id); desc = window.UICopy ? window.UICopy.skillShort(entry.id) : SKILL_DEFS[entry.id].desc; right = '辅 ' + entry.supports.length + '/' + MAX_SUPPORTS; }
+      if (m.summaryTab === 'skills') { name = SKILL_DEFS[entry.id].name + ' Lv.' + entry.lvl; color = attrOf(entry.id); desc = window.UICopy ? window.UICopy.skillShort(entry.id) : SKILL_DEFS[entry.id].desc; right = '辅 ' + entry.supports.length + '/' + supportCap(); }
       else if (m.summaryTab === 'affixes') { name = entry.def.name + (entry.count > 1 ? ' ×' + entry.count : ''); desc = window.UICopy ? window.UICopy.affixShort(entry.def) : entry.def.desc; }
       else if (m.summaryTab === 'equipment') { const eq = entry.eq; name = ITEM_DEFS[eq.key].name; color = RARITY_LIST[rarityIndex(eq)].color; desc = window.UICopy ? window.UICopy.itemShort(eq.key, rarityIndex(eq)) : itemDescription(eq.key, rarityIndex(eq)); right = equipmentLevelText(eq, s.growth); }
       else { const names = { surge: '墨潮', absorb: '吸墨／弹反', dive: '潜墨', other: '其他／墨迹' }; name = (SKILL_DEFS[entry.id] && SKILL_DEFS[entry.id].name) || names[entry.id] || entry.id; color = entry.id === 'other' ? GRAY : attrOf(entry.id); right = Math.round(entry.value).toLocaleString() + ' 伤害'; desc = '伤害占比 ' + (entry.total ? (entry.value / entry.total * 100).toFixed(1) : '0.0') + '%'; }
@@ -323,7 +326,7 @@
     ctx.fillStyle = 'rgba(255,250,238,0.97)'; ctx.fillRect(W / 2 - 300, 150, 600, 420); jrect(W / 2 - 300, 150, 600, 420, state === 'win' ? INK : RED, 2.5);
     txt(state === 'win' ? 'Boss 挑战完成' : 'Boss 挑战失败', W / 2, 230, 28, state === 'win' ? INK : RED, 'center', true);
     txt(BOSS_DEFS[(m.run.bossTestStage || 1) - 1].name + ' · 不计入局外收益', W / 2, 272, 14, GRAY, 'center');
-    button({ x: W / 2 - 180, y: 326, w: 360, h: 50 }, '再次挑战', () => m.beginBossTest(m.run.bossTestStage || 1));
+    button({ x: W / 2 - 180, y: 326, w: 360, h: 50 }, '再次挑战', () => CharacterRuntime.requestBoss(m.run.bossTestStage || 1));
     button({ x: W / 2 - 180, y: 396, w: 360, h: 50 }, '选择其他 Boss', () => m.openBossChallenge());
     button({ x: W / 2 - 180, y: 466, w: 360, h: 50 }, '返回主界面', () => m.goHome());
   }
@@ -353,11 +356,16 @@
     txt('角色养成', 70, 88, 25, INK, 'left', true); txt('已暂停 · 点击条目查看详情', 270, 86, 13, GRAY);
     button({ x: W - 190, y: 62, w: 120, h: 40 }, '返回 Esc', () => view.close());
     [['skills', '技能'], ['affixes', '词条'], ['equipment', '装备']].forEach(([id, name], i) => button({ x: 70 + i * 150, y: 112, w: 134, h: 40 }, name, () => view.setTab(id), { active: view.tab === id }));
+    const character = window.CharacterRuntime && CHARACTER_CONFIG.defs.find(c => c.id === player.characterId);
+    if (character) {
+      txt(character.name + ' Lv.' + player.characterLevel + ' · ' + character.title, 70, 174, 14, character.color, 'left', true);
+      txt(character.short, 400, 174, 12, GRAY);
+    }
     const entries = view.entries(), per = view.tab === 'affixes' ? 6 : 4, shown = entries.slice(view.page * per, view.page * per + per);
     shown.forEach((entry, i) => {
-      const col = i % 2, row = Math.floor(i / 2), r = { x: 70 + col * 580, y: 180 + row * (per === 6 ? 108 : 174), w: 550, h: per === 6 ? 90 : 150 };
+      const col = i % 2, row = Math.floor(i / 2), r = { x: 70 + col * 580, y: 196 + row * (per === 6 ? 108 : 174), w: 550, h: per === 6 ? 90 : 150 };
       let name = '', desc = '', color = INK, right = '';
-      if (view.tab === 'skills') { name = SKILL_DEFS[entry.id].name + ' Lv.' + entry.lvl; desc = window.UICopy ? window.UICopy.skillShort(entry.id) : SKILL_DEFS[entry.id].desc; color = attrOf(entry.id); right = '辅 ' + entry.supports.length + '/' + MAX_SUPPORTS; }
+      if (view.tab === 'skills') { name = SKILL_DEFS[entry.id].name + ' Lv.' + entry.lvl; desc = window.UICopy ? window.UICopy.skillShort(entry.id) : SKILL_DEFS[entry.id].desc; color = attrOf(entry.id); right = '辅 ' + entry.supports.length + '/' + supportCap(); }
       else if (view.tab === 'affixes') { name = entry.def.name + (entry.count > 1 ? ' ×' + entry.count : ''); desc = window.UICopy ? window.UICopy.affixShort(entry.def) : entry.def.desc; }
       else { const eq = entry.eq, ri = rarityIndex(eq); name = ITEM_DEFS[eq.key].name; desc = window.UICopy ? window.UICopy.itemShort(eq.key, ri) : itemDescription(eq.key, ri); color = RARITY_LIST[ri].color; right = equipmentLevelText(eq) + ' · ' + RARITY_LIST[ri].name; }
       ctx.fillStyle = 'rgba(255,250,238,0.95)'; ctx.fillRect(r.x, r.y, r.w, r.h); jrect(r.x, r.y, r.w, r.h, color, 1.7);
@@ -367,6 +375,9 @@
       hits.push({ rect: r, action: () => { if (!window.UICopy) return; if (view.tab === 'skills') window.UICopy.skillDetail(entry); else if (view.tab === 'affixes') window.UICopy.affixDetail(entry); else window.UICopy.itemDetail(entry.eq, entry.slot); }, enabled: true });
     });
     if (!shown.length) txt('暂无内容', W / 2, 360, 18, GRAY, 'center');
+    if (view.tab === 'skills' && player.characterId === 'single' && player.characterLevel >= 3) {
+      button({ x: W / 2 - 100, y: 566, w: 200, h: 40 }, CharacterRuntime.state.reforgeUsed ? '本局已重铸' : '免费重铸一次辅助', () => CharacterRuntime.reforgeSupport(), { enabled: CharacterRuntime.canReforge() });
+    }
     button({ x: W / 2 - 180, y: 624, w: 110, h: 38 }, '← 上一页', () => view.changePage(-1), { enabled: view.page > 0 });
     txt((view.page + 1) + ' / ' + view.pageCount, W / 2, 649, 13, DARK, 'center');
     button({ x: W / 2 + 70, y: 624, w: 110, h: 38 }, '下一页 →', () => view.changePage(1), { enabled: view.page < view.pageCount - 1 });

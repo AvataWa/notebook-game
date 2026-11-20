@@ -104,7 +104,7 @@
     S.noProc = true;
     try {
       if (hasItem('blankcap') && (a.uc || 0) > 0 && a.uc % 4 === 0) {
-        const empty = Math.max(0, MAX_ACTIVES - player.actives.length);
+        const empty = Math.max(0, activeCap() - player.actives.length);
         const copyC = Object.assign({}, c, {
           dmg: c.dmg * itemV('blankcap', 'dmg') / 100,
           unleash: 0, followup: 0, reburst: 0

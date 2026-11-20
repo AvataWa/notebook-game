@@ -5,12 +5,13 @@
   let buildTab = 'skills', buildPage = 0, buildReturnState = 'play';
   const buildCloseRect = { x: 307, y: 41, w: 43, h: 31 };
   const buildTabRects = [
-    { id: 'skills', name: '技能', x: 24, y: 86, w: 105, h: 36 },
-    { id: 'affixes', name: '词条', x: 135, y: 86, w: 105, h: 36 },
-    { id: 'equipment', name: '装备', x: 246, y: 86, w: 105, h: 36 }
+    { id: 'skills', name: '技能', x: 24, y: 100, w: 105, h: 36 },
+    { id: 'affixes', name: '词条', x: 135, y: 100, w: 105, h: 36 },
+    { id: 'equipment', name: '装备', x: 246, y: 100, w: 105, h: 36 }
   ];
   const buildPrevRect = { x: 28, y: 590, w: 82, h: 32 };
   const buildNextRect = { x: 265, y: 590, w: 82, h: 32 };
+  const buildReforgeRect = { x: 117, y: 590, w: 140, h: 32 };
 
   function openBuildView() {
     if (state !== 'play' && state !== 'levelup' && state !== 'start') return false;
@@ -53,9 +54,9 @@
     return entries.slice(buildPage * per, buildPage * per + per);
   }
   function entryRect(i) {
-    if (buildTab === 'skills') return { x: 24, y: 137 + i * 108, w: 327, h: 100 };
-    if (buildTab === 'affixes') return { x: 24, y: 137 + i * 83, w: 327, h: 76 };
-    return { x: 24, y: 137 + i * 103, w: 327, h: 94 };
+    if (buildTab === 'skills') return { x: 24, y: 150 + i * 108, w: 327, h: 100 };
+    if (buildTab === 'affixes') return { x: 24, y: 150 + i * 83, w: 327, h: 76 };
+    return { x: 24, y: 150 + i * 103, w: 327, h: 94 };
   }
   function buildWrap(text, x, y, maxWidth, lineHeight, maxLines = 2) {
     const lines = []; let line = '';
@@ -90,7 +91,7 @@
     ctx.textAlign = 'left'; ctx.fillStyle = attrOf(a.id); ctx.font = 'bold 15px ' + FONT;
     ctx.fillText(def.name + '  Lv.' + a.lvl, rect.x + 14, rect.y + 23);
     ctx.textAlign = 'right'; ctx.fillStyle = PURPLE; ctx.font = 'bold 11px ' + FONT;
-    ctx.fillText('辅 ' + a.supports.length + '/' + MAX_SUPPORTS, rect.x + rect.w - 14, rect.y + 22);
+    ctx.fillText('辅 ' + a.supports.length + '/' + supportCap(), rect.x + rect.w - 14, rect.y + 22);
     ctx.textAlign = 'left'; ctx.fillStyle = DARK; ctx.font = '11px ' + FONT;
     buildWrap(window.UICopy ? window.UICopy.skillShort(a.id) : def.desc, rect.x + 14, rect.y + 47, rect.w - 28, 16, 2);
     detailHint(rect);
@@ -131,6 +132,11 @@
     jrect(12, 28, W - 24, 610, INK, 2.4);
     ctx.textAlign = 'left'; ctx.fillStyle = INK; ctx.font = 'bold 21px ' + FONT;
     ctx.fillText('角色养成', 27, 61);
+    const character = window.CharacterRuntime && CHARACTER_CONFIG.defs.find(c => c.id === player.characterId);
+    if (character) {
+      ctx.fillStyle = character.color; ctx.font = 'bold 10px ' + FONT;
+      ctx.fillText(character.name + ' Lv.' + player.characterLevel + ' · ' + character.title, 27, 82);
+    }
     buildButton(buildCloseRect, '返回');
     for (const tab of buildTabRects) buildButton(tab, tab.name, true, buildTab === tab.id);
     const entries = buildEntries(), visible = visibleEntries();
@@ -146,8 +152,10 @@
     });
     buildButton(buildPrevRect, '上一页', buildPage > 0);
     buildButton(buildNextRect, '下一页', buildPage < buildPageCount() - 1);
+    const canCharacterReforge = buildTab === 'skills' && player.characterId === 'single' && player.characterLevel >= 3;
+    if (canCharacterReforge) buildButton(buildReforgeRect, CharacterRuntime.state.reforgeUsed ? '本局已重铸' : '免费重铸辅助', CharacterRuntime.canReforge());
     ctx.textAlign = 'center'; ctx.fillStyle = DARK; ctx.font = '11px ' + FONT;
-    ctx.fillText((buildPage + 1) + ' / ' + buildPageCount(), W / 2, 604);
+    ctx.fillText((buildPage + 1) + ' / ' + buildPageCount(), W / 2, canCharacterReforge ? 576 : 604);
     ctx.fillStyle = GRAY; ctx.font = '10px ' + FONT;
     ctx.fillText('已暂停 · 点按条目看详情', W / 2, 624);
   }
@@ -183,6 +191,7 @@
     e.preventDefault(); e.stopImmediatePropagation();
     if (pointInRect(p, buildCloseRect)) { closeBuildView(); return; }
     for (const tab of buildTabRects) if (pointInRect(p, tab)) { setBuildTab(tab.id); return; }
+    if (buildTab === 'skills' && player.characterId === 'single' && pointInRect(p, buildReforgeRect) && CharacterRuntime.canReforge()) { CharacterRuntime.reforgeSupport(); return; }
     if (pointInRect(p, buildPrevRect)) { changeBuildPage(-1); return; }
     if (pointInRect(p, buildNextRect)) { changeBuildPage(1); return; }
     const visible = visibleEntries();

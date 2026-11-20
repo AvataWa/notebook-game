@@ -64,8 +64,9 @@ test('死亡先显示战斗失败，点击屏幕后才进入构筑结算', () =>
   G.meta.resetAll(); G.meta.beginRun(false); G.state = 'over'; drawTexts.length = 0; G.render();
   assert(G.state === 'over' && !G.meta.run.settled, '死亡后未经点击就进入结算');
   assert(drawTexts.includes('战斗失败') && drawTexts.includes('点击屏幕查看战斗结算'), '失败确认页文案缺失');
-  pointer(180, 400);
-  assert(G.state === 'metaRunSummary' && G.meta.settlement && !G.meta.settlement.win, '点击后没有进入失败构筑结算');
+  const realNow = Date.now; Date.now = () => realNow() + 501;
+  pointer(180, 400); Date.now = realNow;
+  assert(G.state === 'metaRunSummary' && G.meta.settlement && !G.meta.settlement.win, '防误触结束后点击没有进入失败构筑结算');
 });
 
 test('养成默认同页展示四个主动，详情关闭不会退出养成', () => {

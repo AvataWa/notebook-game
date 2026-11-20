@@ -15,6 +15,7 @@
 
   function defaults() {
     return { version: 2, ink: 0, paper: 0, talents: {}, specs: {}, inventory: [], inherited: null, equipment: createEquipmentGrowth(),
+      character: 'draft', characters: { draft: 1 },
       rank: 0, firstStages: [], firstBosses: [], stats: { runs: 0, wins: 0, highestStage: 1 } };
   }
   function validate(raw) {
@@ -24,6 +25,10 @@
     d.rank = clampInt(raw.rank, 0, 18, 0);
     for (const b of C.basics) d.talents[b.id] = clampInt(raw.talents && raw.talents[b.id], 0, b.max, 0);
     for (const id of [...Object.keys(SKILL_DEFS), ...C.inkSpecs.map(s => s.id)]) d.specs[id] = clampInt(raw.specs && raw.specs[id], 0, 3, 0);
+    if (typeof CHARACTER_CONFIG !== 'undefined') {
+      d.character = CHARACTER_CONFIG.defs.some(c => c.id === raw.character) ? raw.character : 'draft';
+      for (const c of CHARACTER_CONFIG.defs) d.characters[c.id] = clampInt(raw.characters && raw.characters[c.id], 1, 5, 1);
+    }
     const seen = new Set();
     if (Array.isArray(raw.inventory)) for (const eq of raw.inventory) {
       if (!validItem(eq)) continue;
@@ -304,30 +309,32 @@
   }
   function drawHome() {
     panel('我穿越到笔记本了', '局外手账');
-    text(rankInfo().name, W / 2, 126, 23, INK, 'center', true);
-    text('墨点 ' + meta.ink + '　碎纸 ' + meta.paper, W / 2, 158, 14, DARK, 'center');
-    text('继承：' + inheritedDescription(), W / 2, 190, 12, GRAY, 'center');
+    text(rankInfo().name, W / 2, 112, 22, INK, 'center', true);
+    text('墨点 ' + meta.ink + '　碎纸 ' + meta.paper, W / 2, 143, 13, DARK, 'center');
+    const character = typeof CHARACTER_CONFIG !== 'undefined' ? CHARACTER_CONFIG.defs.find(c => c.id === meta.character) || CHARACTER_CONFIG.defs[0] : null;
+    if (character) text('出战：' + character.name + ' Lv.' + (meta.characters[character.id] || 1), W / 2, 173, 12, character.color, 'center', true);
+    text('继承：' + inheritedDescription(), W / 2, 195, 10, GRAY, 'center');
     const rects = homeRects();
     button(rects.normal, '开始游戏');
     button(rects.ranked, meta.rank >= 18 ? '大师考核' : '段位考核');
     button(rects.inventory, '文具盒 ' + meta.inventory.length);
-    button(rects.talents, '天赋');
+    button(rects.talents, '天赋'); button(rects.characters, '角色');
     button(rects.bossChallenge, 'Boss 挑战');
-    text(meta.stats.runs + ' 局 · ' + meta.stats.wins + ' 次通关 · 最高第 ' + meta.stats.highestStage + ' 页', W / 2, 566, 12, DARK, 'center');
+    text(meta.stats.runs + ' 局 · ' + meta.stats.wins + ' 次通关 · 最高第 ' + meta.stats.highestStage + ' 页', W / 2, 548, 11, DARK, 'center');
     jcircle(25, 73, 14, GRAY, 1.6); text('删', 25, 78, 12, GRAY, 'center', true);
     if (resetArmed) {
       ctx.fillStyle = 'rgba(16,16,16,0.48)'; ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = PAPER; ctx.fillRect(38, 230, 299, 190); jrect(38, 230, 299, 190, RED, 2.2);
       text('确认删除本地存档？', W / 2, 272, 18, RED, 'center', true);
-      text('墨点、装备、天赋与段位都会被清除', W / 2, 306, 12, DARK, 'center');
+      text('墨点、装备、天赋、角色与段位都会被清除', W / 2, 306, 12, DARK, 'center');
       text('此操作无法撤销', W / 2, 330, 11, GRAY, 'center');
       button(rects.resetCancel, '取消'); button(rects.resetConfirm, '确认删除', true, true);
     }
   }
   function homeRects() {
-    return { normal: { x: 58, y: 235, w: 259, h: 48 }, ranked: { x: 58, y: 299, w: 259, h: 48 },
-      inventory: { x: 58, y: 363, w: 259, h: 48 }, talents: { x: 58, y: 427, w: 259, h: 48 },
-      bossChallenge: { x: 58, y: 491, w: 259, h: 38 }, reset: { x: 11, y: 59, w: 28, h: 28 },
+    return { normal: { x: 58, y: 216, w: 259, h: 46 }, ranked: { x: 58, y: 274, w: 259, h: 46 },
+      inventory: { x: 58, y: 332, w: 259, h: 46 }, talents: { x: 58, y: 390, w: 123, h: 44 }, characters: { x: 194, y: 390, w: 123, h: 44 },
+      bossChallenge: { x: 58, y: 446, w: 259, h: 40 }, reset: { x: 11, y: 59, w: 28, h: 28 },
       resetCancel: { x: 58, y: 360, w: 118, h: 38 }, resetConfirm: { x: 199, y: 360, w: 118, h: 38 } };
   }
   function bossChallengeRects() {
@@ -440,7 +447,7 @@
       const r = summaryRect(i), def = SKILL_DEFS[a.id];
       ctx.fillStyle = 'rgba(255,250,238,0.94)'; ctx.fillRect(r.x, r.y, r.w, r.h); jrect(r.x, r.y, r.w, r.h, attrOf(a.id), 1.7);
       text(def.name + '  Lv.' + a.lvl, 36, r.y + 23, 15, attrOf(a.id), 'left', true);
-      text('辅 ' + a.supports.length + '/' + MAX_SUPPORTS, 339, r.y + 22, 11, PURPLE, 'right', true);
+      text('辅 ' + a.supports.length + '/' + supportCap(), 339, r.y + 22, 11, PURPLE, 'right', true);
       ctx.font = '11px ' + FONT; ctx.fillStyle = DARK; ctx.textAlign = 'left'; wrap(window.UICopy ? window.UICopy.skillShort(a.id) : def.desc, 36, r.y + 45, 299, 15, 2);
       text('详情 ›', 339, r.y + 76, 9, GRAY, 'right');
     });
@@ -539,7 +546,7 @@
     if ((state === 'over' || state === 'win') && run && run.mode === 'bossTest') {
       e.preventDefault(); e.stopImmediatePropagation();
       const p = toLogical(e), r = testEndRects();
-      if (hit(p, r.retry)) beginBossTest(run.bossTestStage || 1);
+      if (hit(p, r.retry)) CharacterRuntime.requestBoss(run.bossTestStage || 1);
       else if (hit(p, r.select)) openBossChallenge();
       else if (hit(p, r.home)) goHome();
       return;
@@ -554,10 +561,11 @@
         return;
       }
       if (hit(p, r.reset)) resetArmed = true;
-      else if (hit(p, r.normal)) beginRun(false);
-      else if (hit(p, r.ranked)) beginRun(true);
+      else if (hit(p, r.normal)) CharacterRuntime.requestRun(false);
+      else if (hit(p, r.ranked)) CharacterRuntime.requestRun(true);
       else if (hit(p, r.inventory)) { state = 'metaInventory'; metaPage = 0; }
       else if (hit(p, r.talents)) { state = 'metaTalents'; metaPage = 0; }
+      else if (hit(p, r.characters)) CharacterRuntime.openCharacters();
       else if (hit(p, r.bossChallenge)) openBossChallenge();
       return;
     }
@@ -567,7 +575,7 @@
       if (pg && hit(p, pg.prev)) { metaPage = Math.max(0, metaPage - 1); return; }
       if (pg && hit(p, pg.next)) { metaPage = Math.min(pg.pages - 1, metaPage + 1); return; }
       const rects = bossChallengeRects(), offset = metaPage * 10;
-      for (let i = 0; i < Math.min(10, BOSS_DEFS.length - offset); i++) if (hit(p, rects[i])) { beginBossTest(offset + i + 1); return; }
+      for (let i = 0; i < Math.min(10, BOSS_DEFS.length - offset); i++) if (hit(p, rects[i])) { CharacterRuntime.requestBoss(offset + i + 1); return; }
       return;
     }
     if (state === 'metaInventory' && reforgePending) {

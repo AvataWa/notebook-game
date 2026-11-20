@@ -66,7 +66,7 @@
   }
   function skillDetail(a) {
     const def = SKILL_DEFS[a.id];
-    const lines = [def.desc, `等级 Lv.${a.lvl}　类型 ${(SKILL_TAGS[a.id] || []).map(t => TAG_NAME[t]).join(' / ')}`, `辅助 ${a.supports.length}/${MAX_SUPPORTS}`];
+    const lines = [def.desc, `等级 Lv.${a.lvl}　类型 ${(SKILL_TAGS[a.id] || []).map(t => TAG_NAME[t]).join(' / ')}`, `辅助 ${a.supports.length}/${supportCap()}`];
     if (!a.supports.length) lines.push('尚未镶嵌辅助技能');
     for (const sp of a.supports) lines.push(`◆ ${SUPPORTS[sp.id].name} Lv.${sp.lvl}`, supDesc(sp.id, sp.lvl));
     show({ title: def.name, subtitle: '主动技能 · 完整机制', body: lines.join('\n'), color: attrOf(a.id) });

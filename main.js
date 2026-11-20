@@ -36,6 +36,9 @@ if (typeof Image !== 'undefined') {
 }
 function imgReady(im) { return !!im && im.complete && im.naturalWidth > 0; }
 const MAX_ACTIVES = 4, MAX_SUPPORTS = 4, MAX_LVL = 5;
+function activeCap() { return window.CharacterRuntime ? CharacterRuntime.activeCap() : MAX_ACTIVES; }
+function supportCap() { return window.CharacterRuntime ? CharacterRuntime.supportCap() : MAX_SUPPORTS; }
+function activeLevelCap() { return window.CharacterRuntime ? CharacterRuntime.levelCap() : MAX_LVL; }
 // 浏览器统一读取 battle-config.js；兜底仅用于未加载配置脚本的旧无头测试
 const BATTLE = typeof BATTLE_CONFIG !== 'undefined' ? BATTLE_CONFIG : {
   player: { radius: 12, hp: 100, speed: 168, maxInk: 100, hitInvuln: 0.65 },
@@ -2192,7 +2195,7 @@ function addSkillStain(a, c, amount) {
 }
 function updateSkills(dt) {
   cycAng += dt * 6;
-  if (player.diving) return;
+  if (player.diving && !(window.CharacterRuntime && CharacterRuntime.allowDiveCasting())) return;
   for (const a of player.actives) {
     a.t -= dt;
     if (a.t > 0) continue;
@@ -2210,6 +2213,7 @@ function updateSkills(dt) {
     a.uc = (a.uc || 0) + 1;
     const reps = (c.unleash > 0 && a.uc % 3 === 0) ? 1 + c.unleash : 1;
     for (let r = 0; r < reps; r++) { fireSkill(a, c); addSkillStain(a, c, cost / reps); }
+    if (window.CharacterRuntime) CharacterRuntime.afterCast(a, c);
   }
 }
 
@@ -2271,14 +2275,14 @@ function buildStartCards() {
 function buildOptions() {
   const pool = [];
   // 新主动技能
-  if (player.actives.length < MAX_ACTIVES) {
+  if (player.actives.length < activeCap()) {
     for (const id of Object.keys(SKILL_DEFS)) {
       if (!getActive(id)) pool.push({ kind: 'active', id, tag: '[主动]', tagColor: INK, name: SKILL_DEFS[id].name, desc: SKILL_DEFS[id].desc });
     }
   }
   for (const a of player.actives) {
     // 主动技能升级（数值）
-    if (a.lvl < MAX_LVL) pool.push({
+    if (a.lvl < activeLevelCap()) pool.push({
       kind: 'active+', skill: a.id, tag: (a.lvl + 1 === 3 || a.lvl + 1 === 5) && SKILL_EVOLUTIONS[a.id] ? '[形态进化]' : '[强化]', tagColor: INK,
       name: SKILL_DEFS[a.id].name + ' Lv' + (a.lvl + 1), desc: activeUpgradeDesc(a.id, a.lvl + 1)
     });
@@ -2291,7 +2295,7 @@ function buildOptions() {
       });
     }
     // 新辅助（按标签过滤：全部/子弹/范围/打击，双标签技能可吃两系）
-    if (a.supports.length < MAX_SUPPORTS) {
+    if (a.supports.length < supportCap()) {
       for (const s of Object.keys(SUPPORTS)) {
         if (!supportUsable(s, a.id)) continue;
         if (!a.supports.some(sp => sp.id === s)) pool.push({
@@ -2314,7 +2318,7 @@ function buildOptions() {
     pool.push({ kind: 'opaffix', id: a.id, skill: a.skill, tag: '[' + opNames[a.skill] + '辅助]', tagColor: opColors[a.skill], name: a.name, desc: a.desc });
   }
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
-  const nPick = hasItem('crown') ? 4 : 3;
+  const nPick = hasItem('crown') || (window.CharacterRuntime && CharacterRuntime.extraChoice()) ? 4 : 3;
   const picks = pool.slice(0, nPick);
   if (!picks.some(c => c.kind === 'passive')) {
     const idx = pool.findIndex(c => c.kind === 'passive');
@@ -2331,9 +2335,9 @@ function applyOption(i) {
   if (state === 'levelup' && Date.now() < levelupPickAfter) return false;
   const c = cards[i]; if (!c) return;
   const starting = c.kind === 'start';
-  if (c.kind === 'active' || c.kind === 'start') player.actives.push({ id: c.id, lvl: 1, supports: [], t: 0.3, uc: 0 });
-  else if (c.kind === 'active+') { const a = getActive(c.skill); if (a && a.lvl < MAX_LVL) a.lvl++; }
-  else if (c.kind === 'support') { const a = getActive(c.skill); if (a) a.supports.push({ id: c.sup, lvl: 1 }); }
+  if ((c.kind === 'active' || c.kind === 'start') && player.actives.length < activeCap()) player.actives.push({ id: c.id, lvl: 1, supports: [], t: 0.3, uc: 0 });
+  else if (c.kind === 'active+') { const a = getActive(c.skill); if (a && a.lvl < activeLevelCap()) a.lvl++; }
+  else if (c.kind === 'support') { const a = getActive(c.skill); if (a && a.supports.length < supportCap()) a.supports.push({ id: c.sup, lvl: 1 }); }
   else if (c.kind === 'support+') {
     const a = getActive(c.skill);
     const sp = a && a.supports.find(s => s.id === c.sup);
@@ -2962,6 +2966,14 @@ function update(dt) {
   for (const m of minions) {
     m.t -= dt; m.atkCd = Math.max(0, m.atkCd - dt); m.walk += dt * (m.king ? 15 : 10);
     const t0 = nearestEnemy(m.x, m.y, 9999);
+    if (m.characterPaper && window.CharacterRuntime) {
+      if (t0) {
+        const a = Math.atan2(t0.y - m.y, t0.x - m.x), dist = Math.hypot(t0.x - m.x, t0.y - m.y);
+        if (dist > 170) { m.x += Math.cos(a) * 210 * dt; m.y += Math.sin(a) * 210 * dt; }
+        if (m.atkCd <= 0 && CharacterRuntime.castPaper(m)) m.atkCd = Math.max(0.65, (BATTLE.activeCooldowns[m.a.id] || 2) * 0.65);
+      }
+      continue;
+    }
     if (t0) {
       const a = Math.atan2(t0.y - m.y, t0.x - m.x), dist = Math.hypot(t0.x - m.x, t0.y - m.y);
       if (m.ranged && dist < 285) {
@@ -4474,7 +4486,7 @@ function drawHUD() {
     const y = skillTop + 12 + i * 15;
     ctx.fillStyle = INK; ctx.fillText(nameTxt, 16, y);
     ctx.fillStyle = PURPLE;
-    ctx.fillText('辅 ' + a.supports.length + '/' + MAX_SUPPORTS, 16 + ctx.measureText(nameTxt).width + 10, y);
+    ctx.fillText('辅 ' + a.supports.length + '/' + supportCap(), 16 + ctx.measureText(nameTxt).width + 10, y);
   });
   const equipCount = SLOTS.filter(s => player.equip[s]).length;
   ctx.fillStyle = equipCount ? INK : GRAY; ctx.font = 'bold 10px ' + FONT;

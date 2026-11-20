@@ -12,7 +12,10 @@
 
   const EVENT_SUPPORT = { absorb: 'onabsorb', dive: 'ondive', surge: 'onsurge', crit: 'oncrit', kill: 'onkill' };
   const ACTION_EVENTS = new Set(['absorb', 'dive', 'surge']);
-  function cooldownFor(sp) { return Math.max(0.1, 1 - 0.1 * (sp.lvl - 1)); }
+  function cooldownFor(sp, a) {
+    const base = Math.max(0.1, 1 - 0.1 * (sp.lvl - 1));
+    return window.CharacterRuntime ? CharacterRuntime.triggerCooldown(base, a, sp) : base;
+  }
 
   function castTriggered(a, sp, event) {
     const c = skillCalc(a);
@@ -34,7 +37,7 @@
       if (!ACTION_EVENTS.has(event)) {
         const cds = a.triggerCds || (a.triggerCds = Object.create(null));
         if ((cds[event] === undefined ? -Infinity : cds[event]) > gameTime) continue;
-        cds[event] = gameTime + cooldownFor(sp);
+        cds[event] = gameTime + cooldownFor(sp, a);
       }
       castTriggered(a, sp, event); fired = true;
     }
