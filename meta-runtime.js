@@ -348,11 +348,12 @@
   function drawHome() {
     panel('我穿越到笔记本了', '局外手账');
     window.HomeDoodles.draw(false);
-    const progress = rankProgress();
     text('每一页，都是一个没画完的梦。', W / 2, 73, 11, GRAY, 'center');
     text(rankInfo().name, W / 2, 108, 23, INK, 'center', true);
     text('段位手账 ›', W / 2, 133, 11, PURPLE, 'center', true);
-    text(nextRankText(progress), W / 2, 163, 11, DARK, 'center');
+    const homeCopy = window.NarrativeRuntime ? NarrativeRuntime.homeText() : '这一页还空着。来画下第一笔吧。';
+    const homeLines = String(homeCopy || '').split('\n').filter(Boolean).slice(0, 2);
+    homeLines.forEach((line, i) => text(line, W / 2, (homeLines.length > 1 ? 153 : 163) + i * 18, 11, DARK, 'center'));
     const rects = homeRects();
     button(rects.normal, '开始游戏');
     button(rects.inventory, '文具盒 ' + meta.inventory.length);
@@ -601,6 +602,8 @@
   function hit(p, r) { return pointInRect(p, r); }
   canvas.addEventListener('pointerdown', e => {
     if (window.UIDetail && window.UIDetail.isOpen) return;
+    // 设置入口属于全局 UI，不能被主界面的统一热区提前截获。
+    if (state === 'metaHome' && window.SettingsRuntime && hit(toLogical(e), SettingsRuntime.entryRect)) return;
     if (window.DesktopRuntime && DesktopRuntime.active && DesktopRuntime.handleMetaPointer(e)) {
       e.preventDefault(); e.stopImmediatePropagation(); return;
     }

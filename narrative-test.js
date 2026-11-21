@@ -199,12 +199,28 @@ test('首次与重复通关使用不同结算，失败文案非空', () => {
   assert(drawTexts.includes('点按任意处重开一局') || drawTexts.includes('点击屏幕查看战斗结算'), '结算操作提示被移除');
 });
 
-test('设置说明和布局与新叙事范围一致', () => {
-  home(); G.S.open(); drawTexts.length = 0; G.render();
+test('主界面复用上一局结算文案并持久化', () => {
+  beginIntro('draft', true); G.N.finishIntro(); G.hurtPlayer(999999, 'enemy', null);
+  const ending = G.N.settlementText(false);
+  home();
+  assert(ending && G.N.homeText() === ending, '主界面没有复用上一局结算文案');
+  assert(JSON.parse(stored[G.N.progressStorageKey]).lastEndText === ending, '上局结算文案没有持久化');
+  drawTexts.length = 0; G.render();
+  assert(drawTexts.includes(ending), '主界面没有实际绘制上局文案');
+  assert(!drawTexts.includes(G.M.nextRankText()), '主界面仍显示晋升分数目标');
+});
+
+test('主界面设置按钮穿透段位热区并可返回', () => {
+  home(); const entry = G.S.entryRect;
+  dispatchEvent(listeners, 'pointerdown', { pointerId: 1, clientX: entry.x + entry.w / 2, clientY: entry.y + entry.h / 2 });
+  assert(G.state === 'settings' && G.S.isOpen, '主界面统一热区拦截了设置入口');
+  drawTexts.length = 0; G.render();
   assert(drawTexts.includes('选角开场与胜负结算短句'), '设置说明未更新');
   const l = G.S.layout();
   assert(l.narrative && l.narrative.y + l.narrative.h < l.close.y, '叙事行与返回按钮重叠');
   assert(l.close.y + l.close.h <= l.panel.y + l.panel.h, '返回按钮超出设置面板');
+  dispatchEvent(listeners, 'pointerdown', { pointerId: 2, clientX: l.close.x + l.close.w / 2, clientY: l.close.y + l.close.h / 2 });
+  assert(G.state === 'metaHome' && !G.S.isOpen, '设置返回没有恢复主界面');
 });
 
 test('第一批新增文案恰好九十六条且各池数量完整', () => {

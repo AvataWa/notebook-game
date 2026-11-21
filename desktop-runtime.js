@@ -161,9 +161,10 @@
     if (window.HomeDoodles) window.HomeDoodles.draw(true);
     txt(m ? m.rankInfo().name : '', 64, 142, 30, INK, 'left', true);
     if (m) {
-      const progress = m.rankProgress();
       txt('段位手账 ›', 64, 177, 14, PURPLE, 'left', true);
-      txt(m.nextRankText(progress), 64, 211, 14, DARK);
+      const homeCopy = window.NarrativeRuntime ? NarrativeRuntime.homeText() : '这一页还空着。来画下第一笔吧。';
+      const homeLines = String(homeCopy || '').split('\n').filter(Boolean).slice(0, 2);
+      homeLines.forEach((line, i) => txt(line, 64, (homeLines.length > 1 ? 201 : 211) + i * 20, 14, DARK));
       hits.push({ rect: { x: 48, y: 108, w: 390, h: 120 }, action: () => { state = 'metaRankDetails'; }, enabled: true });
     }
     button({ x: 64, y: 280, w: 360, h: 70 }, '开始游戏  →', () => CharacterRuntime.requestRun(), { size: 20 });

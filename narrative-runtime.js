@@ -75,7 +75,7 @@
 
   const S = {
     intro: null, endState: '', endText: '', currentRun: null,
-    progress: { openingSeen: false, winSeen: false, totalDeaths: 0, bossDeaths: {}, lastRun: null, recent: {} }
+    progress: { openingSeen: false, winSeen: false, totalDeaths: 0, bossDeaths: {}, lastRun: null, lastEndText: '', recent: {} }
   };
   try {
     const saved = globalThis.localStorage && JSON.parse(localStorage.getItem(PROGRESS_KEY) || 'null');
@@ -85,6 +85,7 @@
       S.progress.totalDeaths = Math.max(0, Math.floor(+saved.totalDeaths || 0));
       S.progress.bossDeaths = saved.bossDeaths && typeof saved.bossDeaths === 'object' ? saved.bossDeaths : {};
       S.progress.lastRun = saved.lastRun && typeof saved.lastRun === 'object' ? saved.lastRun : null;
+      S.progress.lastEndText = typeof saved.lastEndText === 'string' ? saved.lastEndText.slice(0, 160) : '';
       S.progress.recent = saved.recent && typeof saved.recent === 'object' ? saved.recent : {};
     }
   } catch (_) { /* 存档不可用时仅本次记录 */ }
@@ -252,6 +253,14 @@
     ctx.restore();
   }
 
+  function homeText() {
+    if (!enabled()) return '';
+    if (S.progress.lastEndText) return S.progress.lastEndText;
+    const last = S.progress.lastRun;
+    if (!last) return '这一页还空着。来画下第一笔吧。';
+    // 兼容没有保存结算文案的旧存档，且渲染时不随机换句。
+    return last.win ? WINS[0] : DEFEATS[0];
+  }
   function recordRun(win) {
     const current = S.currentRun;
     if (!current || current.recorded || current.mode !== 'normal') return null;
@@ -286,6 +295,7 @@
       else if (last && last.bossStage && S.progress.bossDeaths[last.bossStage] >= 3) S.endText = fill(pick(SPECIAL_DEFEATS.bossStreak, 'special:bossStreak'), last);
       else if (last && last.bossName && BOSS_DEFEATS[last.bossName]) S.endText = pick(BOSS_DEFEATS[last.bossName], 'bossDeath:' + last.bossStage);
       else S.endText = pick(DEFEATS, 'defeats');
+      S.progress.lastEndText = S.endText;
       saveProgress();
     }
     return S.endText;
@@ -320,7 +330,7 @@
   }, true);
 
   globalThis.NarrativeRuntime = {
-    state: S, startIntro, advanceIntro, finishIntro, tick: tickIntro, clear, settlementText, skipRect,
+    state: S, startIntro, advanceIntro, finishIntro, tick: tickIntro, clear, settlementText, homeText, skipRect,
     copy: { CHARACTER_LINES, OPENING, RETURNING, PAGES, EVOLUTIONS, BOSS_INTROS, BOSS_OUTROS, DEFEATS, WINS, SPECIAL_DEFEATS, BOSS_DEFEATS, MEMORY },
     get progressStorageKey() { return PROGRESS_KEY; }
   };

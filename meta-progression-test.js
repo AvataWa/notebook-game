@@ -32,7 +32,7 @@ function playScore(score, win = false) {
   const result = M.settlement; M.continueSettlement(); M.finishSettlement(); return result;
 }
 
-test('非法存档回退默认值，首页只保留段位目标与功能入口', () => {
+test('非法存档回退默认值，首页只保留上局文案与功能入口', () => {
   assert(G.state === 'metaHome', '初始状态不是局外手账');
   assert(M.data.ink === 0 && M.data.paper === 0 && M.data.rank === 0, '默认资源或段位错误');
   assert(M.data.inventory.length === 0 && !M.data.inherited && M.data.rankScores.length === 0, '默认背包或成绩席不为空');
@@ -40,7 +40,8 @@ test('非法存档回退默认值，首页只保留段位目标与功能入口',
   drawTexts.length = 0; G.render();
   assert(drawTexts.includes('我穿越到笔记本了') && drawTexts.includes('天赋') && drawTexts.includes('文具盒 0'), '局外首页未完整绘制');
   assert(drawTexts.some(s => s.includes('开始游戏')) && drawTexts.includes(M.rankInfo().name), '开局或当前段位缺失');
-  assert(drawTexts.includes(M.nextRankText()) && drawTexts.includes('段位手账 ›'), '晋升目标或手账入口缺失');
+  assert(drawTexts.includes('这一页还空着。来画下第一笔吧。') && drawTexts.includes('段位手账 ›'), '首页文案或手账入口缺失');
+  assert(!drawTexts.includes(M.nextRankText()), '首页仍显示晋升分数目标');
   assert(!drawTexts.some(s => s.includes('最佳三局认证') || s.includes('成绩席') || s.includes('墨点 ') || s.includes('出战：') || s.includes('继承：')), '首页仍堆叠详细数据');
   assert(!drawTexts.some(s => s.includes('段位考核') || s.includes('大师考核')), '首页仍残留考核入口');
 });
