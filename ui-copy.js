@@ -74,8 +74,8 @@
   function affixDetail(entry) {
     const def = entry.def || entry;
     const passive = entry.kind === 'passive' || !def.skill;
-    const type = passive ? '被动 · 通用' : ({ dive: '潜墨 · 操作', surge: '墨潮 · 操作', absorb: '吸墨 · 操作' })[def.skill];
-    show({ title: def.name + (entry.count > 1 ? ` ×${entry.count}` : ''), tag: type, body: def.desc, color: passive ? DARK : INK });
+    const type = passive ? (def.shield ? '被动 · 护盾' : '被动 · 通用') : ({ dive: '潜墨 · 操作', surge: '墨潮 · 操作', absorb: '吸墨 · 操作' })[def.skill];
+    show({ title: def.name + (entry.count > 1 ? ` ×${entry.count}` : ''), tag: type, body: def.desc, color: passive && def.shield ? ARC : (passive ? DARK : INK) });
   }
   function itemDetail(eq, slot, growth) {
     const def = ITEM_DEFS[eq.key], ri = rarityIndex(eq), rarity = RARITY_LIST[ri], stats = equipmentBaseStats(eq, growth);

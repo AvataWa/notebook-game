@@ -28,7 +28,7 @@
   }
   function passive(id, name, desc, requirements, onTake) {
     PASSIVES.push({
-      id, name, desc, once: true,
+      id, name, desc, once: true, skill: requirements.length === 1 ? requirements[0] : undefined,
       available: () => requirements.every(active),
       fx: () => { player.taken[id] = true; if (onTake) onTake(); }
     });

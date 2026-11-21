@@ -30,13 +30,13 @@ function assert(ok, msg) { if (!ok) throw new Error(msg); }
 function near(actual, expected) { return Math.abs(actual - expected) < 1e-8; }
 function fresh() { G.resetGame(); G.state = 'play'; }
 
-test('经验按页内等级递增，跨页只线性小增', () => {
+test('经验按页内等级递增，跨页提高经验预算', () => {
   fresh();
   assert(G.player.xpNext === 26, '首级需求实际为 ' + G.player.xpNext);
   assert(G.xpForNextLevel(2) === 35, '2 级需求应为 35');
   assert(G.xpForNextLevel(10) === 107, '第 1 页 Boss 级需求应为 107');
-  assert(G.xpForNextLevel(11) === 38 && G.xpForNextLevel(20) === 119, '第 2 页经验边界错误');
-  assert(G.xpForNextLevel(91) === 134 && G.xpForNextLevel(99) === 206, '第 10 页经验没有受控');
+  assert(G.xpForNextLevel(11) === 56 && G.xpForNextLevel(20) === 137, '第 2 页经验边界错误');
+  assert(G.xpForNextLevel(91) === 296 && G.xpForNextLevel(99) === 368, '第 10 页经验预算错误');
 });
 
 test('远处怪物死亡也直接加经验，不再生成经验颗粒', () => {
@@ -95,16 +95,16 @@ test('全 100 级节奏模拟：90 次普通升级与 10 次 Boss 补级经验�
   }
   bosses++; // 第 100 级最终 Boss，通关而不再进入 101 级。
   assert(regular === 90 && bosses === 10, '普通升级或 Boss 次数错误：' + regular + '/' + bosses);
-  assert(total === 10440, '全 100 级普通升级总经验应为 10440，实际为 ' + total);
+  assert(total === 17730, '全 100 级普通升级总经验应为 17730，实际为 ' + total);
   pages.forEach((xp, page) => {
-    assert(xp === 558 + page * 108, '第 ' + (page + 1) + ' 页经验预算错误：' + xp);
+    assert(xp === 558 + page * 270, '第 ' + (page + 1) + ' 页经验预算错误：' + xp);
     const needs = localNeeds[page];
     assert(needs.length === 9 && needs.every((v, i) => i === 0 || v > needs[i - 1]), '第 ' + (page + 1) + ' 页内没有逐级递增');
   });
-  assert(pages[9] < pages[0] * 3, '末页经验预算仍超过首页 3 倍');
-  // 用平均每只怪 4～13 经验的代表模型检查击杀节奏，目标仍是稳定击杀数而非拖时间。
+  assert(near(pages[9], pages[0] * 2988 / 558), '末页经验预算不符合方案 A');
+  // 用平均每只怪 4～13 经验的代表模型检查击杀节奏，后期升级频率应明显低于前期。
   const killPaces = pages.map((xp, page) => xp / (page + 4));
-  assert(killPaces.every(kills => kills >= 110 && kills <= 145), '每页代表击杀数超出 110～145：' + killPaces.join(','));
+  assert(killPaces.every(kills => kills >= 130 && kills <= 240), '每页代表击杀数超出 130～240：' + killPaces.join(','));
   console.log('PACE  ' + pages.map((xp, page) => 'P' + (page + 1) + ':' + xp + 'xp/' + Math.round(killPaces[page]) + '杀').join(' | '));
 });
 

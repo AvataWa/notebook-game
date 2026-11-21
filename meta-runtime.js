@@ -349,6 +349,7 @@
     panel('我穿越到笔记本了', '局外手账');
     window.HomeDoodles.draw(false);
     const progress = rankProgress();
+    text('每一页，都是一个没画完的梦。', W / 2, 73, 11, GRAY, 'center');
     text(rankInfo().name, W / 2, 108, 23, INK, 'center', true);
     text('段位手账 ›', W / 2, 133, 11, PURPLE, 'center', true);
     text(nextRankText(progress), W / 2, 163, 11, DARK, 'center');

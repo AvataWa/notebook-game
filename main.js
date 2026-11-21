@@ -186,6 +186,10 @@ const SKILL_EVOLUTIONS = {
   volcanic: { 3: '质变：裂缝向左右分支', 5: '觉醒：延长火山带，末端大范围喷发' },
   tornado:  { 3: '质变：纸飞机额外分裂一代', 5: '觉醒：大飞机编队，连续分裂' },
   arc:      { 3: '质变：主电弧额外分叉', 5: '觉醒：连锁落点留下持续雷网' },
+  chainclip:{ 3: '质变：新目标积蓄电荷，回跳消耗电荷且不耗连锁', 5: '觉醒：命中三个不同目标后首末闭链爆发' },
+  ballista: { 3: '质变：集火三层后图钉穿透 +1', 5: '觉醒：目标死亡保留集火并补射两枚图钉' },
+  inkrain:  { 3: '质变：重叠毒云合并，扩大范围并叠加每跳伤害', 5: '觉醒：毒云消失后留下持续毒潭' },
+  absolve:  { 3: '质变：标记目标死亡后可向附近普通怪传递一次', 5: '觉醒：赦免纸蝶激光可折射，单体精英与 Boss 可回折' },
   cola:     { 3: '质变：新星后留下减速冰面', 5: '觉醒：冻结怪群并引发连环碎冰' }
 };
 function activeUpgradeDesc(id, lvl) {
@@ -217,9 +221,11 @@ function skillTagText(id) { return (SKILL_TAGS[id] || []).map(t => TAG_NAME[t] |
 function supportTagText(id) { const tag = SUPPORTS[id] && SUPPORTS[id].tag; return tag === 'all' ? '通用' : (TAG_NAME[tag] || tag || '通用'); }
 function cardTypeLabel(c) {
   if (!c) return '';
+  if (c.acquire && c.kind === 'active') return '新主动 · 入库 · ' + skillTagText(c.id);
+  if (c.acquire && c.kind === 'support') return '新辅助 · 入库 · ' + supportTagText(c.sup);
   if (c.kind === 'start' || c.kind === 'active' || c.kind === 'active+') return '主动 · ' + skillTagText(c.id || c.skill);
   if (c.kind === 'support' || c.kind === 'support+') return '辅助 · ' + supportTagText(c.sup);
-  if (c.kind === 'passive') return c.tag === '[形态]' ? '形态 · 专属' : '被动 · 通用';
+  if (c.kind === 'passive') return c.tag === '[形态]' ? '形态 · 专属' : (c.tag === '[护盾]' ? '被动 · 护盾' : '被动 · 通用');
   if (c.kind === 'opaffix') return String(c.tag || '操作').replace(/[\[\]]/g, '') + ' · 通用';
   if (c.kind === 'heal') return '恢复 · 生命';
   return '';
@@ -1289,9 +1295,9 @@ function updateBoss(e, dt) {
   }
 }
 function xpForNextLevel(level) {
-  // 页内逐级增加、翻页线性小增：避免全局二次曲线把后期变成纯刷经验。
+  // 页内逐级增加、翻页提高经验预算：保留前期节奏，降低后期三选一频率。
   const page = Math.floor((level - 1) / 10), local = (level - 1) % 10;
-  return 26 + local * 9 + page * 12;
+  return 26 + local * 9 + page * 30;
 }
 function killEnemy(e) {
   if (e.dead) return;
@@ -1913,6 +1919,14 @@ function hurtPlayer(dmg, kind, source) {
   const inkDr = player.taken.inkarmor && playerOnOwnInk() ? BATTLE.traits.inkArmorReduction : 0;
   dmg = Math.round(dmg * (1 - player.eqDr) * (1 - inkDr));
   player.diving = false;
+  // 挂机者护盾在减伤后承接伤害；完全吸收也进入受击保护，溢出部分再走生命与免死。
+  if (window.IdleRuntime && player.characterId === 'idle') {
+    dmg = IdleRuntime.absorbDamage(dmg);
+    if (dmg <= 0) {
+      player.hurtT = BATTLE.player.hitInvuln; shakeT = Math.max(shakeT, 0.06);
+      return;
+    }
+  }
   if (player.hp - dmg <= 0 && !player.metaNoRevive && hasItem('tape') && gameTime - player.lastRevive > 30) {
     player.lastRevive = gameTime;
     player.hp = 1; player.hurtT = BATTLE.player.hitInvuln; shakeT = 0.3;
@@ -2271,11 +2285,12 @@ function wrapCardDescription(text, maxWidth) {
   return lines;
 }
 function layoutCards(n) {
-  const baseH = n === 4 ? 100 : 108, gap = n === 4 ? 12 : 16;
-  const cardW = n === 4 ? 250 : 280, textW = cardW - 32;
+  const compact = n === 4;
+  const baseH = compact ? 86 : 94, gap = compact ? 8 : 10;
+  const cardW = compact ? 230 : 280, textW = cardW - 32;
   ctx.save();
   const heights = cards.map(c => {
-    ctx.font = '12px ' + FONT;
+    ctx.font = (compact ? '11px ' : '12px ') + FONT;
     const level = c.kind === 'support' ? 1 : (+String(c.name).match(/Lv(\d+)/)?.[1] || 1);
     const short = (c.kind === 'support' || c.kind === 'support+') && window.UICopy
       ? window.UICopy.supportShort(c.sup, level)
@@ -2293,13 +2308,15 @@ function layoutCards(n) {
         if (full !== short) detail = full;
       }
     }
-    ctx.font = '10px ' + FONT;
-    c.detailLines = wrapCardDescription(detail, textW).slice(0, n === 4 ? 1 : 2);
-    return baseH + (c.typeLabel ? 14 : 0) + c.detailLines.length * 13;
+    ctx.font = (compact ? '9px ' : '10px ') + FONT;
+    c.detailLines = wrapCardDescription(detail, textW).slice(0, compact ? 1 : 2);
+    return baseH + (c.typeLabel ? (compact ? 12 : 12) : 0) + c.detailLines.length * (compact ? 11 : 12);
   });
   ctx.restore();
   const total = heights.reduce((sum, h) => sum + h, 0) + (n - 1) * gap;
-  const bottomLimit = state === 'levelup' && hasItem('rerollnote') ? 600 : H - 28;
+  const rerollVisible = state === 'levelup' && (hasItem('rerollnote') || (window.CharacterRuntime && CharacterRuntime.hasRerolls()));
+  // 四选一及刷新按钮都不能进入底部“养成”热区。
+  const bottomLimit = buildRect.y - (rerollVisible ? 69 : 12);
   const y0 = Math.max(74, Math.min(130 + (430 - total) / 2, bottomLimit - total));
   let y = y0;
   cardRects = cards.map((c, i) => {
@@ -2315,13 +2332,31 @@ function buildStartCards() {
   cards = ids.slice(0, 3).map(id => ({ kind: 'start', id, tag: '[起手]', tagColor: INK, name: SKILL_DEFS[id].name, desc: SKILL_DEFS[id].desc }));
   layoutCards(3);
 }
-function buildOptions() {
-  const pool = [];
-  // 新主动技能
-  if (player.actives.length < activeCap()) {
-    for (const id of Object.keys(SKILL_DEFS)) {
-      if (!getActive(id)) pool.push({ kind: 'active', id, tag: '[主动]', tagColor: INK, name: SKILL_DEFS[id].name, desc: SKILL_DEFS[id].desc });
+function weightedOptionPicks(pool, count) {
+  const remaining = pool.slice(), picks = [];
+  while (remaining.length && picks.length < count) {
+    const total = remaining.reduce((sum, c) => sum + (c.weight || 1), 0);
+    let roll = Math.random() * total, index = remaining.length - 1;
+    for (let i = 0; i < remaining.length; i++) {
+      roll -= remaining[i].weight || 1;
+      if (roll < 0) { index = i; break; }
     }
+    picks.push(remaining.splice(index, 1)[0]);
+  }
+  return picks;
+}
+function buildOptions() {
+  const pool = [], reserve = Array.isArray(player.reserve) ? player.reserve : [];
+  const activeFull = player.actives.length >= activeCap();
+  const reservedActive = id => reserve.some(slot => slot && slot.kind === 'active' && slot.value.id === id);
+  const supportOwned = id => player.actives.some(a => a.supports.some(sp => sp && sp.id === id))
+    || reserve.some(slot => slot && slot.kind === 'support' && slot.value.id === id);
+  // 主动栏满后仍可抽到未拥有主动，以 65% 权重进入备用库。
+  for (const id of Object.keys(SKILL_DEFS)) {
+    if (getActive(id) || reservedActive(id)) continue;
+    pool.push({ kind: 'active', id, tag: activeFull ? '[新主动·入库]' : '[主动]', tagColor: INK,
+      name: SKILL_DEFS[id].name, desc: SKILL_DEFS[id].desc,
+      acquire: activeFull, storeOnly: activeFull, weight: activeFull ? 0.65 : 1 });
   }
   for (const a of player.actives) {
     // 主动技能升级（数值）
@@ -2337,37 +2372,42 @@ function buildOptions() {
         desc: supDesc(sp.id, sp.lvl + 1)
       });
     }
-    // 新辅助（按标签过滤：全部/子弹/范围/打击，双标签技能可吃两系）
-    if (a.supports.length < supportCap()) {
-      for (const s of Object.keys(SUPPORTS)) {
-        if (!supportUsable(s, a.id)) continue;
-        if (!a.supports.some(sp => sp.id === s)) pool.push({
-          kind: 'support', skill: a.id, sup: s, tag: '[辅助]', tagColor: PURPLE,
-          name: SUPPORTS[s].name + ' → ' + SKILL_DEFS[a.id].name, desc: 'Lv1：' + supDesc(s, 1)
-        });
-      }
+    // 辅助栏满后，未拥有辅助仍以 65% 权重刷新并进入备用库。
+    const supportFull = a.supports.length >= supportCap();
+    for (const s of Object.keys(SUPPORTS)) {
+      if (!supportUsable(s, a.id) || supportOwned(s)) continue;
+      pool.push({
+        kind: 'support', skill: a.id, sup: s, tag: supportFull ? '[新辅助·入库]' : '[辅助]', tagColor: PURPLE,
+        name: SUPPORTS[s].name + ' → ' + SKILL_DEFS[a.id].name, desc: 'Lv1：' + supDesc(s, 1),
+        acquire: supportFull, storeOnly: supportFull, weight: supportFull ? 0.65 : 1
+      });
     }
   }
   for (const p of PASSIVES) {
     if (p.once && player.taken[p.id]) continue;
     if (p.available && !p.available()) continue;
-    pool.push({ kind: 'passive', id: p.id, tag: p.form ? '[形态]' : '[被动]',
-      tagColor: p.form ? (ATTR_COLOR[SKILL_ATTR[p.skill]] || INK) : DARK, name: p.name, desc: p.desc });
+    pool.push({ kind: 'passive', id: p.id, skill: p.skill, form: !!p.form, shield: !!p.shield,
+      tag: p.form ? '[形态]' : (p.shield ? '[护盾]' : '[被动]'),
+      tagColor: p.form ? (ATTR_COLOR[SKILL_ATTR[p.skill]] || INK) : (p.shield ? ARC : DARK), name: p.name, desc: p.desc });
   }
   const opNames = { dive: '潜墨', surge: '墨潮', absorb: '吸墨' };
   const opColors = { dive: INK, surge: ARC, absorb: PURPLE };
   for (const a of OPERATION_AFFIX_LIST) {
-    if (hasAffix(a.skill, a.id)) continue;
+    if (player.characterId === 'idle' || hasAffix(a.skill, a.id)) continue;
     pool.push({ kind: 'opaffix', id: a.id, skill: a.skill, tag: '[' + opNames[a.skill] + '辅助]', tagColor: opColors[a.skill], name: a.name, desc: a.desc });
   }
-  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
   const nPick = hasItem('crown') || (window.CharacterRuntime && CharacterRuntime.extraChoice()) ? 4 : 3;
-  const picks = pool.slice(0, nPick);
-  const hasHeal = picks.length > 0 && Math.random() < 0.3;
-  if (hasHeal) picks[Math.floor(Math.random() * picks.length)] = { kind: 'heal', tag: '[恢复]', tagColor: '#2f9e68', name: '恢复生命', desc: '立即恢复 30% 最大生命值' };
-  if (!hasHeal && !picks.some(c => c.kind === 'passive')) {
-    const idx = pool.findIndex(c => c.kind === 'passive');
-    if (idx >= 0) picks[picks.length - 1] = pool[idx];
+  let picks;
+  if (window.OptionDirectorRuntime) {
+    picks = window.OptionDirectorRuntime.pick(pool, nPick);
+  } else {
+    picks = weightedOptionPicks(pool, nPick);
+    const hasHeal = picks.length > 0 && Math.random() < 0.3;
+    if (hasHeal) picks[Math.floor(Math.random() * picks.length)] = { kind: 'heal', tag: '[恢复]', tagColor: '#2f9e68', name: '恢复生命', desc: '立即恢复 30% 最大生命值' };
+    if (!hasHeal && !picks.some(c => c.kind === 'passive')) {
+      const idx = pool.findIndex(c => c.kind === 'passive');
+      if (idx >= 0) picks[picks.length - 1] = pool[idx];
+    }
   }
   cards = picks;
   layoutCards(cards.length);
@@ -2869,9 +2909,11 @@ function update(dt) {
           break;
         }
         if (b.kind === 'chain' && b.chainLeft > 0) {
+          if (window.EvolutionRuntime) window.EvolutionRuntime.beforeChainHit(b, e);
           const rawDmg = b.dmg;
           hurtEnemy(e, rawDmg, rawDmg * b.dot, b.x, b.y, b.vuln, b.critAdd, 0, b.col, false, b.hadesSkill);
           b.chainLeft--;
+          if (window.EvolutionRuntime) window.EvolutionRuntime.afterChainHit(b, e);
           const nxt = nearestEnemy(b.x, b.y, 170, e);
           if (nxt) {
             b.dmg *= 0.7;
@@ -3034,7 +3076,7 @@ function update(dt) {
           if (m.ghost) {
             // 赦免蝶保留原小鬼的伤害、辅助与攻击间隔，只把近战命中改成激光。
             lightnings.push({ x1: m.x, y1: m.y - 3, x2: target.x, y2: target.y, t: 0.18, delay: 0, prog: 0,
-              tgt: target, dmg: m.dmg, c: m.c, col: m.c.col, absolveLaser: true });
+              tgt: target, dmg: m.dmg, c: m.c, col: m.c.col, absolveLaser: true, sourceMinion: m });
             m.atkCd = 0.6 / (1 + (m.c.rapid || 0));
           } else if (CharacterRuntime.castPaper(m, target)) m.atkCd = m.king ? 0.65 : 0.85;
         }
@@ -4032,6 +4074,7 @@ function drawPlayerResources() {
   resourceArc(23, 'rgba(245,241,230,0.82)', 2.6);
   if (hpRatio > 0) resourceArc(28, RED, 1.6, hpRatio);
   if (inkRatio > 0) resourceArc(23, INK, 1.4, inkRatio);
+  if (window.IdleRuntime) IdleRuntime.drawResources(resourceArc, player.x, centerY);
   ctx.restore();
 }
 function render() {
@@ -4039,10 +4082,13 @@ function render() {
   ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
   ctx.save();
   const feelCam = globalThis.CombatFeelRuntime ? CombatFeelRuntime.cameraOffset() : { x: 0, y: 0, shake: 0, zoom: 1 };
-  const shakeSize = 5 + feelCam.shake;
-  if (shakeT > 0 || feelCam.shake > 0) ctx.translate((Math.random() - 0.5) * shakeSize, (Math.random() - 0.5) * shakeSize);
-  ctx.translate(feelCam.x, feelCam.y);
-  if (feelCam.zoom !== 1) {
+  const motionScale = globalThis.SettingsRuntime ? SettingsRuntime.motionScale() : 0.55;
+  if (motionScale > 0) {
+    const shakeSize = (5 + feelCam.shake) * motionScale;
+    if (shakeT > 0 || feelCam.shake > 0) ctx.translate((Math.random() - 0.5) * shakeSize, (Math.random() - 0.5) * shakeSize);
+    ctx.translate(feelCam.x * motionScale, feelCam.y * motionScale);
+  }
+  if (motionScale > 0 && feelCam.zoom !== 1) {
     ctx.translate(W / 2, H / 2); ctx.scale(feelCam.zoom, feelCam.zoom); ctx.translate(-W / 2, -H / 2);
   }
   // camX/camY 已经是缩放后视野的世界左上角，直接平移即可让玩家保持屏幕居中
@@ -4585,29 +4631,33 @@ function drawHUD() {
     ctx.globalAlpha = 1;
   });
   setSeed(16800);
-  const absorbReady = player.absorbCd <= 0;
-  ctx.fillStyle = player.absorbT > 0 ? 'rgba(210,225,255,0.96)' : 'rgba(255,250,238,0.94)';
-  ctx.fillRect(absorbRect.x, absorbRect.y, absorbRect.w, absorbRect.h);
-  jrect(absorbRect.x, absorbRect.y, absorbRect.w, absorbRect.h, absorbReady ? INK : GRAY, player.absorbT > 0 ? 3 : 2.2);
-  ctx.fillStyle = absorbReady ? INK : GRAY; ctx.font = 'bold 13px ' + FONT;
-  ctx.fillText(player.absorbT > 0 ? '吸墨中' : '吸墨', absorbRect.x + absorbRect.w / 2, absorbRect.y + 23);
-  ctx.font = '8px ' + FONT;
-  ctx.fillText(absorbReady ? '弹反' : player.absorbCd.toFixed(1) + ' 秒', absorbRect.x + absorbRect.w / 2, absorbRect.y + 40);
-  ctx.fillStyle = player.surgeCharging ? 'rgba(190,215,250,0.96)' : (player.special >= 100 ? 'rgba(210,225,255,0.96)' : 'rgba(255,250,238,0.94)');
-  ctx.fillRect(specialRect.x, specialRect.y, specialRect.w, specialRect.h);
-  jrect(specialRect.x, specialRect.y, specialRect.w, specialRect.h, player.special >= 100 ? INK : GRAY, player.surgeCharging ? 3 : 2.2);
-  ctx.fillStyle = player.special >= 100 ? INK : GRAY; ctx.font = 'bold 14px ' + FONT;
-  ctx.fillText(player.surgeCharging ? '蓄力中' : '墨潮', specialRect.x + specialRect.w / 2, specialRect.y + 18);
-  ctx.font = '9px ' + FONT;
-  ctx.fillText(player.surgeCharging ? Math.round(inkSurgeChargeRatio() * 100) + '% · 松开' : (player.special >= 100 ? '长按' : Math.floor(player.special) + '%'), specialRect.x + specialRect.w / 2, specialRect.y + 33);
-  const canDive = player.ink > 0 && player.diveCd <= 0;
-  ctx.fillStyle = player.diving ? 'rgba(210,225,255,0.96)' : 'rgba(255,250,238,0.94)';
-  ctx.fillRect(diveRect.x, diveRect.y, diveRect.w, diveRect.h);
-  jrect(diveRect.x, diveRect.y, diveRect.w, diveRect.h, player.diving ? INK : (canDive ? INK : GRAY), 2.2);
-  ctx.fillStyle = player.diving || canDive ? INK : GRAY; ctx.font = 'bold 13px ' + FONT;
-  ctx.fillText(player.diving ? '潜墨中' : '潜墨', diveRect.x + diveRect.w / 2, diveRect.y + 18);
-  ctx.font = '8px ' + FONT;
-  ctx.fillText(player.diving ? '无敌 · ' + diveInkCost() + '/秒' : (player.diveCd > 0 ? player.diveCd.toFixed(1) + ' 秒' : '位移'), diveRect.x + diveRect.w / 2, diveRect.y + 33);
+  if (player.characterId === 'idle' && window.IdleRuntime) {
+    IdleRuntime.drawHUD(false);
+  } else {
+    const absorbReady = player.absorbCd <= 0;
+    ctx.fillStyle = player.absorbT > 0 ? 'rgba(210,225,255,0.96)' : 'rgba(255,250,238,0.94)';
+    ctx.fillRect(absorbRect.x, absorbRect.y, absorbRect.w, absorbRect.h);
+    jrect(absorbRect.x, absorbRect.y, absorbRect.w, absorbRect.h, absorbReady ? INK : GRAY, player.absorbT > 0 ? 3 : 2.2);
+    ctx.fillStyle = absorbReady ? INK : GRAY; ctx.font = 'bold 13px ' + FONT;
+    ctx.fillText(player.absorbT > 0 ? '吸墨中' : '吸墨', absorbRect.x + absorbRect.w / 2, absorbRect.y + 23);
+    ctx.font = '8px ' + FONT;
+    ctx.fillText(absorbReady ? '弹反' : player.absorbCd.toFixed(1) + ' 秒', absorbRect.x + absorbRect.w / 2, absorbRect.y + 40);
+    ctx.fillStyle = player.surgeCharging ? 'rgba(190,215,250,0.96)' : (player.special >= 100 ? 'rgba(210,225,255,0.96)' : 'rgba(255,250,238,0.94)');
+    ctx.fillRect(specialRect.x, specialRect.y, specialRect.w, specialRect.h);
+    jrect(specialRect.x, specialRect.y, specialRect.w, specialRect.h, player.special >= 100 ? INK : GRAY, player.surgeCharging ? 3 : 2.2);
+    ctx.fillStyle = player.special >= 100 ? INK : GRAY; ctx.font = 'bold 14px ' + FONT;
+    ctx.fillText(player.surgeCharging ? '蓄力中' : '墨潮', specialRect.x + specialRect.w / 2, specialRect.y + 18);
+    ctx.font = '9px ' + FONT;
+    ctx.fillText(player.surgeCharging ? Math.round(inkSurgeChargeRatio() * 100) + '% · 松开' : (player.special >= 100 ? '长按' : Math.floor(player.special) + '%'), specialRect.x + specialRect.w / 2, specialRect.y + 33);
+    const canDive = player.ink > 0 && player.diveCd <= 0;
+    ctx.fillStyle = player.diving ? 'rgba(210,225,255,0.96)' : 'rgba(255,250,238,0.94)';
+    ctx.fillRect(diveRect.x, diveRect.y, diveRect.w, diveRect.h);
+    jrect(diveRect.x, diveRect.y, diveRect.w, diveRect.h, player.diving ? INK : (canDive ? INK : GRAY), 2.2);
+    ctx.fillStyle = player.diving || canDive ? INK : GRAY; ctx.font = 'bold 13px ' + FONT;
+    ctx.fillText(player.diving ? '潜墨中' : '潜墨', diveRect.x + diveRect.w / 2, diveRect.y + 18);
+    ctx.font = '8px ' + FONT;
+    ctx.fillText(player.diving ? '无敌 · ' + diveInkCost() + '/秒' : (player.diveCd > 0 ? player.diveCd.toFixed(1) + ' 秒' : '位移'), diveRect.x + diveRect.w / 2, diveRect.y + 33);
+  }
   // 固定左下摇杆始终可见，让玩家明确左手移动、右手技能的分区
   const jx = joy.active ? joy.bx : JOY_HOME.x, jy = joy.active ? joy.by : JOY_HOME.y;
   ctx.globalAlpha = joy.active ? 0.48 : 0.24;
@@ -4628,24 +4678,25 @@ function drawCards(title) {
   ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.font = 'bold 22px ' + FONT;
   ctx.fillText(title, W / 2, titleY);
   const inputLocked = state === 'levelup' && Date.now() < levelupPickAfter;
+  const compact = cards.length === 4;
   cards.forEach((cd, i) => {
     const r = cardRects[i];
     setSeed(1000 + i);
     ctx.fillStyle = 'rgba(255,250,238,0.7)';
     ctx.fillRect(r.x, r.y, r.w, r.h);
-    jrect(r.x, r.y, r.w, r.h, cd.tagColor, 2.5);
+    jrect(r.x, r.y, r.w, r.h, cd.tagColor, compact ? 2 : 2.5);
     ctx.textAlign = 'left';
-    ctx.fillStyle = INK; ctx.font = 'bold 15px ' + FONT;
-    ctx.fillText(cd.name, r.x + 16, r.y + 32, r.w - 32);
-    const tagOffset = cd.typeLabel ? 14 : 0;
-    if (cd.typeLabel) drawTagChip(cd.typeLabel, r.x + 16, r.y + 40, cd.tagColor, 10, r.w - 32);
-    ctx.fillStyle = DARK; ctx.font = '12px ' + FONT;
+    ctx.fillStyle = INK; ctx.font = 'bold ' + (compact ? 14 : 15) + 'px ' + FONT;
+    ctx.fillText(cd.name, r.x + 16, r.y + (compact ? 28 : 27), r.w - 32);
+    const tagOffset = cd.typeLabel ? 12 : 0;
+    if (cd.typeLabel) drawTagChip(cd.typeLabel, r.x + 16, r.y + (compact ? 36 : 34), cd.tagColor, compact ? 9 : 10, r.w - 32);
+    ctx.fillStyle = DARK; ctx.font = (compact ? '11px ' : '12px ') + FONT;
     const lines = cd.descLines || wrapCardDescription(cd.shortDesc || cd.desc, r.w - 32).slice(0, 2);
-    lines.forEach((line, row) => ctx.fillText(line, r.x + 16, r.y + 59 + tagOffset + row * 15));
-    ctx.fillStyle = GRAY; ctx.font = '10px ' + FONT;
-    const detailY = r.y + 60 + tagOffset + lines.length * 15;
-    (cd.detailLines || []).forEach((line, row) => ctx.fillText(line, r.x + 16, detailY + row * 13));
-    ctx.fillText(inputLocked ? '0.5 秒后可选择' : '点按选择', r.x + 16, r.y + r.h - 11);
+    lines.forEach((line, row) => ctx.fillText(line, r.x + 16, r.y + (compact ? 53 : 50) + tagOffset + row * (compact ? 13 : 14)));
+    ctx.fillStyle = GRAY; ctx.font = (compact ? '9px ' : '10px ') + FONT;
+    const detailY = r.y + (compact ? 54 : 51) + tagOffset + lines.length * (compact ? 13 : 14);
+    (cd.detailLines || []).forEach((line, row) => ctx.fillText(line, r.x + 16, detailY + row * (compact ? 11 : 12)));
+    ctx.fillText(inputLocked ? '0.5 秒后可选择' : '点按选择', r.x + 16, r.y + r.h - 9);
   });
 }
 
@@ -4704,6 +4755,8 @@ function loop(now) {
       timeScale = Math.min(timeScale, ABSORB_RULE.slowScale);
     }
     update(dt * timeScale);
+  } else if (state === 'narrativeIntro' && globalThis.NarrativeRuntime) {
+    NarrativeRuntime.tick(dt);
   }
   updateAdaptiveQuality(rawDt); renderFrame++;
   if (!shouldSkipRender()) render();

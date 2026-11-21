@@ -320,10 +320,11 @@
 
   function drawSoundButton() {
     if (state !== 'play') return;
+    const settings = globalThis.SettingsRuntime;
     setSeed(488); ctx.globalAlpha = 0.72;
-    jcircle(W - 27, 73, 12, muted ? GRAY : INK, 1.5);
-    ctx.fillStyle = muted ? GRAY : INK; ctx.textAlign = 'center'; ctx.font = 'bold 10px ' + FONT;
-    ctx.fillText(muted ? '静' : '声', W - 27, 77); ctx.globalAlpha = 1;
+    jcircle(W - 27, 73, 12, !settings && muted ? GRAY : INK, 1.5);
+    ctx.fillStyle = !settings && muted ? GRAY : INK; ctx.textAlign = 'center'; ctx.font = 'bold 10px ' + FONT;
+    ctx.fillText(settings ? '设' : (muted ? '静' : '声'), W - 27, 77); ctx.globalAlpha = 1;
   }
   const baseRender = render;
   render = function() { const result = baseRender(); drawSoundButton(); return result; };
@@ -333,7 +334,8 @@
     if (state !== 'play') return;
     const p = toLogical(e);
     if (!pointInRect(p, SOUND_RECT)) return;
-    e.preventDefault(); e.stopImmediatePropagation(); toggleMute();
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (globalThis.SettingsRuntime) SettingsRuntime.open(); else toggleMute();
   }, true);
   window.addEventListener('keydown', function(e) {
     if (!e.repeat && e.key.toLowerCase() === 'm') toggleMute();

@@ -29,7 +29,7 @@ isDesktopLayout = () => false; resize();
   resetGame, applyOption, buildOptions, update, render, floatPopScale, floatIsFlashing, drawPlayerResources,
   layoutCards, drawCards, drawCoreDamageZone, drawOuterSurgeDamageZone,
   spawnEnemy, drawMeleeTelegraph, enemySwingRange,
-  get state() { return state; }, get player() { return player; }, get cards() { return cards; }, get enemies() { return enemies; },
+  get state() { return state; }, set state(v) { state = v; }, get player() { return player; }, get cards() { return cards; }, get enemies() { return enemies; },
   get cardRects() { return cardRects; }, get erupts() { return erupts; }, get novas() { return novas; }, get floats() { return floats; },
   set hitStop(v) { hitStopT = v; },
   get joy() { return joy; }, get levelupDelay() { return levelupDelayT; },
@@ -186,25 +186,39 @@ test('三选一主说明最多两行，补充机制灰字显示且无详情按�
   G.layoutCards(3); drawTexts.length = 0; G.drawCards('测试');
   const r = G.cardRects[0], lines = G.cards[0].descLines, details = G.cards[0].detailLines;
   assert(G.cards[0].typeLabel === '主动 · 打击 / 范围', '主动技能类型标签缺失');
-  assert(lines.length === 2 && details.length > 0 && r.h === 108 + 14 + details.length * 13, '主说明、补充说明或卡片高度错误');
+  assert(lines.length === 2 && details.length > 0 && r.h === 94 + 12 + details.length * 12, '主说明、补充说明或卡片高度错误');
   assert(lines.every(line => line.length * 10 <= r.w - 32), '换行后的描述仍超出卡片宽度');
-  const lastY = r.y + 59 + 14 + (lines.length - 1) * 15;
+  const lastY = r.y + 50 + 12 + (lines.length - 1) * 14;
   assert(lastY <= r.y + r.h - 25, '描述末行压到卡片底部选择提示');
+  const lastDetailY = r.y + 51 + 12 + lines.length * 14 + (details.length - 1) * 12;
+  assert(lastDetailY <= r.y + r.h - 22, '补充说明末行压到卡片底部选择提示');
   assert(!drawTexts.some(t => t.txt === G.cards[0].desc), '绘制时仍把长描述作为单行输出');
   lines.forEach(line => assert(drawTexts.some(t => t.txt === line && t.x === r.x + 16), '换行文本没有实际绘制：' + line));
   details.forEach(line => assert(drawTexts.some(t => t.txt === line && t.font.startsWith('10px')), '灰字补充说明没有实际绘制：' + line));
   assert(!drawTexts.some(t => t.txt === '详情'), '三选一仍显示详情按钮');
 });
-test('竖屏四选一收窄居中，普通三选一宽度不变', () => {
+test('竖屏四选一紧凑居中且避开养成，普通三选一宽度不变', () => {
   fresh(); G.cards.length = 0;
   for (let i = 0; i < 4; i++) G.cards.push({ kind: 'heal', tagColor: '#2f9e68', name: '恢复生命', desc: '立即恢复 30% 最大生命值' });
   G.layoutCards(4);
-  assert(G.cardRects.every(r => r.w === 250 && Math.abs(r.x + r.w / 2 - 187.5) < 1e-8), '四选一卡片未按 250 宽度居中');
-  assert(G.cards.every(c => c.descLines.every(line => line.length * 10 <= 218)), '四选一描述没有按收窄后的宽度换行');
+  assert(G.cardRects.every(r => r.w === 230 && Math.abs(r.x + r.w / 2 - 187.5) < 1e-8), '四选一卡片未按 230 宽度居中');
+  assert(G.cards.every(c => c.descLines.every(line => line.length * 10 <= 198)), '四选一描述没有按收窄后的宽度换行');
+  const last = G.cardRects[G.cardRects.length - 1];
+  assert(last.y + last.h <= 593, '四选一仍进入养成按钮区域：' + (last.y + last.h));
   G.cards.length = 0;
   for (let i = 0; i < 3; i++) G.cards.push({ kind: 'heal', tagColor: '#2f9e68', name: '恢复生命', desc: '立即恢复 30% 最大生命值' });
   G.layoutCards(3);
   assert(G.cardRects.every(r => r.w === 280 && r.x === 47), '普通三选一卡片宽度被意外修改');
+});
+test('最长三选一收窄后仍为刷新按钮和养成预留间距', () => {
+  fresh(); G.state = 'levelup'; G.player.characterId = 'draft'; G.cards.length = 0;
+  for (let i = 0; i < 3; i++) G.cards.push({ kind: 'active+', skill: 'cyclone', tag: '[强化]', tagColor: '#6c4da1', name: '长描述测试', desc: '这是一段用于验证自动换行的超长词条描述，必须在卡片内部完整显示并且不能超出边界或遮挡选择提示。' });
+  G.layoutCards(3);
+  const last = G.cardRects[G.cardRects.length - 1];
+  const total = last.y + last.h - G.cardRects[0].y;
+  assert(total <= 410, '三选一总高度没有实际收窄：' + total);
+  assert(last.y + last.h <= 536, '最长卡片进入刷新按钮预留区域：' + (last.y + last.h));
+  assert(last.y + last.h + 12 + 38 <= 593, '刷新按钮与养成按钮间距不足');
 });
 test('圆心与墨潮外圈增伤标注严格对应 50% 和 70% 半径', () => {
   fresh(); drawArcs.length = 0; drawTexts.length = 0;

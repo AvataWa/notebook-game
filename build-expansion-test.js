@@ -1,7 +1,7 @@
 // 形态被动、属性辅助、加法叠加与派生上限专项测试
 const fs = require('fs');
 const files = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'main.js', 'build-runtime.js',
-  'hades-runtime.js', 'hades-weapons-runtime.js', 'weapon-passives-expansion.js', 'form-passives-runtime.js',
+  'hades-runtime.js', 'hades-weapons-runtime.js', 'weapon-passives-expansion.js', 'form-passives-runtime.js', 'evolution-runtime.js',
   'support-expansion-runtime.js', 'elemental-support-runtime.js', 'trigger-support-runtime.js'];
 const src = files.map(f => fs.readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
 const fakeCtx = new Proxy({}, { get(t, k) {

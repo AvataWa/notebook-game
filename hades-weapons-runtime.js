@@ -36,7 +36,7 @@
   function has(id) { return !!(player && player.taken && player.taken[id]); }
   function active(id) { return player && player.actives.some(a => a.id === id); }
   function passive(id, name, desc, skill) {
-    PASSIVES.push({ id, name, desc, once: true, available: () => active(skill), fx: () => { player.taken[id] = true; } });
+    PASSIVES.push({ id, name, desc, skill, once: true, available: () => active(skill), fx: () => { player.taken[id] = true; } });
   }
   passive('slash_echo', '余锋裂纸', '断页斩的斩痕二次爆裂，造成 60% 伤害', 'pageslash');
   passive('slash_pull', '回锋收页', '断页斩回卷，将外圈小怪拖近并追加反向斩', 'pageslash');

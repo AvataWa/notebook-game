@@ -13,7 +13,7 @@
   function has(id) { return !!(player && player.taken && player.taken[id]); }
   function active(id) { return player && player.actives.some(a => a.id === id); }
   function passive(id, name, desc, skill) {
-    PASSIVES.push({ id, name, desc, once: true, available: () => active(skill), fx: () => { player.taken[id] = true; } });
+    PASSIVES.push({ id, name, desc, skill, once: true, available: () => active(skill), fx: () => { player.taken[id] = true; } });
   }
   passive('slash_charge', '斩弹蓄锋', '断页斩每斩断 1 枚敌弹，下一斩伤害 +6%，最多 +30%；释放后清空', 'pageslash');
   passive('slash_crack', '裂口封路', '断页斩留下 2 秒斩痕，经过的敌人每 0.6 秒受到 25% 伤害', 'pageslash');

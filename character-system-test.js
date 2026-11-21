@@ -8,7 +8,7 @@ const files = [
   'form-passives-runtime.js', 'support-expansion-runtime.js', 'elemental-support-runtime.js',
   'trigger-support-runtime.js', 'build-view.js', 'meta-config.js', 'character-config.js',
   'dive-counter-runtime.js', 'combat-feel-runtime.js', 'equipment-rework-runtime.js',
-  'meta-runtime.js', 'character-runtime.js', 'ui-copy.js', 'ui-detail-runtime.js'
+  'meta-runtime.js', 'character-runtime.js', 'idle-runtime.js', 'ui-copy.js', 'ui-detail-runtime.js'
 ];
 const src = files.map(f => fs.readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
 const drawTexts = [];
@@ -82,10 +82,13 @@ test('普通局和 Boss 都经过选角，并使用所选角色起手', () => {
   assert(G.M.run.mode === 'bossTest' && G.M.run.bossTestStage === 3 && G.player.actives[0].id === 'absolve', 'Boss 选角或关卡错误');
 });
 
-test('七名角色都有符合规则的初始主动', () => {
+test('八名角色都有符合规则的初始主动', () => {
   for (const d of G.C.defs) {
     fresh(d.id);
-    assert(G.player.actives.length === 1 && (d.id === 'single' || G.player.actives[0].id === d.initial), d.name + ' 起手错误');
+    const expected = d.id === 'idle' ? 2 : 1;
+    assert(G.player.actives.length === expected, d.name + ' 起手数量错误');
+    if (!['single', 'idle'].includes(d.id)) assert(G.player.actives[0].id === d.initial, d.name + ' 固定起手错误');
+    if (d.id === 'idle') assert(G.player.actives[0].id !== G.player.actives[1].id, '挂机者两个起手主动重复');
     assert(G.player.characterId === d.id && G.player.characterLevel === 1, d.name + ' 身份或等级错误');
   }
 });
@@ -176,7 +179,7 @@ test('四色笔记两色、三色提供阶段收益，四色触发混色', () =>
 test('一笔到底限制单主动，开放八辅助、十二级与重铸', () => {
   const p = fresh('single', 5);
   assert(p.actives[0].lvl === 2 && G.C.activeCap() === 1 && G.C.supportCap() === 8 && G.C.levelCap() === 12, '单技能角色上限错误');
-  G.buildOptions(); assert(!G.cards.some(c => c.kind === 'active'), '单技能角色仍可获得其他主动');
+  G.buildOptions(); assert(G.cards.every(c => c.kind !== 'active' || c.acquire), '一笔到底出现直接装备其他主动的选项');
   const sp = { id: 'oncrit', lvl: 1 }; p.actives[0].supports = Array.from({ length: 7 }, () => ({ id: 'wide', lvl: 1 })).concat(sp);
   assert(near(G.C.triggerCooldown(1, p.actives[0], sp), 0.5), '第八槽连携冷却没有减半');
   p.characterLevel = 3; p.actives[0].supports = [{ id: 'wide', lvl: 3 }];
@@ -202,7 +205,7 @@ test('角色手账、开局选角与构筑界面实际绘制角色信息', () =>
   assert(drawTexts.some(t => t.includes('一笔到底 Lv.1 · 单技能极限')), '构筑界面缺少角色名称、等级或流派');
 });
 
-test('七名角色战斗本体使用各自颜色与骨架挂件，潜墨沿用同一外观', () => {
+test('八名角色战斗本体使用各自颜色与骨架挂件，潜墨沿用同一外观', () => {
   const seen = [], baseDraw = global.BipedRenderer.draw;
   global.BipedRenderer.draw = function(c, rig, options) {
     if (G.player.bipedRig && rig === G.player.bipedRig) seen.push({ color: options.def.color, decorate: options.decorate, swimming: !!options.swimming });

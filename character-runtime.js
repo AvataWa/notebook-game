@@ -441,6 +441,15 @@
       inkPoly([[h.x - r * 0.85, h.y + r * 0.65], [h.x - r * 0.6, h.y + r * 1.6], [h.x, h.y + r * 0.95], [h.x + r * 0.55, h.y + r * 1.9], [h.x + r * 0.85, h.y + r * 0.65]], color, 1.9);
       jline(h.x + r * 0.55, h.y + r * 1.9, h.x + r * 0.48, h.y + r * 1.25, WARN_YELLOW, 1);
       inkPoly([[hand.x, hand.y], [hand.x + 7, hand.y - 2], [hand.x + 12, hand.y + 2], [hand.x + 16, hand.y - 1]], color, 1.7);
+    } else if (d.icon === 'idle') {
+      /* 软塌睡帽、页边 Z 字与青色护盾光晕，突出“只走位”的轻松感。 */
+      inkPoly([[h.x - r, h.y - r * 0.25], [h.x - r * 0.35, h.y - r * 1.55], [h.x + r * 1.35, h.y - r * 0.75], [h.x + r, h.y]], color, 1.8, true);
+      jcircle(h.x - r * 0.35, h.y - r * 1.55, 1.8, WARN_YELLOW, 1.2);
+      inkPoly([[h.x + r * 1.35, h.y - r * 1.6], [h.x + r * 2.25, h.y - r * 1.6], [h.x + r * 1.35, h.y - r * 0.55], [h.x + r * 2.25, h.y - r * 0.55]], color, 1.2);
+      if (window.IdleRuntime && IdleRuntime.shieldRatio > 0) {
+        c.globalAlpha *= 0.25 + IdleRuntime.shieldRatio * 0.45; jcircle(p.x, p.y - 10, 27, ARC, 1.5);
+        jline(p.x - 20, p.y - 29, p.x + 18, p.y + 7, ARC, 0.8);
+      }
     }
     c.restore();
   }
@@ -494,6 +503,10 @@
     } else if (d.icon === 'single') {
       inkPoly([[hx - hr, hy - hr * 0.6], [hx - hr * 0.6, hy - hr * 1.8], [hx, hy - hr], [hx + hr * 0.55, hy - hr * 2.1], [hx + hr, hy - hr * 0.6]], d.color, 2);
       jline(x + size * 0.25, y, x + size * 0.75, y + size * 0.2, d.color, 2.2);
+    } else if (d.icon === 'idle') {
+      inkPoly([[hx - hr, hy], [hx - hr * 0.35, hy - hr * 1.8], [hx + hr * 1.4, hy - hr * 0.8], [hx + hr, hy + hr * 0.2]], d.color, 2, true);
+      jcircle(hx - hr * 0.35, hy - hr * 1.8, 2.2, WARN_YELLOW, 1.3);
+      inkPoly([[hx + hr * 1.4, hy - hr * 1.8], [hx + hr * 2.4, hy - hr * 1.8], [hx + hr * 1.4, hy - hr * 0.5], [hx + hr * 2.4, hy - hr * 0.5]], d.color, 1.5);
     }
   }
   function drawCharacters() {
@@ -508,18 +521,22 @@
         ctx.fillStyle = 'rgba(255,250,238,0.96)'; ctx.fillRect(r.x, r.y, r.w, r.h); jrect(r.x, r.y, r.w, r.h, d.color, viewId === d.id ? 3 : 1.5);
         portrait(d, r.x + 42, r.y + 62, 30); text(d.name, r.x + 82, r.y + 36, 17, d.color, 'left', true);
         text(d.title + ' · Lv.' + savedLevel(d.id), r.x + 82, r.y + 63, 12, DARK);
-        text(d.id === 'single' ? '随机主动 · 开局揭晓' : '起手 · ' + SKILL_DEFS[d.initial].name, r.x + 82, r.y + 86, 11, GRAY);
+        text(d.id === 'single' ? '随机主动 · 开局揭晓' : (d.id === 'idle' ? '随机双主动 · 开局揭晓' : '起手 · ' + SKILL_DEFS[d.initial].name), r.x + 82, r.y + 86, 11, GRAY);
         hits.push({ rect: r, action: () => { viewId = d.id; }, enabled: true });
       });
       const d = defOf(viewId), level = savedLevel(d.id), box = { x: 48, y: 374, w: 1184, h: 222 };
+      const flavor = globalThis.NarrativeRuntime && NarrativeRuntime.copy.CHARACTER_LINES[d.id];
       ctx.fillStyle = 'rgba(255,250,238,0.96)'; ctx.fillRect(box.x, box.y, box.w, box.h); jrect(box.x, box.y, box.w, box.h, d.color, 2);
       portrait(d, 112, 486, 54); text(d.name + ' · ' + d.title, 184, 414, 22, d.color, 'left', true);
       text(d.short, 184, 444, 14, DARK); text('限制：' + d.limit, 184, 470, 13, RED);
-      text('当前 Lv.' + level + '：' + d.levels[level - 1], 184, 504, 13, INK);
-      if (level < 5) text('下一级：' + d.levels[level], 184, 532, 12, GRAY); else text('五项能力已全部解锁', 184, 532, 12, PURPLE);
+      if (flavor) text('“' + flavor[1] + '”', 184, 496, 12, PURPLE);
+      text('当前 Lv.' + level + '：' + d.levels[level - 1], 184, 526, 13, INK);
+      if (!start) {
+        if (level < 5) text('下一级：' + d.levels[level], 184, 554, 12, GRAY); else text('五项能力已全部解锁', 184, 554, 12, PURPLE);
+      }
       if (!start) button({ x: 934, y: 406, w: 250, h: 46 }, meta().data.character === d.id ? '当前出战' : '设为出战', () => selectCharacter(d.id), meta().data.character !== d.id, meta().data.character === d.id);
       if (!start) button({ x: 934, y: 474, w: 250, h: 46 }, level >= 5 ? '已满级' : '升级 · ' + CHARACTER_CONFIG.costs[level - 1] + ' 墨点', () => upgradeCharacter(d.id), level < 5 && meta().data.ink >= CHARACTER_CONFIG.costs[level - 1]);
-      button({ x: 934, y: 542, w: 250, h: 46 }, start ? '开始战斗' : '以此角色出战', () => start ? confirmSelection() : selectCharacter(d.id), true, false, d.color);
+      button({ x: 934, y: 542, w: 250, h: 46 }, start ? '开始战斗' : '以此角色出战', () => start ? CharacterRuntime.confirmSelection() : selectCharacter(d.id), true, false, d.color);
     } else {
       DEFS.forEach((d, i) => {
         const col = i % 2, row = Math.floor(i / 2), r = { x: 20 + col * 170, y: 105 + row * 66, w: 165, h: 56 };
@@ -529,17 +546,21 @@
         hits.push({ rect: r, action: () => { viewId = d.id; detailScroll = 0; }, enabled: true });
       });
       const d = defOf(viewId), level = savedLevel(d.id);
+      const flavor = globalThis.NarrativeRuntime && NarrativeRuntime.copy.CHARACTER_LINES[d.id];
       ctx.fillStyle = 'rgba(255,250,238,0.96)'; ctx.fillRect(20, 379, 335, 176); jrect(20, 379, 335, 176, d.color, 1.8);
       text(d.name + ' · Lv.' + level, 32, 404, 16, d.color, 'left', true);
-      text(d.id === 'single' ? '随机主动 · 开局揭晓' : '起手 · ' + SKILL_DEFS[d.initial].name, 343, 403, 10, GRAY, 'right');
+      text(d.id === 'single' ? '随机主动 · 开局揭晓' : (d.id === 'idle' ? '随机双主动 · 开局揭晓' : '起手 · ' + SKILL_DEFS[d.initial].name), 343, 403, 10, GRAY, 'right');
       ctx.save(); ctx.beginPath(); ctx.rect(24, 413, 323, 137); ctx.clip();
       let y = 427 - detailScroll;
       ctx.font = '10px ' + FONT; y += wrapText(d.short, 32, y, 303, 15, 2) * 15 + 5;
       text('限制：' + d.limit, 32, y, 10, RED); y += 22;
+      if (flavor) { ctx.font = '10px ' + FONT; y += wrapText('“' + flavor[1] + '”', 32, y, 303, 15, 2) * 15 + 5; }
       ctx.font = '10px ' + FONT; y += wrapText('当前：' + d.levels[level - 1], 32, y, 303, 15, 3) * 15 + 5;
-      ctx.font = '10px ' + FONT;
-      if (level < 5) y += wrapText('下级：' + d.levels[level], 32, y, 303, 15, 3) * 15;
-      else text('五项能力已全部解锁', 32, y, 10, PURPLE);
+      if (!start) {
+        ctx.font = '10px ' + FONT;
+        if (level < 5) y += wrapText('下级：' + d.levels[level], 32, y, 303, 15, 3) * 15;
+        else text('五项能力已全部解锁', 32, y, 10, PURPLE);
+      }
       detailScrollMax = Math.max(0, y + detailScroll - 540); detailScroll = Math.min(detailScroll, detailScrollMax);
       ctx.restore();
       if (detailScrollMax > 0) {
@@ -551,7 +572,7 @@
       if (!start) {
         button({ x: 20, y: 568, w: 108, h: 38 }, meta().data.character === d.id ? '出战中' : '设为出战', () => selectCharacter(d.id), meta().data.character !== d.id, meta().data.character === d.id);
         button({ x: 137, y: 568, w: 218, h: 38 }, level >= 5 ? '已满级' : '升级 · ' + CHARACTER_CONFIG.costs[level - 1] + ' 墨点', () => upgradeCharacter(d.id), level < 5 && meta().data.ink >= CHARACTER_CONFIG.costs[level - 1]);
-      } else button({ x: 58, y: 578, w: 259, h: 46 }, '开始战斗 · ' + d.name, confirmSelection, true, false, d.color);
+      } else button({ x: 58, y: 578, w: 259, h: 46 }, '开始战斗 · ' + d.name, () => CharacterRuntime.confirmSelection(), true, false, d.color);
     }
   }
 
@@ -583,7 +604,7 @@
   window.addEventListener('keydown', e => {
     if (state !== 'metaCharacters' && state !== 'metaCharacterSelect') return;
     if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); const source = pending && pending.kind === 'boss' ? 'metaBossChallenge' : 'metaHome'; pending = null; if (source === 'metaHome') meta().goHome(); else state = source; }
-    if (e.key === 'Enter' && state === 'metaCharacterSelect') { e.preventDefault(); confirmSelection(); }
+    if (e.key === 'Enter' && state === 'metaCharacterSelect') { e.preventDefault(); e.stopImmediatePropagation(); CharacterRuntime.confirmSelection(); }
   }, true);
 
   window.CharacterRuntime = {

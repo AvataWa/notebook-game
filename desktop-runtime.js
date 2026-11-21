@@ -142,7 +142,7 @@
       ctx.globalAlpha = Math.min(1, toastValue.t);
       txt(toastValue.txt, W / 2, H - 132 - i * 23, 15, DARK, 'center', true); ctx.globalAlpha = 1;
     });
-    const controls = [
+    const controls = player.characterId === 'idle' ? [] : [
       [absorbRect, '左键', player.absorbT > 0 ? '吸墨中' : '吸墨 · 弹反', player.absorbCd <= 0 ? INK : GRAY],
       [specialRect, '右键', player.surgeCharging ? '蓄力 ' + Math.round(inkSurgeChargeRatio() * 100) + '%' : (player.special >= 100 ? '墨潮 · 长按' : '墨潮 ' + Math.floor(player.special) + '%'), player.special >= 100 ? INK : GRAY],
       [diveRect, 'Space', player.diving ? '潜墨中' : '潜墨', player.ink > 0 && player.diveCd <= 0 ? INK : GRAY]
@@ -151,7 +151,8 @@
       ctx.fillStyle = 'rgba(255,250,238,0.95)'; ctx.fillRect(r.x, r.y, r.w, r.h); jrect(r.x, r.y, r.w, r.h, color, 2);
       txt(key, r.x + 12, r.y + 22, 12, color, 'left', true); txt(label, r.x + r.w / 2 + 8, r.y + 37, 13, color, 'center', true);
     }
-    txt('WASD / 方向键移动　·　左键 / E 吸墨　·　右键 / Q 墨潮　·　空格潜墨　·　Esc 暂停', 26, H - 30, 13, DARK, 'left');
+    if (player.characterId === 'idle' && window.IdleRuntime) IdleRuntime.drawHUD(true);
+    txt(player.characterId === 'idle' ? 'WASD / 方向键移动　·　技能自动施放　·　Tab 养成　·　Esc 暂停' : 'WASD / 方向键移动　·　左键 / E 吸墨　·　右键 / Q 墨潮　·　空格潜墨　·　Esc 暂停', 26, H - 30, 13, DARK, 'left');
   };
 
   function drawHome() {
@@ -451,7 +452,7 @@
     txt('暂停', W / 2, 200, 32, INK, 'center', true); txt('这一页先停在这里', W / 2, 234, 14, GRAY, 'center');
     button({ x: W / 2 - 170, y: 284, w: 340, h: 54 }, '继续战斗  Esc', () => { state = 'play'; }, { size: 17 });
     button({ x: W / 2 - 170, y: 358, w: 340, h: 50 }, '查看角色养成  Tab', () => { state = 'play'; window.__buildView.open(); });
-    button({ x: W / 2 - 170, y: 428, w: 340, h: 50 }, CombatFeelRuntime.muted ? '开启声音  M' : '关闭声音  M', () => CombatFeelRuntime.toggleMute());
+    button({ x: W / 2 - 170, y: 428, w: 340, h: 50 }, '游戏设置', () => SettingsRuntime.open());
     button({ x: W / 2 - 170, y: 498, w: 340, h: 50 }, '返回主界面', () => meta().goHome(), { color: RED });
   }
 
@@ -486,6 +487,7 @@
     // 保留潜墨与养成按钮自身行为，其余战斗区域使用鼠标技能快捷键。
     if (pointInRect(p, diveRect) || pointInRect(p, buildRect)) return;
     e.preventDefault(); e.stopImmediatePropagation();
+    if (player.characterId === 'idle') return;
     if (e.button === 0) castAbsorb();
     else if (startInkSurgeCharge(e.pointerId) && canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
   }, true);

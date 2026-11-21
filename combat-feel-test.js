@@ -2,7 +2,7 @@
 const fs = require('fs');
 const src = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'main.js', 'build-runtime.js',
   'hades-runtime.js', 'hades-weapons-runtime.js', 'weapon-passives-expansion.js',
-  'support-expansion-runtime.js', 'dive-counter-runtime.js', 'combat-feel-runtime.js']
+  'support-expansion-runtime.js', 'dive-counter-runtime.js', 'combat-feel-runtime.js', 'settings-runtime.js']
   .map(f => fs.readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
 const drawTexts = [];
 const fakeCtx = new Proxy({}, { get(t, k) {
@@ -25,7 +25,9 @@ eval(src + `
 ;globalThis.G = {
   resetGame, update, render, hurtEnemy, killEnemy, spawnEnemy, chargeParry, castInkSurge,
   get player() { return player; }, get enemies() { return enemies; }, get F() { return CombatFeelRuntime; },
-  get state() { return state; }, set state(v) { state = v; }, get D() { return DiveCounterRuntime; }
+  get state() { return state; }, set state(v) { state = v; }, get D() { return DiveCounterRuntime; },
+  get S() { return SettingsRuntime; }, get keys() { return keys; }, get joy() { return joy; },
+  set shakeT(v) { shakeT = v; }, get shakeT() { return shakeT; }
 };`);
 let failed = 0, passed = 0;
 function test(name, fn) { try { fn(); passed++; console.log('OK  ' + name); } catch (e) { failed++; console.log('ERR ' + name + ': ' + e.stack.split('\n')[0]); } }
@@ -116,6 +118,39 @@ test('全部反馈同屏渲染不报错，静音设置可持久化', () => {
   assert(stored['notebook-muted'] === (G.F.muted ? '1' : '0'), '静音状态没有持久化');
   assert(G.F.muted !== before, '静音开关没有生效');
   G.render();
+});
+
+test('震屏默认开启，开启时统一降低到原来的 55%', () => {
+  assert(G.S.shakeEnabled && G.S.motionScale() === 0.55, '默认震屏状态或幅度错误');
+  assert(!stored['notebook-shake'], '默认开启不应要求预先写入存档');
+});
+
+test('关闭震屏立即清除震动并持久化，重新开启恢复轻震', () => {
+  G.shakeT = 0.4; G.S.toggleShake();
+  assert(!G.S.shakeEnabled && G.S.motionScale() === 0 && G.shakeT === 0, '关闭后仍有震屏');
+  assert(stored['notebook-shake'] === '0', '关闭状态没有持久化');
+  G.render(); G.S.toggleShake();
+  assert(G.S.shakeEnabled && G.S.motionScale() === 0.55 && stored['notebook-shake'] === '1', '重新开启没有生效');
+});
+
+test('设置按钮可打开面板，震屏行可点击，返回恢复原界面', () => {
+  fresh(); G.joy.active = true; G.keys.d = true;
+  const pointer = rect => {
+    const listeners = handlers.pointerdown, fn = listeners[listeners.length - 1];
+    let stopped = false;
+    fn({ clientX: rect.x + rect.w / 2, clientY: rect.y + rect.h / 2, pointerType: 'touch', button: 0,
+      preventDefault() {}, stopImmediatePropagation() { stopped = true; } });
+    assert(stopped, '设置输入没有拦截底层战斗操作');
+  };
+  pointer(G.S.entryRect);
+  assert(G.state === 'settings' && G.S.isOpen && !G.joy.active && !G.keys.d, '打开设置没有暂停或清理输入');
+  drawTexts.length = 0; G.render();
+  for (const label of ['设置', '声音', '震屏', '返回']) assert(drawTexts.includes(label), '设置界面缺少 ' + label);
+  pointer(G.S.layout().shake); assert(!G.S.shakeEnabled, '点击震屏行没有关闭');
+  pointer(G.S.layout().close); assert(G.state === 'play' && !G.S.isOpen, '返回没有恢复战斗');
+  G.S.toggleShake();
+  G.state = 'metaHome'; G.S.open(); G.S.close(); assert(G.state === 'metaHome', '主界面设置返回状态错误');
+  G.state = 'desktopPause'; G.S.open(); G.S.close(); assert(G.state === 'desktopPause', '桌面暂停设置返回状态错误');
 });
 
 console.log('COMBAT_FEEL_TEST_' + (failed ? 'FAILED' : 'OK') + ' (' + passed + '/' + (passed + failed) + ')');

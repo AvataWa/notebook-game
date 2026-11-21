@@ -99,9 +99,10 @@
   }
   function drawAffixEntry(entry, rect) {
     const isPassive = entry.kind === 'passive', def = entry.def;
-    const title = isPassive ? '通用被动' : ({ dive: '潜墨辅助', surge: '墨潮辅助', absorb: '吸墨辅助' })[def.skill];
-    buildCard(rect, isPassive ? DARK : INK);
-    ctx.textAlign = 'left'; ctx.fillStyle = isPassive ? DARK : INK; ctx.font = 'bold 13px ' + FONT;
+    const title = isPassive ? (def.shield ? '护盾被动' : '通用被动') : ({ dive: '潜墨辅助', surge: '墨潮辅助', absorb: '吸墨辅助' })[def.skill];
+    const entryColor = isPassive && def.shield ? ARC : (isPassive ? DARK : INK);
+    buildCard(rect, entryColor);
+    ctx.textAlign = 'left'; ctx.fillStyle = entryColor; ctx.font = 'bold 13px ' + FONT;
     ctx.fillText(def.name + (isPassive && entry.count > 1 ? '  ×' + entry.count : ''), rect.x + 14, rect.y + 22);
     ctx.textAlign = 'right'; ctx.fillStyle = GRAY; ctx.font = '10px ' + FONT;
     ctx.fillText(title, rect.x + rect.w - 14, rect.y + 21);
