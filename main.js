@@ -177,7 +177,7 @@ const SKILL_DEFS = {
   ruler:    { name: '裂地直尺',   desc: '直尺劈落，地刺成排刺出并余震' },
   chalk:    { name: '流星粉笔头', desc: '0.45 秒快速落下，末段修正落点并砸出大坑' },
   pinburst: { name: '蜂群大头钉', desc: '扇形射出一把大头钉，钉尖爆裂' },
-  absolve:  { name: '赦免粉笔',   desc: '标记最强敌人 3 秒，期间击杀转化为己方小鬼' },
+  absolve:  { name: '赦免粉笔',   desc: '标记最强敌人 3 秒，期间击杀转化为环绕激光纸蝶' },
   brand:    { name: '橡皮筋烙印', desc: '持续电击并连锁；每跳伤害 +8%，最多 +40%' },
   cola:     { name: '冰可乐新星', desc: '冻慢周围敌人；命中已减速目标追加碎冰' }
 };
@@ -213,6 +213,27 @@ const PHYS_TRAIL = '#4a3958';
 const ICE_LIGHT = '#c9f2ff', ICE_DARK = '#286d9b';
 const ATTR_NAME = { phys: '物理', fire: '火', ice: '冰', thunder: '雷' };
 const TAG_NAME = { proj: '子弹', area: '范围', strike: '打击' };
+function skillTagText(id) { return (SKILL_TAGS[id] || []).map(t => TAG_NAME[t] || t).join(' / ') || '无标签'; }
+function supportTagText(id) { const tag = SUPPORTS[id] && SUPPORTS[id].tag; return tag === 'all' ? '通用' : (TAG_NAME[tag] || tag || '通用'); }
+function cardTypeLabel(c) {
+  if (!c) return '';
+  if (c.kind === 'start' || c.kind === 'active' || c.kind === 'active+') return '主动 · ' + skillTagText(c.id || c.skill);
+  if (c.kind === 'support' || c.kind === 'support+') return '辅助 · ' + supportTagText(c.sup);
+  if (c.kind === 'passive') return c.tag === '[形态]' ? '形态 · 专属' : '被动 · 通用';
+  if (c.kind === 'opaffix') return String(c.tag || '操作').replace(/[\[\]]/g, '') + ' · 通用';
+  if (c.kind === 'heal') return '恢复 · 生命';
+  return '';
+}
+function drawTagChip(value, x, y, color = INK, size = 10, maxWidth = 999) {
+  const text = String(value || ''); if (!text) return null;
+  ctx.font = size + 'px ' + FONT;
+  const padX = 3, padY = 2;
+  const h = size + padY * 2, w = Math.min(maxWidth, ctx.measureText(text).width + padX * 2);
+  ctx.save(); ctx.globalAlpha = 0.1; ctx.fillStyle = color; ctx.fillRect(x, y, w, h);
+  ctx.globalAlpha = 0.48; jrect(x, y, w, h, color, 1); ctx.restore();
+  ctx.fillStyle = color; ctx.textAlign = 'left'; ctx.fillText(text, x + padX, y + size + padY, w - padX * 2);
+  return { x, y, w, h };
+}
 function attrOf(aid) { return ATTR_COLOR[SKILL_ATTR[aid]] || INK; }
 function trailColorOf(aid) { return SKILL_ATTR[aid] === 'phys' ? PHYS_TRAIL : attrOf(aid); }
 
@@ -447,10 +468,10 @@ let inkVisitStamp = 0;
 let inkPaintedCount = 0, inkFriendlyColor = INK, inkFriendlyRgb = [26, 43, 143];
 const inkHostileRgb = [154, 136, 114];
 function makeInkLayer() {
-  if (typeof document.createElement !== 'function') return { canvas: null, ctx: null, image: null };
+  if (typeof document.createElement !== 'function') return { canvas: null, ctx: null, image: null, dirty: false };
   const layer = document.createElement('canvas'); layer.width = INK_GW; layer.height = INK_GH;
   const c = layer.getContext('2d');
-  return { canvas: layer, ctx: c, image: c ? c.createImageData(INK_GW, INK_GH) : null };
+  return { canvas: layer, ctx: c, image: c ? c.createImageData(INK_GW, INK_GH) : null, dirty: false };
 }
 const friendlyInkLayer = makeInkLayer(), hostileInkLayer = makeInkLayer();
 function inkRgb(hex) {
@@ -459,13 +480,28 @@ function inkRgb(hex) {
 }
 function putInkRegion(layer, x0, y0, x1, y1) {
   if (!layer.ctx || !layer.image) return;
-  // Canvas 脏矩形只接受整数；技能轨迹可能给出小数坐标，向外取整并限制在墨迹层内。
+  // 只累计脏矩形，实际提交合并到渲染前；网格和 ImageData 仍在涂写时即时更新。
   const left = Math.max(0, Math.floor(Math.min(x0, x1)));
   const top = Math.max(0, Math.floor(Math.min(y0, y1)));
   const right = Math.min(INK_GW - 1, Math.ceil(Math.max(x0, x1)));
   const bottom = Math.min(INK_GH - 1, Math.ceil(Math.max(y0, y1)));
   if (![left, top, right, bottom].every(Number.isFinite) || right < left || bottom < top) return;
-  layer.ctx.putImageData(layer.image, 0, 0, left, top, right - left + 1, bottom - top + 1);
+  if (layer.dirty) {
+    layer.dirtyLeft = Math.min(layer.dirtyLeft, left); layer.dirtyTop = Math.min(layer.dirtyTop, top);
+    layer.dirtyRight = Math.max(layer.dirtyRight, right); layer.dirtyBottom = Math.max(layer.dirtyBottom, bottom);
+  } else {
+    layer.dirty = true; layer.dirtyLeft = left; layer.dirtyTop = top;
+    layer.dirtyRight = right; layer.dirtyBottom = bottom;
+  }
+}
+function flushInkLayer(layer) {
+  if (!layer.dirty || !layer.ctx || !layer.image) return;
+  layer.ctx.putImageData(layer.image, 0, 0, layer.dirtyLeft, layer.dirtyTop,
+    layer.dirtyRight - layer.dirtyLeft + 1, layer.dirtyBottom - layer.dirtyTop + 1);
+  layer.dirty = false;
+}
+function flushInkRegions() {
+  flushInkLayer(friendlyInkLayer); flushInkLayer(hostileInkLayer);
 }
 function syncInkPixel(i) {
   const p = i * 4, owner = inkOwner[i];
@@ -1253,8 +1289,9 @@ function updateBoss(e, dt) {
   }
 }
 function xpForNextLevel(level) {
-  // 首级需求从 8 提高到 26，后续需求加速增长，明显减少升级打断
-  return 18 + Math.round(level * 8 + level * level * 0.35);
+  // 页内逐级增加、翻页线性小增：避免全局二次曲线把后期变成纯刷经验。
+  const page = Math.floor((level - 1) / 10), local = (level - 1) % 10;
+  return 26 + local * 9 + page * 12;
 }
 function killEnemy(e) {
   if (e.dead) return;
@@ -2159,15 +2196,19 @@ function addInkStroke(x1, y1, x2, y2, col, hostile, sourceId) {
 function addPlayerTrail(x, y, col, prevTrail) {
   return addInkStain(x, y, 1.2, 14, col, false, true, prevTrail || null, 0, true);
 }
-// 每帧直接铺设“上一帧→当前帧”的完整线段；只保留实体当前位置，不保存历史墨团
-function addLinkedTrail(owner, x, y, col, hostile, r, amount, spacing, xKey, yKey, refKey) {
+// 累计移动距离达到 spacing 后，再铺设“上次落笔→当前位置”的完整线段。
+// 短距离不推进上次落笔点，避免静止与逐帧微小移动造成重复涂写，同时保证长线段中间不断墨。
+function addLinkedTrail(owner, x, y, col, hostile, r, amount, spacing, xKey, yKey, refKey, keepTipCovered = false) {
   let px = owner[xKey], py = owner[yKey];
   if (!Number.isFinite(px) || !Number.isFinite(py)) { px = x; py = y; }
+  if (!owner[refKey]) owner[refKey] = { x, y };
+  else { owner[refKey].x = x; owner[refKey].y = y; }
+  const minDistance = Math.max(1, spacing || 1);
+  const tipNeedsInk = keepTipCovered && !inkCircleHas(x, y, r * 0.35, hostile);
+  if (Math.hypot(x - px, y - py) < minDistance && !tipNeedsInk) return 0;
   const covered = paintInkSegment(px, py, x, y, r * 0.78, amount, col, !!hostile, true,
     hostile ? (owner.sourceId || owner.id || 0) : 0, true);
   owner[xKey] = x; owner[yKey] = y;
-  if (!owner[refKey]) owner[refKey] = { x, y };
-  else { owner[refKey].x = x; owner[refKey].y = y; }
   return covered;
 }
 function playerOnOwnInk() {
@@ -2231,6 +2272,7 @@ function wrapCardDescription(text, maxWidth) {
 }
 function layoutCards(n) {
   const baseH = n === 4 ? 100 : 108, gap = n === 4 ? 12 : 16;
+  const cardW = n === 4 ? 250 : 280, textW = cardW - 32;
   ctx.save();
   const heights = cards.map(c => {
     ctx.font = '12px ' + FONT;
@@ -2239,7 +2281,8 @@ function layoutCards(n) {
       ? window.UICopy.supportShort(c.sup, level)
       : String(c.desc || '').replace(/^Lv1：/, '');
     c.shortDesc = short;
-    c.descLines = wrapCardDescription(short, 248).slice(0, 2);
+    c.typeLabel = cardTypeLabel(c);
+    c.descLines = wrapCardDescription(short, textW).slice(0, 2);
     let detail = '';
     if (c.kind === 'active+') detail = SKILL_DEFS[c.skill].desc;
     else if (c.kind === 'support' || c.kind === 'support+') {
@@ -2251,8 +2294,8 @@ function layoutCards(n) {
       }
     }
     ctx.font = '10px ' + FONT;
-    c.detailLines = wrapCardDescription(detail, 248).slice(0, n === 4 ? 1 : 2);
-    return baseH + c.detailLines.length * 13;
+    c.detailLines = wrapCardDescription(detail, textW).slice(0, n === 4 ? 1 : 2);
+    return baseH + (c.typeLabel ? 14 : 0) + c.detailLines.length * 13;
   });
   ctx.restore();
   const total = heights.reduce((sum, h) => sum + h, 0) + (n - 1) * gap;
@@ -2260,7 +2303,7 @@ function layoutCards(n) {
   const y0 = Math.max(74, Math.min(130 + (430 - total) / 2, bottomLimit - total));
   let y = y0;
   cardRects = cards.map((c, i) => {
-    const h = heights[i], rect = { x: 47, y, w: 280, h };
+    const h = heights[i], rect = { x: n === 4 ? (W - cardW) / 2 : 47, y, w: cardW, h };
     y += h + gap;
     return rect;
   });
@@ -2320,7 +2363,9 @@ function buildOptions() {
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
   const nPick = hasItem('crown') || (window.CharacterRuntime && CharacterRuntime.extraChoice()) ? 4 : 3;
   const picks = pool.slice(0, nPick);
-  if (!picks.some(c => c.kind === 'passive')) {
+  const hasHeal = picks.length > 0 && Math.random() < 0.3;
+  if (hasHeal) picks[Math.floor(Math.random() * picks.length)] = { kind: 'heal', tag: '[恢复]', tagColor: '#2f9e68', name: '恢复生命', desc: '立即恢复 30% 最大生命值' };
+  if (!hasHeal && !picks.some(c => c.kind === 'passive')) {
     const idx = pool.findIndex(c => c.kind === 'passive');
     if (idx >= 0) picks[picks.length - 1] = pool[idx];
   }
@@ -2345,6 +2390,11 @@ function applyOption(i) {
   }
   else if (c.kind === 'passive') PASSIVES.find(p => p.id === c.id).fx();
   else if (c.kind === 'opaffix') player.affixes[c.skill][c.id] = true;
+  else if (c.kind === 'heal') {
+    const healed = Math.min(player.maxhp * 0.3, Math.max(0, player.maxhp - player.hp));
+    player.hp = Math.min(player.maxhp, player.hp + player.maxhp * 0.3);
+    floats.push({ x: player.x, y: player.y - 28, txt: healed > 0 ? '+' + Math.round(healed) : '生命已满', t: 0.7, color: c.tagColor });
+  }
   cards = []; state = 'play';
   if (!starting) player.goldT = Math.max(player.goldT, 1);
   if (starting) toast('潜墨可无敌位移但持续耗墨；涂新区域攒满墨潮');
@@ -2654,7 +2704,7 @@ function update(dt) {
     if (!player.diving || diveOffInkPath) {
       const trailCol = player.actives.length ? trailColorOf(player.actives[0].id) : INK;
       addLinkedTrail(player, player.x, player.y, trailCol, false,
-        14, 1.2, 12, 'trailX', 'trailY', 'trailS');
+        14, 1.2, 12, 'trailX', 'trailY', 'trailS', player.diving);
     }
   }
   player.hurtT = Math.max(0, player.hurtT - dt);
@@ -2966,11 +3016,28 @@ function update(dt) {
   for (const m of minions) {
     m.t -= dt; m.atkCd = Math.max(0, m.atkCd - dt); m.walk += dt * (m.king ? 15 : 10);
     const t0 = nearestEnemy(m.x, m.y, 9999);
-    if (m.characterPaper && window.CharacterRuntime) {
-      if (t0) {
-        const a = Math.atan2(t0.y - m.y, t0.x - m.x), dist = Math.hypot(t0.x - m.x, t0.y - m.y);
-        if (dist > 170) { m.x += Math.cos(a) * 210 * dt; m.y += Math.sin(a) * 210 * dt; }
-        if (m.atkCd <= 0 && CharacterRuntime.castPaper(m)) m.atkCd = Math.max(0.65, (BATTLE.activeCooldowns[m.a.id] || 2) * 0.65);
+    if ((m.characterPaper && window.CharacterRuntime) || m.ghost) {
+      // 纸偶师纸蝶与赦免蝶共用环绕索敌；锁定目标死亡后才重新选择。
+      let target = m.paperTarget;
+      if (!target || target.dead) { target = nearestEnemy(m.x, m.y, 9999); m.paperTarget = target; }
+      if (target) {
+        m.orbitA = (m.orbitA || 0) + dt * (m.king ? 2.2 : 1.7);
+        const orbitR = m.orbitR || 60;
+        const goalX = target.x + Math.cos(m.orbitA) * orbitR, goalY = target.y + Math.sin(m.orbitA) * orbitR;
+        const dx = goalX - m.x, dy = goalY - m.y, goalDist = Math.hypot(dx, dy);
+        if (goalDist > 0.5) {
+          const step = Math.min(goalDist, (m.king ? 280 : 230) * dt);
+          m.x += dx / goalDist * step; m.y += dy / goalDist * step;
+        }
+        const dist = Math.hypot(target.x - m.x, target.y - m.y);
+        if (dist <= 190 && m.atkCd <= 0) {
+          if (m.ghost) {
+            // 赦免蝶保留原小鬼的伤害、辅助与攻击间隔，只把近战命中改成激光。
+            lightnings.push({ x1: m.x, y1: m.y - 3, x2: target.x, y2: target.y, t: 0.18, delay: 0, prog: 0,
+              tgt: target, dmg: m.dmg, c: m.c, col: m.c.col, absolveLaser: true });
+            m.atkCd = 0.6 / (1 + (m.c.rapid || 0));
+          } else if (CharacterRuntime.castPaper(m, target)) m.atkCd = m.king ? 0.65 : 0.85;
+        }
       }
       continue;
     }
@@ -3905,6 +3972,7 @@ function drawMeleeTelegraph(e) {
 function renderInkTerritory() {
   const friendlyCol = player.actives.length ? trailColorOf(player.actives[0].id) : INK;
   recolorFriendlyInk(friendlyCol);
+  flushInkRegions();
   ctx.save(); ctx.imageSmoothingEnabled = true;
   if (hostileInkLayer.canvas) { ctx.globalAlpha = 0.27; ctx.drawImage(hostileInkLayer.canvas, WORLD_L, WORLD_T, WORLD_W, WORLD_H); }
   if (friendlyInkLayer.canvas) { ctx.globalAlpha = 0.23; ctx.drawImage(friendlyInkLayer.canvas, WORLD_L, WORLD_T, WORLD_W, WORLD_H); }
@@ -4080,13 +4148,30 @@ function render() {
   }
   for (const m of minions) {
     setSeed(m.walk * 1000 | 0);
-    if (m.ghost) {   // 赦免粉笔拉起来的幽灵小鬼：半透明描边
-      ctx.globalAlpha = 0.55;
-      drawStick(m.x, m.y, 18, m.walk, INK);
-      jline(m.x - 5, m.y + 9, m.x - 2, m.y + 5, INK, 1.2);
-      jline(m.x - 2, m.y + 5, m.x + 1, m.y + 9, INK, 1.2);
-      jline(m.x + 1, m.y + 9, m.x + 4, m.y + 5, INK, 1.2);
-      ctx.globalAlpha = 1;
+    if (m.characterPaper || m.ghost) {
+      // 纸偶师纸蝶与赦免蝶共用小型扇翅轮廓；赦免蝶保留半透明感。
+      const scale = (m.king ? 1.5 : 1) * 0.85, flap = 0.55 + 0.45 * Math.abs(Math.sin(m.walk * 1.35));
+      const span = 16 * flap, col = m.ghost ? INK : ((m.c && m.c.col) || ALLY), bodyCol = m.ghost ? INK : ALLY;
+      const alpha = m.ghost ? 0.62 : 1;
+      ctx.save(); ctx.translate(m.x, m.y + Math.sin(m.walk * 0.55) * 1.5); ctx.scale(scale, scale);
+      for (const side of [-1, 1]) {
+        ctx.globalAlpha = 0.18 * alpha; ctx.fillStyle = col;
+        ctx.beginPath(); ctx.moveTo(side * 2, 0); ctx.quadraticCurveTo(side * span, -17, side * (span + 3), -5);
+        ctx.quadraticCurveTo(side * (span + 1), 5, side * 3, 5); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(side * 2, 3); ctx.quadraticCurveTo(side * (span * 0.75), 5, side * (span * 0.65), 13);
+        ctx.quadraticCurveTo(side * 4, 13, side * 2, 5); ctx.closePath(); ctx.fill();
+        ctx.globalAlpha = alpha;
+        jline(side * 2, 0, side * span, -13, col, 1.8); jline(side * span, -13, side * (span + 3), -4, col, 1.8);
+        jline(side * (span + 3), -4, side * span, 3, col, 1.8); jline(side * span, 3, side * 2, 4, col, 1.8);
+        jline(side * 2, 3, side * (span * 0.72), 6, col, 1.5); jline(side * (span * 0.72), 6, side * (span * 0.65), 13, col, 1.5);
+        jline(side * (span * 0.65), 13, side * 2, 5, col, 1.5);
+        jline(side * 5, -2, side * (span - 2), -7, col, 0.9);
+      }
+      ctx.globalAlpha = alpha;
+      jline(0, -5, 0, 9, bodyCol, 2.6); jcircle(0, -7, 2.5, bodyCol, 1.8);
+      jline(-1, -9, -5, -14, bodyCol, 1.1); jline(1, -9, 5, -14, bodyCol, 1.1);
+      jcircle(-5, -14, 1, bodyCol, 1); jcircle(5, -14, 1, bodyCol, 1);
+      ctx.restore();
     } else {
       drawStick(m.x, m.y, m.king ? 32 : 18, m.walk, ALLY);
       if (m.king) {
@@ -4421,7 +4506,7 @@ function render() {
 
   drawHUD();
   if (state === 'start') drawCards('穿越了！选择你的起手涂鸦');
-  if (state === 'levelup') drawCards(hasItem('crown') ? '升级！选一张涂鸦卡（王冠：四选一）' : '升级！选一张涂鸦卡');
+  if (state === 'levelup') drawCards('升级！选一张涂鸦卡');
   if (state === 'over') drawEnd(false);
   if (state === 'win') drawEnd(true);
   if (state === 'play' || state === 'levelup' || state === 'start') drawBuildButton();
@@ -4550,15 +4635,15 @@ function drawCards(title) {
     ctx.fillRect(r.x, r.y, r.w, r.h);
     jrect(r.x, r.y, r.w, r.h, cd.tagColor, 2.5);
     ctx.textAlign = 'left';
-    ctx.fillStyle = cd.tagColor; ctx.font = 'bold 12px ' + FONT;
-    ctx.fillText(cd.tag, r.x + 16, r.y + 20);
     ctx.fillStyle = INK; ctx.font = 'bold 15px ' + FONT;
-    ctx.fillText(cd.name, r.x + 16, r.y + 42, r.w - 32);
+    ctx.fillText(cd.name, r.x + 16, r.y + 32, r.w - 32);
+    const tagOffset = cd.typeLabel ? 14 : 0;
+    if (cd.typeLabel) drawTagChip(cd.typeLabel, r.x + 16, r.y + 40, cd.tagColor, 10, r.w - 32);
     ctx.fillStyle = DARK; ctx.font = '12px ' + FONT;
     const lines = cd.descLines || wrapCardDescription(cd.shortDesc || cd.desc, r.w - 32).slice(0, 2);
-    lines.forEach((line, row) => ctx.fillText(line, r.x + 16, r.y + 59 + row * 15));
+    lines.forEach((line, row) => ctx.fillText(line, r.x + 16, r.y + 59 + tagOffset + row * 15));
     ctx.fillStyle = GRAY; ctx.font = '10px ' + FONT;
-    const detailY = r.y + 60 + lines.length * 15;
+    const detailY = r.y + 60 + tagOffset + lines.length * 15;
     (cd.detailLines || []).forEach((line, row) => ctx.fillText(line, r.x + 16, detailY + row * 13));
     ctx.fillText(inputLocked ? '0.5 秒后可选择' : '点按选择', r.x + 16, r.y + r.h - 11);
   });
@@ -4588,7 +4673,8 @@ function updateAdaptiveQuality(rawDt) {
   const ms = Math.min(100, rawDt * 1000);
   perfStats.frameMs += (ms - perfStats.frameMs) * 0.08;
   if (state !== 'play') return;
-  if (perfStats.frameMs > 24 && enemies.length >= 45) qualityBadT += rawDt;
+  // 墨迹、弹幕与技能同样可能造成高负载，降档只依据真实帧耗时，不再要求怪物数量。
+  if (perfStats.frameMs > 24) qualityBadT += rawDt;
   else qualityBadT = Math.max(0, qualityBadT - rawDt * 2);
   if (qualityBadT >= 1.2 && renderQuality < 2) {
     setRenderQuality(renderQuality + 1); qualityBadT = 0; qualityGoodT = 0;
@@ -4599,6 +4685,10 @@ function updateAdaptiveQuality(rawDt) {
   if (qualityGoodT >= 6 && renderQuality > 0) {
     setRenderQuality(renderQuality - 1); qualityGoodT = 0; qualityBadT = 0;
   }
+}
+function shouldSkipRender() {
+  // 低画质稳定隔帧渲染；严重卡顿时也生效，逻辑更新仍保持逐帧执行。
+  return state === 'play' && renderQuality === 2 && renderFrame % 2 === 1;
 }
 function loop(now) {
   requestAnimationFrame(loop);
@@ -4616,7 +4706,7 @@ function loop(now) {
     update(dt * timeScale);
   }
   updateAdaptiveQuality(rawDt); renderFrame++;
-  if (!(state === 'play' && renderQuality === 2 && rawDt < 0.024 && renderFrame % 2)) render();
+  if (!shouldSkipRender()) render();
 }
 globalThis.doodleBridge = window.doodleBridge = { line: jline, circle: jcircle, rect: jrect };
 resetGame();

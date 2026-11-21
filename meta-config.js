@@ -18,6 +18,5 @@ const META_CONFIG = {
   rankNames: ['涂鸦学徒', '铅笔好手', '圆珠笔达人', '马克笔专家', '钢笔大师', '纸面传说'],
   rankMinor: ['Ⅲ', 'Ⅱ', 'Ⅰ'],
   scrapByRarity: [2, 5, 12, 25],
-  reforgeCostByRarity: [40, 80, 120, 160],
-  examAffixes: ['断墨', '群像', '急促铃', '涂改', '不许返工']
+  reforgeCostByRarity: [40, 80, 120, 160]
 };

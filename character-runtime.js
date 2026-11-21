@@ -50,8 +50,8 @@
   const baseBeginBossTest = meta().beginBossTest;
   meta().beginBossTest = function(...args) { const result = baseBeginBossTest(...args); applyRun(); return result; };
 
-  function requestRun(ranked = false) {
-    pending = { kind: 'run', ranked }; viewId = meta().data.character; state = 'metaCharacterSelect'; return true;
+  function requestRun() {
+    pending = { kind: 'run' }; viewId = meta().data.character; state = 'metaCharacterSelect'; return true;
   }
   function requestBoss(stage) {
     pending = { kind: 'boss', stage }; viewId = meta().data.character; state = 'metaCharacterSelect'; return true;
@@ -72,7 +72,7 @@
     if (!pending) return false;
     selectCharacter(viewId);
     const task = pending; pending = null;
-    return task.kind === 'boss' ? meta().beginBossTest(task.stage) : meta().beginRun(task.ranked);
+    return task.kind === 'boss' ? meta().beginBossTest(task.stage) : meta().beginRun();
   }
 
   function activeCap() { return is('single') ? 1 : MAX_ACTIVES; }
@@ -206,25 +206,36 @@
     const id = SKILL_DEFS[e.characterKillSkill] ? e.characterKillSkill : selectedDef().initial;
     const source = getActive(id) || makeActive(id);
     const a = makeActive(id, source.lvl); if (lvl() >= 5) a.supports = clone(source.supports || []);
-    const m = { x: e.x, y: e.y, t: 12, atkCd: 0.5, walk: 0, rad: 1, c: { col: ALLY }, characterPaper: true, a, king: false };
+    const m = { x: e.x, y: e.y, t: 12, atkCd: 0.4, walk: 0, rad: 1, c: { col: ALLY },
+      characterPaper: true, a, king: false, orbitR: 60, orbitA: Math.random() * Math.PI * 2, paperTarget: null };
     minions.push(m); novas.push({ x: e.x, y: e.y, t: 0.3, max: 44, col: ALLY, c: { col: ALLY } });
     if (lvl() >= 4) {
       const same = minions.filter(p => p.characterPaper && !p.king && p.a.id === id);
       if (same.length >= 3) {
         for (const p of same.slice(0, 3)) p.t = -1;
         m.king = true; m.t = 16; m.rad = 1.5;
-        floats.push({ x: m.x, y: m.y - 35, txt: '纸偶合体！', t: 0.9, color: PURPLE, crit: true });
+        floats.push({ x: m.x, y: m.y - 35, txt: '纸蝶合体！', t: 0.9, color: PURPLE, crit: true });
       }
     }
   }
-  function castPaper(m) {
+  function castPaper(m, target) {
     if (!m || !m.a || !m.a.id) return false;
-    const x = player.x, y = player.y; player.x = m.x; player.y = m.y; S.paperCasting = true;
-    const c = skillCalc(m.a), inherit = m.king && lvl() >= 5 ? 0.55 : (lvl() >= 2 ? 0.4 : 0.35);
-    c.dmg *= inherit * (m.king ? 1.8 : 1); if (m.king) c.rad *= 1.8;
-    fireSkill(m.a, c); m.c = c;
-    S.paperCasting = false; player.x = x; player.y = y;
-    return true;
+    const tgt = target && !target.dead ? target : nearestEnemy(m.x, m.y, 480);
+    if (!tgt) return false;
+    S.paperCasting = true;
+    try {
+      const c = skillCalc(m.a), inherit = m.king && lvl() >= 5 ? 0.55 : (lvl() >= 2 ? 0.4 : 0.35);
+      c.dmg *= inherit * (m.king ? 1.8 : 1); m.c = c;
+      // 激光继承伤害的命中类辅助；不再临时改写玩家坐标，也不会换成其他技能形态。
+      const laserC = Object.assign({}, c, {
+        strike: true, sdmg: (c.sdmg || 0) + (c.bdmg || 0), scrit: (c.scrit || 0) + (c.bcrit || 0)
+      });
+      lightnings.push({ x1: m.x, y1: m.y - 3, x2: tgt.x, y2: tgt.y, t: 0.2, delay: 0, prog: 0,
+        tgt, dmg: 12 * c.dmg, c: laserC, col: c.col, paperLaser: true });
+      return true;
+    } finally {
+      S.paperCasting = false;
+    }
   }
 
   function applyRainbow(e, strong) {
@@ -365,21 +376,132 @@
     text(title, isDesktopLayout() ? 48 : 24, isDesktopLayout() ? 58 : 49, isDesktopLayout() ? 28 : 23, INK, 'left', true);
     if (subtitle) text(subtitle, W - (isDesktopLayout() ? 48 : 24), isDesktopLayout() ? 54 : 46, 11, GRAY, 'right');
   }
+  function inkPoly(points, color, width = 1.6, close = false) {
+    for (let i = 1; i < points.length; i++) jline(points[i - 1][0], points[i - 1][1], points[i][0], points[i][1], color, width);
+    if (close && points.length > 2) jline(points[points.length - 1][0], points[points.length - 1][1], points[0][0], points[0][1], color, width);
+  }
+
+  /* 战斗挂件只消费骨架坐标；普通与潜墨姿态共用，永不另画一套直立小人。 */
+  function drawBattleAccessories(c, pose, d, color) {
+    const h = pose.head, p = pose.pelvis, n = pose.neck, r = 7.5;
+    const hand = pose.arms[1].foot;
+    c.save(); if (pose.swimming) c.globalAlpha *= 0.82;
+    if (d.icon === 'draft') {
+      /* 耳后铅笔：橡皮、木杆和笔尖三段，保留无名草稿的学生感。 */
+      jline(h.x + r * 0.62, h.y + r * 0.2, h.x + r * 1.5, h.y + r * 1.45, '#b88a4a', 2.4);
+      jline(h.x + r * 0.53, h.y + r * 0.05, h.x + r * 0.7, h.y + r * 0.28, RED, 2.8);
+      inkPoly([[h.x + r * 1.5, h.y + r * 1.45], [h.x + r * 1.72, h.y + r * 1.83], [h.x + r * 1.27, h.y + r * 1.6]], color, 1.2, true);
+      inkPoly([[n.x - 2, n.y - 1], [n.x + 3, n.y + 3], [n.x - 1, n.y + 5]], color, 1.1);
+    } else if (d.icon === 'parry') {
+      /* 回锋头带 + 斜持直尺，尺子刻度在战斗缩放下仍可辨认。 */
+      jline(h.x - r, h.y + r * 0.28, h.x + r, h.y + r * 0.28, WARN_YELLOW, 1.8);
+      inkPoly([[h.x - r, h.y + r * 0.25], [h.x - r * 1.75, h.y + r * 0.65], [h.x - r * 1.25, h.y - r * 0.05]], WARN_YELLOW, 1.4);
+      jline(hand.x - 8, hand.y - 7, hand.x + 9, hand.y + 7, color, 3);
+      for (let i = -5; i <= 5; i += 5) jline(hand.x + i, hand.y + i * 0.75, hand.x + i + 2, hand.y + i * 0.75 - 2, WARN_YELLOW, 0.9);
+    } else if (d.icon === 'dive') {
+      /* 墨滴兜帽和背鳍沿头部／躯干挂接，游泳时自然转成水平轮廓。 */
+      jcircle(h.x, h.y, r + 2, color, 1.35);
+      inkPoly([[h.x - 3, h.y + r + 1], [h.x + 1, h.y + r + 6], [h.x + 4, h.y + r + 1]], color, 1.5);
+      inkPoly([[p.x - 1, p.y + 3], [p.x - 8, p.y + 9], [n.x - 3, n.y + 1]], ICE_LIGHT, 1.7, true);
+      jline(p.x - 10, p.y - 1, p.x - 4, p.y + 1, ICE_LIGHT, 1.1);
+      jline(p.x - 11, p.y - 4, p.x - 6, p.y - 2, ICE_LIGHT, 1);
+    } else if (d.icon === 'surge') {
+      /* 双重曝光环使用两种金黄，放射线只放在头部，避免遮住战场。 */
+      c.globalAlpha *= 0.72;
+      jcircle(h.x, h.y, r + 3.5, WARN_YELLOW, 1.4);
+      jcircle(h.x, h.y, r + 6.5, d.color, 1.1);
+      for (let i = 0; i < 4; i++) {
+        const a = i * Math.PI / 2 + 0.35;
+        jline(h.x + Math.cos(a) * (r + 8), h.y + Math.sin(a) * (r + 8), h.x + Math.cos(a) * (r + 11), h.y + Math.sin(a) * (r + 11), WARN_YELLOW, 1.25);
+      }
+      jline(n.x - 4, n.y, n.x + 4, n.y, WARN_YELLOW, 2);
+    } else if (d.icon === 'summon') {
+      /* 折纸方头先盖住圆头，再补折角和表情；背后牵着一只小纸偶。 */
+      c.fillStyle = PAPER; c.fillRect(h.x - r, h.y - r, r * 2, r * 2);
+      jrect(h.x - r, h.y - r, r * 2, r * 2, color, 1.8);
+      inkPoly([[h.x + 1, h.y + r], [h.x + r, h.y + 1], [h.x + 1, h.y + 1]], color, 1.1, true);
+      jcircle(h.x + 2.4, h.y + 1.2, 0.8, color, 1);
+      jline(h.x + 1, h.y - 2.5, h.x + 4, h.y - 3.5, color, 1);
+      const x = p.x - 10, y = p.y + 11;
+      jline(n.x - 2, n.y, x, y + 3, ALLY, 0.9);
+      inkPoly([[x, y + 4], [x - 3, y + 1], [x, y - 2], [x + 3, y + 1]], ALLY, 1.2, true);
+      jline(x, y - 2, x, y - 7, ALLY, 1.2);
+      jline(x, y - 5, x - 3, y - 3, ALLY, 1); jline(x, y - 5, x + 3, y - 3, ALLY, 1);
+    } else if (d.icon === 'colors') {
+      /* 四色发束与背后四支笔一一对应四种属性。 */
+      const cols = [ATTR_COLOR.phys, ATTR_COLOR.fire, ATTR_COLOR.ice, ATTR_COLOR.thunder];
+      cols.forEach((col, i) => {
+        const dx = (i - 1.5) * 3;
+        jline(h.x + dx * 0.45, h.y + r * 0.8, h.x + dx, h.y + r + 4 + (i % 2) * 2, col, 2);
+        jline(p.x + dx - 1, p.y + 1, n.x + dx + 1, n.y + 5, col, 1.8);
+        jline(n.x + dx + 1, n.y + 5, n.x + dx + 1.8, n.y + 7, col, 1);
+      });
+    } else if (d.icon === 'single') {
+      /* 高笔尖冠 + 从掌心拖出的连续一笔，轮廓和其余角色明显不同。 */
+      inkPoly([[h.x - r * 0.85, h.y + r * 0.65], [h.x - r * 0.6, h.y + r * 1.6], [h.x, h.y + r * 0.95], [h.x + r * 0.55, h.y + r * 1.9], [h.x + r * 0.85, h.y + r * 0.65]], color, 1.9);
+      jline(h.x + r * 0.55, h.y + r * 1.9, h.x + r * 0.48, h.y + r * 1.25, WARN_YELLOW, 1);
+      inkPoly([[hand.x, hand.y], [hand.x + 7, hand.y - 2], [hand.x + 12, hand.y + 2], [hand.x + 16, hand.y - 1]], color, 1.7);
+    }
+    c.restore();
+  }
+
+  const battleDecorators = Object.create(null);
+  function decoratorFor(d) {
+    if (!battleDecorators[d.id]) battleDecorators[d.id] = (c, pose, display) => drawBattleAccessories(c, pose, d, display.color);
+    return battleDecorators[d.id];
+  }
+  if (typeof CreatureGameRuntime !== 'undefined') {
+    const baseDrawCharacter = CreatureGameRuntime.drawPlayer;
+    CreatureGameRuntime.drawPlayer = function(c, body, color) {
+      const d = defOf(body.characterId || meta().data.character);
+      const bodyColor = !color || color === INK ? d.color : color;
+      return baseDrawCharacter(c, body, bodyColor, decoratorFor(d));
+    };
+    const baseDrawDivingCharacter = CreatureGameRuntime.drawDivingPlayer;
+    CreatureGameRuntime.drawDivingPlayer = function(c, body, color) {
+      const d = defOf(body.characterId || meta().data.character);
+      return baseDrawDivingCharacter(c, body, color || d.color, decoratorFor(d));
+    };
+  }
+
   function portrait(d, x, y, size) {
     drawStick(x, y, size, boilT * 0.05, d.color);
-    if (d.icon === 'parry') { jline(x - size * 0.6, y + 4, x + size * 0.55, y - size * 0.6, d.color, 3); jline(x - size * 0.45, y - 2, x + size * 0.45, y + 8, WARN_YELLOW, 2); }
-    else if (d.icon === 'dive') { jcircle(x, y + size * 0.2, size * 0.6, d.color, 2); jline(x - size * 0.6, y + size * 0.2, x + size * 0.6, y + size * 0.2, ICE_LIGHT, 2); }
-    else if (d.icon === 'surge') { jcircle(x, y, size * 0.7, d.color, 2.5); jcircle(x, y, size * 0.45, WARN_YELLOW, 2); }
-    else if (d.icon === 'summon') { drawStick(x + size * 0.65, y + 6, size * 0.45, -boilT * 0.05, ALLY); jline(x + 5, y - 5, x + size * 0.55, y, ALLY, 1.5); }
-    else if (d.icon === 'colors') Object.values(ATTR_COLOR).forEach((c, i) => jcircle(x + Math.cos(i * Math.PI / 2) * size * 0.65, y + Math.sin(i * Math.PI / 2) * size * 0.45, 4, c, 2));
-    else if (d.icon === 'single') jline(x, y - size, x, y + size * 0.5, PURPLE, 4);
+    const hx = x, hy = y - size * 0.62, hr = size * 0.28;
+    if (d.icon === 'draft') {
+      jline(hx + hr * 0.7, hy, hx + hr * 1.8, hy - hr * 1.5, '#b88a4a', 2.5);
+      jline(hx + hr * 1.8, hy - hr * 1.5, hx + hr * 1.5, hy - hr * 1.2, d.color, 1.4);
+    } else if (d.icon === 'parry') {
+      jline(x - size * 0.6, y + 4, x + size * 0.55, y - size * 0.6, d.color, 3);
+      jline(hx - hr, hy, hx + hr, hy, WARN_YELLOW, 2);
+      jline(hx - hr, hy, hx - hr * 1.8, hy + 5, WARN_YELLOW, 1.5);
+    } else if (d.icon === 'dive') {
+      jcircle(hx, hy, hr + 3, d.color, 1.8);
+      inkPoly([[hx - 3, hy - hr - 2], [hx + 1, hy - hr - 8], [hx + 4, hy - hr - 2]], d.color, 1.6);
+      inkPoly([[x, y], [x - size * 0.45, y - size * 0.25], [x - size * 0.2, y + size * 0.25]], ICE_LIGHT, 1.8, true);
+    } else if (d.icon === 'surge') {
+      jcircle(hx, hy, hr + 5, d.color, 2); jcircle(hx, hy, hr + 9, WARN_YELLOW, 1.4);
+      for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; jline(hx + Math.cos(a) * (hr + 11), hy + Math.sin(a) * (hr + 11), hx + Math.cos(a) * (hr + 14), hy + Math.sin(a) * (hr + 14), WARN_YELLOW, 1.5); }
+    } else if (d.icon === 'summon') {
+      ctx.fillStyle = PAPER; ctx.fillRect(hx - hr, hy - hr, hr * 2, hr * 2); jrect(hx - hr, hy - hr, hr * 2, hr * 2, d.color, 1.8);
+      inkPoly([[hx, hy - hr], [hx + hr, hy], [hx, hy]], d.color, 1.1, true);
+      drawStick(x + size * 0.65, y + 6, size * 0.45, -boilT * 0.05, ALLY); jline(x + 5, y - 5, x + size * 0.55, y, ALLY, 1.5);
+    } else if (d.icon === 'colors') {
+      [ATTR_COLOR.phys, ATTR_COLOR.fire, ATTR_COLOR.ice, ATTR_COLOR.thunder].forEach((col, i) => {
+        const dx = (i - 1.5) * size * 0.16;
+        jline(hx + dx * 0.5, hy - hr, hx + dx, hy - hr - 7 - (i % 2) * 2, col, 2.4);
+        jline(x + dx * 0.5, y + size * 0.1, x + dx, y - size * 0.3, col, 2);
+      });
+    } else if (d.icon === 'single') {
+      inkPoly([[hx - hr, hy - hr * 0.6], [hx - hr * 0.6, hy - hr * 1.8], [hx, hy - hr], [hx + hr * 0.55, hy - hr * 2.1], [hx + hr, hy - hr * 0.6]], d.color, 2);
+      jline(x + size * 0.25, y, x + size * 0.75, y + size * 0.2, d.color, 2.2);
+    }
   }
   function drawCharacters() {
     hits = []; const desktop = isDesktopLayout(), start = state === 'metaCharacterSelect';
     panel(start ? '选择出战角色' : '角色手账', start ? '每次战斗前可更换' : '墨点 ' + meta().data.ink);
     // 返回选角前的入口；Boss 选角单独保留来源。
     const goBack = () => { const source = pending && pending.kind === 'boss' ? 'metaBossChallenge' : 'metaHome'; pending = null; if (source === 'metaHome') meta().goHome(); else state = source; };
-    button(desktop ? { x: W - 150, y: 70, w: 100, h: 40 } : { x: 296, y: 62, w: 58, h: 32 }, '返回', goBack);
+    button(desktop ? { x: 70, y: 630, w: 120, h: 40 } : { x: 296, y: 628, w: 58, h: 28 }, '返回', goBack);
     if (desktop) {
       DEFS.forEach((d, i) => {
         const col = i % 4, row = Math.floor(i / 4), r = { x: 48 + col * 302, y: 110 + row * 126, w: 278, h: 106 };
@@ -402,7 +524,8 @@
       DEFS.forEach((d, i) => {
         const col = i % 2, row = Math.floor(i / 2), r = { x: 20 + col * 170, y: 105 + row * 66, w: 165, h: 56 };
         ctx.fillStyle = 'rgba(255,250,238,0.96)'; ctx.fillRect(r.x, r.y, r.w, r.h); jrect(r.x, r.y, r.w, r.h, d.color, viewId === d.id ? 2.8 : 1.3);
-        text(d.name, r.x + 10, r.y + 23, 13, d.color, 'left', true); text(d.title + ' · Lv.' + savedLevel(d.id), r.x + 10, r.y + 43, 9, GRAY);
+        portrait(d, r.x + 23, r.y + 33, 19);
+        text(d.name, r.x + 46, r.y + 23, 13, d.color, 'left', true); text(d.title + ' · Lv.' + savedLevel(d.id), r.x + 46, r.y + 43, 9, GRAY);
         hits.push({ rect: r, action: () => { viewId = d.id; detailScroll = 0; }, enabled: true });
       });
       const d = defOf(viewId), level = savedLevel(d.id);

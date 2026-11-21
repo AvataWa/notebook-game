@@ -92,11 +92,12 @@ test('潜墨离开己方墨迹仍保持无敌位移，受击不退出', () => {
   const hp = G.player.hp; G.hurtPlayer(20);
   assert(G.player.diving && G.player.hp === hp, '潜墨受击后掉血或退出'); G.render();
 });
-test('不足旧采样距离时也当帧铺设完整线段', () => {
+test('短距离累计到采样阈值后铺设完整线段，笔端位置保持同步', () => {
   fresh(); const owner = { trailX: 0, trailY: 0, trailS: null };
   G.addLinkedTrail(owner, 10, 0, '#1a2b8f', false, 14, 1.2, 12, 'trailX', 'trailY', 'trailS');
+  assert(owner.trailX === 0 && owner.trailS.x === 10, '未到阈值时错误推进落笔点或笔端未同步');
   G.addLinkedTrail(owner, 14, 0, '#1a2b8f', false, 14, 1.2, 12, 'trailX', 'trailY', 'trailS');
-  assert(owner.trailS.x === 14 && G.inkCircleHas(12, 0, 0, false), '笔端或中间线段没有同步');
+  assert(owner.trailX === 14 && owner.trailS.x === 14 && G.inkCircleHas(12, 0, 0, false), '累计距离后落笔点、笔端或中间线段没有同步');
 });
 test('长线段中点属于真实墨迹范围，远端不会误判', () => {
   fresh(); G.addPlayerTrail(30, 0, '#1a2b8f', { x: -30, y: 0 }); G.player.x = 0; G.player.y = 0;

@@ -54,7 +54,7 @@
   function show(data) { if (window.UIDetail) window.UIDetail.open(data); }
   function cardDetail(card) {
     if (!card) return;
-    let body = card.desc || '', subtitle = card.tag || '';
+    let body = card.desc || '', subtitle = '';
     if (card.kind === 'active' || card.kind === 'start') body = skillShort(card.id);
     if (card.kind === 'active+') body = `${SKILL_DEFS[card.skill].desc}\n\n本次强化：${activeUpgradeDesc(card.skill, +String(card.name).match(/Lv(\d+)/)?.[1] || 1)}`;
     if (card.kind === 'support' || card.kind === 'support+') {
@@ -62,20 +62,20 @@
       subtitle = `${SUPPORTS[card.sup].name} → ${SKILL_DEFS[card.skill].name}`;
       body = supDesc(card.sup, level);
     }
-    show({ title: card.name, subtitle, body, color: card.tagColor || INK });
+    show({ title: card.name, subtitle, tag: cardTypeLabel(card), body, color: card.tagColor || INK });
   }
   function skillDetail(a) {
     const def = SKILL_DEFS[a.id];
-    const lines = [def.desc, `等级 Lv.${a.lvl}　类型 ${(SKILL_TAGS[a.id] || []).map(t => TAG_NAME[t]).join(' / ')}`, `辅助 ${a.supports.length}/${supportCap()}`];
+    const lines = [def.desc, `等级 Lv.${a.lvl}`, `辅助 ${a.supports.length}/${supportCap()}`];
     if (!a.supports.length) lines.push('尚未镶嵌辅助技能');
-    for (const sp of a.supports) lines.push(`◆ ${SUPPORTS[sp.id].name} Lv.${sp.lvl}`, supDesc(sp.id, sp.lvl));
-    show({ title: def.name, subtitle: '主动技能 · 完整机制', body: lines.join('\n'), color: attrOf(a.id) });
+    for (const sp of a.supports) lines.push(`◆ ${SUPPORTS[sp.id].name} Lv.${sp.lvl} · ${supportTagText(sp.id)}`, supDesc(sp.id, sp.lvl));
+    show({ title: def.name, subtitle: '完整机制', tag: '主动 · ' + skillTagText(a.id), body: lines.join('\n'), color: attrOf(a.id) });
   }
   function affixDetail(entry) {
     const def = entry.def || entry;
     const passive = entry.kind === 'passive' || !def.skill;
-    const type = passive ? '通用被动' : ({ dive: '潜墨辅助', surge: '墨潮辅助', absorb: '吸墨辅助' })[def.skill];
-    show({ title: def.name + (entry.count > 1 ? ` ×${entry.count}` : ''), subtitle: type, body: def.desc, color: passive ? DARK : INK });
+    const type = passive ? '被动 · 通用' : ({ dive: '潜墨 · 操作', surge: '墨潮 · 操作', absorb: '吸墨 · 操作' })[def.skill];
+    show({ title: def.name + (entry.count > 1 ? ` ×${entry.count}` : ''), tag: type, body: def.desc, color: passive ? DARK : INK });
   }
   function itemDetail(eq, slot, growth) {
     const def = ITEM_DEFS[eq.key], ri = rarityIndex(eq), rarity = RARITY_LIST[ri], stats = equipmentBaseStats(eq, growth);

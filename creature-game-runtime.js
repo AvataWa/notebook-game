@@ -127,12 +127,12 @@
     return Math.max(0.1, body.r * heightFactor / Math.max(1, naturalHeight)) * displayScale;
   }
 
-  function drawBiped(ctx, body, color) {
+  function drawBiped(ctx, body, color, decorate, swimming) {
     const rig = body.bipedRig;
     bipedRenderer.draw(ctx, rig, {
-      cx: body.x, groundY: body.y + body.r * 0.75,
+      cx: body.x, groundY: swimming ? body.y + 8 : body.y + body.r * 0.75,
       scale: bipedScale(body, rig), facing: body.creatureFacing || 1,
-      def: displayDef(body.creatureId, color)
+      def: displayDef(body.creatureId, color), decorate, swimming: !!swimming
     });
   }
 
@@ -163,13 +163,13 @@
     return true;
   }
 
-  function drawPlayer(ctx, body, color) {
+  function drawPlayer(ctx, body, color, decorate) {
     attachPlayer(body);
-    drawBiped(ctx, body, color || '#1a2b8f');
+    drawBiped(ctx, body, color || '#1a2b8f', decorate, false);
     return true;
   }
 
-  function drawDivingPlayer(ctx, body, color) {
+  function drawDivingPlayer(ctx, body, color, decorate) {
     const rig = attachPlayer(body);
     const col = color || '#1a2b8f', bridge = root.doodleBridge;
     const t = rig.time || 0, drift = Math.sin(t * 5) * 2;
@@ -180,11 +180,7 @@
     ctx.globalAlpha = 0.24;
     bridge.line(body.x - 20 - drift * 0.5, body.y + 17, body.x + 18 - drift * 0.5, body.y + 17, col, 1);
     ctx.restore();
-    bipedRenderer.draw(ctx, rig, {
-      cx: body.x, groundY: body.y + 8, swimming: true,
-      scale: bipedScale(body, rig), facing: body.creatureFacing || 1,
-      def: displayDef('player', col)
-    });
+    drawBiped(ctx, body, col, decorate, true);
     return true;
   }
 

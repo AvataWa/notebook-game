@@ -1,7 +1,9 @@
 // 出战角色：存档、选角、固定起手、五级成长与七类战斗规则专项测试
 const fs = require('fs');
 const files = [
-  'battle-config.js', 'enemy-config.js', 'content-config.js', 'main.js', 'build-runtime.js',
+  'battle-config.js', 'enemy-config.js', 'content-config.js', 'procedural-locomotion.js',
+  'creature-designs.js', 'creature-bio-rig.js', 'creature-design-renderer.js',
+  'biped-locomotion.js', 'biped-renderer.js', 'creature-game-runtime.js', 'main.js', 'build-runtime.js',
   'hades-runtime.js', 'hades-weapons-runtime.js', 'weapon-passives-expansion.js',
   'form-passives-runtime.js', 'support-expansion-runtime.js', 'elemental-support-runtime.js',
   'trigger-support-runtime.js', 'build-view.js', 'meta-config.js', 'character-config.js',
@@ -37,6 +39,7 @@ eval(src + `
   supportUsable,
   get player() { return player; }, get enemies() { return enemies; }, get minions() { return minions; },
   get bullets() { return bullets; }, get cards() { return cards; }, get floats() { return floats; },
+  get lightnings() { return lightnings; },
   get state() { return state; }, set state(v) { state = v; },
   get gameTime() { return gameTime; }, set gameTime(v) { gameTime = v; },
   get levelupPickAfter() { return levelupPickAfter; }, set levelupPickAfter(v) { levelupPickAfter = v; },
@@ -70,10 +73,10 @@ test('存档包含角色与五级数据，升级扣墨点并持久化', () => {
   assert(G.C.selectCharacter('parry') && JSON.parse(stored['notebook-meta-v1']).character === 'parry', '出战选择没有保存');
 });
 
-test('普通、考核和 Boss 都经过选角，并使用所选角色起手', () => {
-  G.M.resetAll(); G.C.requestRun(true); assert(G.state === 'metaCharacterSelect', '考核未进入选角');
+test('普通局和 Boss 都经过选角，并使用所选角色起手', () => {
+  G.M.resetAll(); G.C.requestRun(); assert(G.state === 'metaCharacterSelect', '普通局未进入选角');
   G.C.selectCharacter('dive'); G.C.confirmSelection();
-  assert(G.M.run.mode === 'ranked' && G.player.characterId === 'dive' && G.player.actives[0].id === 'boomerang', '考核角色或起手错误');
+  assert(G.M.run.mode === 'normal' && G.player.characterId === 'dive' && G.player.actives[0].id === 'boomerang', '普通局角色或起手错误');
   G.C.requestBoss(3); assert(G.state === 'metaCharacterSelect', 'Boss 未进入选角');
   G.C.selectCharacter('summon'); G.C.confirmSelection();
   assert(G.M.run.mode === 'bossTest' && G.M.run.bossTestStage === 3 && G.player.actives[0].id === 'absolve', 'Boss 选角或关卡错误');
@@ -140,6 +143,22 @@ test('纸偶师精英击杀与 Boss 血量阶段都会生成纸偶', () => {
   assert(G.minions.filter(m => m.characterPaper).length === 2 && boss.characterPaperStage === 1, 'Boss 损失 25% 生命没有生成纸偶');
 });
 
+test('纸蝶锁定目标环绕约 60 距离，激光独立结算且不移动玩家', () => {
+  const p = fresh('summon'), px = p.x, py = p.y;
+  const dead = target(); dead.elite = true;
+  G.hurtEnemy(dead, 99999, 0, 0, 0, 0, 0, 0, '#000', false, 'absolve');
+  const m = G.minions.find(v => v.characterPaper), e = target();
+  e.x = 140; e.y = 0; m.x = 80; m.y = 0; m.orbitA = Math.PI; m.paperTarget = e; m.atkCd = 0;
+  const hp = e.hp;
+  G.update(0.05); G.update(0.05);
+  assert(G.lightnings.some(l => l.paperLaser && l.tgt === e), '纸蝶没有向锁定目标生成激光');
+  assert(e.hp < hp, '纸蝶激光没有造成真实伤害');
+  for (let i = 0; i < 20; i++) G.update(0.05);
+  const dist = Math.hypot(e.x - m.x, e.y - m.y);
+  assert(dist >= 45 && dist <= 85, '纸蝶没有维持在目标约 60 的环绕距离：' + dist);
+  assert(m.paperTarget === e && p.x === px && p.y === py, '纸蝶目标发生漂移或施法改写了玩家坐标');
+});
+
 test('四色笔记两色、三色提供阶段收益，四色触发混色', () => {
   const p = fresh('colors');
   p.actives = ['arc', 'cyclone', 'volcanic', 'icespear'].map(id => ({ id, lvl: 1, supports: [], t: 999, uc: 0 }));
@@ -181,6 +200,26 @@ test('角色手账、开局选角与构筑界面实际绘制角色信息', () =>
   assert(drawTexts.includes('选择出战角色') && drawTexts.some(t => t.includes('开始战斗')), '开局选角界面不完整');
   G.C.selectCharacter('single'); G.C.confirmSelection(); window.__buildView.open(); drawTexts.length = 0; G.render();
   assert(drawTexts.some(t => t.includes('一笔到底 Lv.1 · 单技能极限')), '构筑界面缺少角色名称、等级或流派');
+});
+
+test('七名角色战斗本体使用各自颜色与骨架挂件，潜墨沿用同一外观', () => {
+  const seen = [], baseDraw = global.BipedRenderer.draw;
+  global.BipedRenderer.draw = function(c, rig, options) {
+    if (G.player.bipedRig && rig === G.player.bipedRig) seen.push({ color: options.def.color, decorate: options.decorate, swimming: !!options.swimming });
+    return baseDraw(c, rig, options);
+  };
+  try {
+    for (const d of G.C.defs) {
+      fresh(d.id); seen.length = 0; G.render();
+      const last = seen[seen.length - 1];
+      assert(last && last.color === d.color && typeof last.decorate === 'function' && !last.swimming, d.name + ' 战斗外观未接入');
+    }
+    const p = fresh('dive'); p.diving = true; seen.length = 0; G.render();
+    const dive = seen[seen.length - 1];
+    assert(dive && dive.swimming && typeof dive.decorate === 'function', '潜墨没有使用同一角色挂件');
+    p.diving = false; p.hurtT = 0.2; seen.length = 0; G.render();
+    assert(seen[seen.length - 1].color === '#c0392b', '角色主色覆盖了受伤红色闪烁');
+  } finally { global.BipedRenderer.draw = baseDraw; }
 });
 
 console.log(failed ? 'CHARACTER_SYSTEM_TEST_FAILURES: ' + failed : 'CHARACTER_SYSTEM_TEST_OK (' + passed + '/' + passed + ')');

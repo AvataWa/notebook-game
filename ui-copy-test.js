@@ -82,8 +82,12 @@ test('养成默认同页展示四个主动，详情关闭不会退出养成', ()
 
 test('主界面、天赋和 Boss 挑战使用精简标签', () => {
   G.meta.goHome(); drawTexts.length = 0; G.render();
-  for (const label of ['开始游戏', '段位考核', '文具盒 0', '天赋', 'Boss 挑战']) assert(drawTexts.includes(label), '首页缺少：' + label);
-  assert(!drawTexts.some(t => t.includes('段位只升不降') || t.includes('选择讨伐目标')), '首页仍有过长规则说明');
+  for (const label of ['开始游戏', '文具盒 0', '天赋', 'Boss 挑战']) assert(drawTexts.includes(label), '首页缺少：' + label);
+  assert(drawTexts.includes('段位手账 ›') && !drawTexts.some(t => t.includes('最佳三局认证') || t.includes('段位考核') || t.includes('大师考核')), '首页段位入口缺失或详细认证信息未移出');
+  assert(!drawTexts.some(t => t.includes('段位只升不降') || t.includes('选择讨伐目标') || t.includes('出战：') || t.includes('继承：')), '首页仍有过长规则或冗余信息');
+  G.state = 'metaRankDetails'; drawTexts.length = 0; G.render();
+  assert(drawTexts.includes('最佳三局认证') && drawTexts.some(t => t.includes('三席平均')), '段位手账缺少认证详情');
+  G.meta.goHome();
   G.meta.data.ink = 1000; G.meta.tab = 'basic'; G.state = 'metaTalents'; drawTexts.length = 0; G.render();
   assert(drawTexts.includes('全部伤害 +0% → +3%') && drawTexts.includes('30'), '天赋当前/下级或成本显示错误');
   G.meta.openBossChallenge(); drawTexts.length = 0; G.render();

@@ -87,14 +87,14 @@
       const r = cardRects[i], color = cd.tagColor || INK;
       ctx.fillStyle = 'rgba(255,250,238,0.96)'; ctx.fillRect(r.x, r.y, r.w, r.h);
       jrect(r.x, r.y, r.w, r.h, color, 2.4);
-      txt(cd.tag, r.x + 20, r.y + 30, 13, color, 'left', true);
       txt('[' + (i + 1) + ']', r.x + r.w - 20, r.y + 30, 13, GRAY, 'right');
-      txt(cd.name, r.x + 20, r.y + 72, 20, INK, 'left', true, r.w - 40);
+      txt(cd.name, r.x + 20, r.y + 60, 20, INK, 'left', true, r.w - 40);
+      if (cd.typeLabel) drawTagChip(cd.typeLabel, r.x + 20, r.y + 72, color, 12, r.w - 40);
       ctx.font = '14px ' + FONT;
       const short = cd.shortDesc || String(cd.desc || '').replace(/^Lv1：/, '');
-      const count = lines(short, r.x + 20, r.y + 112, r.w - 40, 23, 4);
+      const count = lines(short, r.x + 20, r.y + 126, r.w - 40, 22, 4);
       const detail = (cd.detailLines || []).join('');
-      if (detail) { ctx.font = '12px ' + FONT; ctx.fillStyle = GRAY; lines(detail, r.x + 20, r.y + 122 + count * 23, r.w - 40, 19, 3); }
+      if (detail) { ctx.font = '12px ' + FONT; ctx.fillStyle = GRAY; lines(detail, r.x + 20, r.y + 136 + count * 22, r.w - 40, 18, 3); }
       txt(locked ? '0.5 秒后可选择' : '点击或按 ' + (i + 1) + ' 选择', r.x + 20, r.y + r.h - 24, 12, locked ? GRAY : color, 'left', true);
     });
   };
@@ -157,25 +157,22 @@
   function drawHome() {
     panel('我穿越到笔记本了', '桌面试玩版 · v' + '0.2.0');
     const m = meta();
-    txt(m ? m.rankInfo().name : '', 64, 142, 28, INK, 'left', true);
-    txt('圆珠笔涂鸦 × 动作肉鸽 × 技能构筑', 64, 177, 16, DARK);
+    if (window.HomeDoodles) window.HomeDoodles.draw(true);
+    txt(m ? m.rankInfo().name : '', 64, 142, 30, INK, 'left', true);
     if (m) {
-      const character = CHARACTER_CONFIG.defs.find(c => c.id === m.data.character) || CHARACTER_CONFIG.defs[0];
-      txt('墨点 ' + m.data.ink + '　碎纸 ' + m.data.paper, 64, 216, 15, DARK);
-      txt('继承：' + (m.data.inherited ? ITEM_DEFS[m.data.inherited.key].name : '无'), 64, 246, 13, GRAY);
-      txt('出战：' + character.name + ' Lv.' + (m.data.characters[character.id] || 1), 64, 274, 14, character.color, 'left', true);
+      const progress = m.rankProgress();
+      txt('段位手账 ›', 64, 177, 14, PURPLE, 'left', true);
+      txt(m.nextRankText(progress), 64, 211, 14, DARK);
+      hits.push({ rect: { x: 48, y: 108, w: 390, h: 120 }, action: () => { state = 'metaRankDetails'; }, enabled: true });
     }
-    button({ x: 64, y: 310, w: 360, h: 70 }, '开始游戏  →', () => CharacterRuntime.requestRun(false), { size: 20 });
-    button({ x: 64, y: 400, w: 360, h: 58 }, m && m.data.rank >= 18 ? '大师考核' : '段位考核', () => CharacterRuntime.requestRun(true), { size: 17 });
-    button({ x: 486, y: 300, w: 250, h: 58 }, '文具盒', () => { state = 'metaInventory'; });
-    button({ x: 756, y: 300, w: 250, h: 58 }, '墨点天赋', () => { state = 'metaTalents'; });
-    button({ x: 486, y: 390, w: 250, h: 58 }, '角色', () => CharacterRuntime.openCharacters());
-    button({ x: 756, y: 390, w: 250, h: 58 }, 'Boss 挑战', () => m.openBossChallenge());
+    button({ x: 64, y: 280, w: 360, h: 70 }, '开始游戏  →', () => CharacterRuntime.requestRun(), { size: 20 });
+    button({ x: 486, y: 280, w: 250, h: 58 }, '文具盒', () => { state = 'metaInventory'; });
+    button({ x: 756, y: 280, w: 250, h: 58 }, '墨点天赋', () => { state = 'metaTalents'; });
+    button({ x: 486, y: 370, w: 250, h: 58 }, '角色', () => CharacterRuntime.openCharacters());
+    button({ x: 756, y: 370, w: 250, h: 58 }, 'Boss 挑战', () => m.openBossChallenge());
     ctx.save(); ctx.translate(1050, 180); ctx.rotate(-0.08); setSeed(744);
     jrect(-100, -70, 200, 170, INK, 3); jline(-70, -38, 68, -38, LINE, 2); jline(-70, 0, 68, 0, LINE, 2); jline(-70, 38, 68, 38, LINE, 2);
     drawStick(0, 30, 68, boilT * 0.05, INK); ctx.restore();
-    if (m) txt(m.data.stats.runs + ' 局 · ' + m.data.stats.wins + ' 次通关 · 最高第 ' + m.data.stats.highestStage + ' 页', 64, 548, 13, GRAY);
-    txt('WASD 移动　左键 / E 吸墨　右键 / Q 墨潮　空格潜墨　Tab 养成　F11 全屏', 64, 628, 14, DARK);
     jcircle(32, 92, 16, GRAY, 1.6); txt('删', 32, 97, 13, GRAY, 'center', true);
     hits.push({ rect: { x: 14, y: 74, w: 36, h: 36 }, action: () => { resetArmed = true; }, enabled: true });
     if (resetArmed) {
@@ -188,9 +185,33 @@
     }
   }
 
+  function drawRankDetails() {
+    const m = meta(), progress = m.rankProgress();
+    panel('段位手账', m.rankInfo().name);
+    button({ x: 48, y: 630, w: 120, h: 40 }, '返回 Esc', () => m.goHome());
+    txt('最佳三局认证', 70, 126, 21, INK, 'left', true);
+    txt('三席平均 ' + (Math.round(progress.average * 10) / 10).toFixed(1), 1120, 126, 18, PURPLE, 'right', true);
+    for (let i = 0; i < 3; i++) {
+      const r = { x: 70 + i * 390, y: 158, w: 350, h: 158 }, value = progress.scores[i];
+      ctx.fillStyle = 'rgba(255,250,238,0.94)'; ctx.fillRect(r.x, r.y, r.w, r.h); jrect(r.x, r.y, r.w, r.h, value == null ? GRAY : INK, 1.8);
+      txt('第 ' + (i + 1) + ' 席', r.x + 24, r.y + 38, 14, GRAY);
+      txt(value == null ? '--' : value, r.x + r.w / 2, r.y + 111, 46, value == null ? GRAY : INK, 'center', true);
+    }
+    const nextName = m.data.rank >= 18 ? '已达最高段位' : '下一认证 · ' + m.rankInfo(progress.nextRank).name;
+    txt(nextName, 70, 373, 23, INK, 'left', true);
+    txt(m.data.rank >= 18 ? '大师认证已完成' : '目标平均 ' + progress.target + ' 分', 70, 408, 16, DARK);
+    txt(m.nextRankText(progress), 70, 447, 19, PURPLE, 'left', true);
+    jline(70, 482, 1210, 482, GRAY, 1.2);
+    txt('历史记录', 70, 526, 17, INK, 'left', true);
+    txt('挑战局数  ' + m.data.stats.runs + '　·　完整通关  ' + m.data.stats.wins + '　·　最高第 ' + m.data.stats.highestStage + ' 页', 70, 562, 16, DARK);
+    ctx.fillStyle = 'rgba(210,225,255,0.38)'; ctx.fillRect(690, 354, 500, 100); jrect(690, 354, 500, 100, LINE, 1.4);
+    txt('表现分＝到达波数＋Boss 无伤数', 940, 391, 16, INK, 'center', true);
+    txt('取最佳三局，空席计 0；段位只升不降', 940, 424, 14, GRAY, 'center');
+  }
+
   function drawBossChallenge() {
     panel('Boss 挑战', '练习模式 · 无收益');
-    button({ x: W - 150, y: 70, w: 100, h: 40 }, '返回 Esc', () => meta().goHome());
+    button({ x: 48, y: 630, w: 120, h: 40 }, '返回 Esc', () => meta().goHome());
     const m = meta(), gap = 18, bw = 220, bh = 108, total = 5 * bw + 4 * gap, x0 = (W - total) / 2;
     BOSS_DEFS.forEach((def, i) => {
       const col = i % 5, row = Math.floor(i / 5), r = { x: x0 + col * (bw + gap), y: 140 + row * 125, w: bw, h: bh };
@@ -212,7 +233,7 @@
   }
   function drawTalents() {
     const m = meta(); panel('墨点天赋', '墨点 ' + m.data.ink);
-    button({ x: W - 150, y: 70, w: 100, h: 40 }, '返回 Esc', () => m.goHome());
+    button({ x: 48, y: 630, w: 120, h: 40 }, '返回 Esc', () => m.goHome());
     [['basic', '基础'], ['active', '主动'], ['ink', '墨水']].forEach(([id, name], i) => button({ x: 48 + i * 150, y: 86, w: 134, h: 40 }, name, () => { m.tab = id; page = 0; }, { active: m.tab === id }));
     button({ x: W - 190, y: 86, w: 142, h: 40 }, '重置天赋', () => m.resetTalents(), { color: PURPLE });
     const entries = talentEntries(), per = 6, shown = entries.slice(page * per, page * per + per);
@@ -234,7 +255,7 @@
   inventoryEntries.filter = 'all';
   function drawInventory() {
     const m = meta(); panel('文具盒', '碎纸 ' + m.data.paper);
-    button({ x: W - 150, y: 70, w: 100, h: 40 }, '返回 Esc', () => m.goHome());
+    button({ x: 48, y: 630, w: 120, h: 40 }, '返回 Esc', () => m.goHome());
     const filters = [{ id: 'all', name: '全部' }, ...SLOTS.map(s => ({ id: s, name: SLOT_NAME[s] }))];
     filters.forEach((f, i) => button({ x: 48 + i * 130, y: 84, w: 114, h: 38 }, f.name, () => { inventoryEntries.filter = f.id; page = 0; }, { active: inventoryEntries.filter === f.id }));
     const entries = inventoryEntries(), per = 4, shown = entries.slice(page * per, page * per + per);
@@ -279,13 +300,19 @@
   }
   function drawSummary() {
     const m = meta(), s = m.settlement; if (!s) return;
-    panel('本关构筑回顾', s.mode === 'ranked' ? '段位考核' : '普通模式');
+    panel('本关构筑回顾', '普通模式');
     const seconds = Math.floor(s.time || 0), time = Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
-    txt((s.win ? '挑战成功' : '挑战失败') + ' · 第 ' + s.stage + ' 页 · Lv.' + s.level + ' · 击杀 ' + s.kills + ' · ' + time + ' · 墨点 +' + s.earned, 48, 96, 15, s.win ? INK : RED, 'left', true);
-    [['skills', '技能'], ['affixes', '词条'], ['equipment', '装备'], ['damage', '伤害']].forEach(([id, name], i) => button({ x: 48 + i * 140, y: 116, w: 124, h: 38 }, name, () => { m.summaryTab = id; page = 0; }, { active: m.summaryTab === id }));
+    txt((s.win ? '挑战成功' : '挑战失败') + ' · 第 ' + s.stage + ' 页 · Lv.' + s.level + ' · 击杀 ' + s.kills + ' · ' + time + ' · 墨点 +' + s.earned, 48, 88, 14, s.win ? INK : RED, 'left', true);
+    txt('本局表现 ' + s.score + ' = 深度 ' + s.depthScore + ' + Boss 无伤 ' + s.flawlessBosses, 48, 116, 15, INK, 'left', true);
+    const scores = [0, 1, 2].map(i => s.rankScores[i] == null ? '--' : s.rankScores[i]).join(' / ');
+    txt('认证 ' + scores + ' · 平均 ' + (Math.round(s.rankAverage * 10) / 10).toFixed(1), 48, 140, 14, DARK);
+    const progress = m.rankProgress();
+    const next = m.data.rank >= 18 ? '大师认证已完成' : (progress.needsClear && progress.requiredScore <= 0 ? '完成一次通关晋升大师' : (progress.requiredScore > 100 ? '先提升前两席成绩' : '再打出 ' + progress.requiredScore + ' 分晋升'));
+    txt(next + (s.promoted ? ' · 已晋升 ' + m.rankInfo(s.newRank).name : ''), 48, 162, 13, PURPLE, 'left', true);
+    [['skills', '技能'], ['affixes', '词条'], ['equipment', '装备'], ['damage', '伤害']].forEach(([id, name], i) => button({ x: 48 + i * 140, y: 174, w: 124, h: 34 }, name, () => { m.summaryTab = id; page = 0; }, { active: m.summaryTab === id }));
     const entries = summaryEntries(), per = 6, shown = entries.slice(page * per, page * per + per);
     shown.forEach((entry, i) => {
-      const col = i % 2, row = Math.floor(i / 2), r = { x: 48 + col * 602, y: 178 + row * 126, w: 570, h: 104 };
+      const col = i % 2, row = Math.floor(i / 2), r = { x: 48 + col * 602, y: 224 + row * 126, w: 570, h: 104 };
       let name = '', color = INK, desc = '', right = '';
       if (m.summaryTab === 'skills') { name = SKILL_DEFS[entry.id].name + ' Lv.' + entry.lvl; color = attrOf(entry.id); desc = window.UICopy ? window.UICopy.skillShort(entry.id) : SKILL_DEFS[entry.id].desc; right = '辅 ' + entry.supports.length + '/' + supportCap(); }
       else if (m.summaryTab === 'affixes') { name = entry.def.name + (entry.count > 1 ? ' ×' + entry.count : ''); desc = window.UICopy ? window.UICopy.affixShort(entry.def) : entry.def.desc; }
@@ -297,8 +324,8 @@
       if (m.summaryTab !== 'damage') hits.push({ rect: r, action: () => { if (!window.UICopy) return; if (m.summaryTab === 'skills') window.UICopy.skillDetail(entry); else if (m.summaryTab === 'affixes') window.UICopy.affixDetail(entry); else window.UICopy.itemDetail(entry.eq, entry.slot, s.growth); }, enabled: true });
     });
     if (!shown.length) txt('本局暂无记录', W / 2, 350, 17, GRAY, 'center');
-    pager(entries.length, per, 576);
-    button({ x: W / 2 - 150, y: 638, w: 300, h: 46 }, s.mode === 'ranked' ? '完成结算' : '下一步', () => m.continueSettlement(), { size: 16 });
+    pager(entries.length, per, 590);
+    button({ x: W / 2 - 150, y: 638, w: 300, h: 46 }, '下一步', () => m.continueSettlement(), { size: 16 });
   }
 
   function drawSettlement() {
@@ -333,12 +360,13 @@
 
   function drawMeta() {
     if (!active()) return false;
-    const owned = ['metaHome', 'metaBossChallenge', 'metaTalents', 'metaInventory', 'metaRunSummary', 'metaSettlement'].includes(state)
+    const owned = ['metaHome', 'metaRankDetails', 'metaBossChallenge', 'metaTalents', 'metaInventory', 'metaRunSummary', 'metaSettlement'].includes(state)
       || ((state === 'over' || state === 'win') && meta().run && meta().run.mode === 'bossTest');
     // 战斗、三选一和装备弹窗会继续复用各自点击区域，不能在这里清空。
     if (!owned) return false;
     clearPageOnStateChange(); hits = [];
     if (state === 'metaHome') drawHome();
+    else if (state === 'metaRankDetails') drawRankDetails();
     else if (state === 'metaBossChallenge') drawBossChallenge();
     else if (state === 'metaTalents') drawTalents();
     else if (state === 'metaInventory') drawInventory();
@@ -354,7 +382,7 @@
     hits = []; ctx.fillStyle = 'rgba(32,30,29,0.76)'; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = PAPER; ctx.fillRect(40, 42, W - 80, H - 84); jrect(40, 42, W - 80, H - 84, INK, 2.4);
     txt('角色养成', 70, 88, 25, INK, 'left', true); txt('已暂停 · 点击条目查看详情', 270, 86, 13, GRAY);
-    button({ x: W - 190, y: 62, w: 120, h: 40 }, '返回 Esc', () => view.close());
+    button({ x: W - 230, y: 624, w: 160, h: 38 }, '返回 Esc', () => view.close());
     [['skills', '技能'], ['affixes', '词条'], ['equipment', '装备']].forEach(([id, name], i) => button({ x: 70 + i * 150, y: 112, w: 134, h: 40 }, name, () => view.setTab(id), { active: view.tab === id }));
     const character = window.CharacterRuntime && CHARACTER_CONFIG.defs.find(c => c.id === player.characterId);
     if (character) {
@@ -364,13 +392,14 @@
     const entries = view.entries(), per = view.tab === 'affixes' ? 6 : 4, shown = entries.slice(view.page * per, view.page * per + per);
     shown.forEach((entry, i) => {
       const col = i % 2, row = Math.floor(i / 2), r = { x: 70 + col * 580, y: 196 + row * (per === 6 ? 108 : 174), w: 550, h: per === 6 ? 90 : 150 };
-      let name = '', desc = '', color = INK, right = '';
-      if (view.tab === 'skills') { name = SKILL_DEFS[entry.id].name + ' Lv.' + entry.lvl; desc = window.UICopy ? window.UICopy.skillShort(entry.id) : SKILL_DEFS[entry.id].desc; color = attrOf(entry.id); right = '辅 ' + entry.supports.length + '/' + supportCap(); }
+      let name = '', desc = '', color = INK, right = '', tag = '';
+      if (view.tab === 'skills') { name = SKILL_DEFS[entry.id].name + ' Lv.' + entry.lvl; desc = window.UICopy ? window.UICopy.skillShort(entry.id) : SKILL_DEFS[entry.id].desc; color = attrOf(entry.id); right = '辅 ' + entry.supports.length + '/' + supportCap(); tag = '主动 · ' + skillTagText(entry.id); }
       else if (view.tab === 'affixes') { name = entry.def.name + (entry.count > 1 ? ' ×' + entry.count : ''); desc = window.UICopy ? window.UICopy.affixShort(entry.def) : entry.def.desc; }
       else { const eq = entry.eq, ri = rarityIndex(eq); name = ITEM_DEFS[eq.key].name; desc = window.UICopy ? window.UICopy.itemShort(eq.key, ri) : itemDescription(eq.key, ri); color = RARITY_LIST[ri].color; right = equipmentLevelText(eq) + ' · ' + RARITY_LIST[ri].name; }
       ctx.fillStyle = 'rgba(255,250,238,0.95)'; ctx.fillRect(r.x, r.y, r.w, r.h); jrect(r.x, r.y, r.w, r.h, color, 1.7);
       txt(name, r.x + 16, r.y + 30, 17, color, 'left', true); txt(right, r.x + r.w - 16, r.y + 29, 12, PURPLE, 'right');
-      ctx.font = '13px ' + FONT; ctx.fillStyle = DARK; lines(desc, r.x + 16, r.y + 62, r.w - 32, 20, 3);
+      if (tag) drawTagChip(tag, r.x + 16, r.y + 39, color, 11, r.w - 32);
+      ctx.font = '13px ' + FONT; ctx.fillStyle = DARK; lines(desc, r.x + 16, r.y + (tag ? 76 : 62), r.w - 32, 19, tag ? 2 : 3);
       txt('详情 ›', r.x + r.w - 16, r.y + r.h - 12, 11, GRAY, 'right');
       hits.push({ rect: r, action: () => { if (!window.UICopy) return; if (view.tab === 'skills') window.UICopy.skillDetail(entry); else if (view.tab === 'affixes') window.UICopy.affixDetail(entry); else window.UICopy.itemDetail(entry.eq, entry.slot); }, enabled: true });
     });
@@ -403,13 +432,15 @@
   }
 
   function drawDetail(detail) {
-    hits = []; const x = 250, y = 90, w = 780, h = 540;
-    ctx.fillStyle = 'rgba(25,23,22,0.74)'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = PAPER; ctx.fillRect(x, y, w, h); jrect(x, y, w, h, detail.color, 2.4);
-    txt(detail.title, x + 30, y + 48, 23, detail.color, 'left', true, w - 60);
-    if (detail.subtitle) txt(detail.subtitle, x + 30, y + 76, 13, GRAY);
-    jline(x + 30, y + 96, x + w - 30, y + 96, detail.color, 1.2);
-    ctx.font = '14px ' + FONT; ctx.fillStyle = DARK; lines(detail.body, x + 30, y + 132, w - 60, 24, 14);
-    const r = { x: W / 2 - 100, y: y + h - 64, w: 200, h: 42 };
+    hits = []; const layout = window.UIDetail.getLayout(), p = layout.panel, r = layout.close;
+    const x = p.x, y = p.y, w = p.w, h = p.h;
+    ctx.fillStyle = 'rgba(25,23,22,0.74)'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = PAPER; ctx.fillRect(x, y, w, h); jrect(x, y, w, h, detail.color, 2.2);
+    const tagOffset = detail.tag ? 22 : 0;
+    txt(detail.title, x + 24, y + 42, 21, detail.color, 'left', true, w - 48);
+    if (detail.tag) drawTagChip(detail.tag, x + 24, y + 50, detail.color, 12, w - 48);
+    if (detail.subtitle) txt(detail.subtitle, x + 24, y + 68 + tagOffset, 12, GRAY, 'left', false, w - 48);
+    jline(x + 24, y + 86 + tagOffset, x + w - 24, y + 86 + tagOffset, detail.color, 1.1);
+    ctx.font = '13px ' + FONT; ctx.fillStyle = DARK; lines(detail.body, x + 24, y + 116 + tagOffset, w - 48, 21, 10);
     button(r, '返回  Esc', () => window.UIDetail.close());
     return r;
   }
@@ -432,7 +463,7 @@
   function handleMetaPointer(e) {
     if (!active()) return false;
     if (meta().confirmDefeat()) return true;
-    const states = ['metaHome', 'metaBossChallenge', 'metaTalents', 'metaInventory', 'metaRunSummary', 'metaSettlement'];
+    const states = ['metaHome', 'metaRankDetails', 'metaBossChallenge', 'metaTalents', 'metaInventory', 'metaRunSummary', 'metaSettlement'];
     if (!states.includes(state) && !((state === 'over' || state === 'win') && meta().run && meta().run.mode === 'bossTest')) return false;
     runHit(e); return true;
   }

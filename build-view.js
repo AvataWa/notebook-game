@@ -3,7 +3,7 @@
   'use strict';
 
   let buildTab = 'skills', buildPage = 0, buildReturnState = 'play';
-  const buildCloseRect = { x: 307, y: 41, w: 43, h: 31 };
+  const buildCloseRect = { x: 117, y: 590, w: 140, h: 32 };
   const buildTabRects = [
     { id: 'skills', name: '技能', x: 24, y: 100, w: 105, h: 36 },
     { id: 'affixes', name: '词条', x: 135, y: 100, w: 105, h: 36 },
@@ -11,7 +11,7 @@
   ];
   const buildPrevRect = { x: 28, y: 590, w: 82, h: 32 };
   const buildNextRect = { x: 265, y: 590, w: 82, h: 32 };
-  const buildReforgeRect = { x: 117, y: 590, w: 140, h: 32 };
+  const buildReforgeRect = { x: 117, y: 548, w: 140, h: 32 };
 
   function openBuildView() {
     if (state !== 'play' && state !== 'levelup' && state !== 'start') return false;
@@ -92,8 +92,9 @@
     ctx.fillText(def.name + '  Lv.' + a.lvl, rect.x + 14, rect.y + 23);
     ctx.textAlign = 'right'; ctx.fillStyle = PURPLE; ctx.font = 'bold 11px ' + FONT;
     ctx.fillText('辅 ' + a.supports.length + '/' + supportCap(), rect.x + rect.w - 14, rect.y + 22);
-    ctx.textAlign = 'left'; ctx.fillStyle = DARK; ctx.font = '11px ' + FONT;
-    buildWrap(window.UICopy ? window.UICopy.skillShort(a.id) : def.desc, rect.x + 14, rect.y + 47, rect.w - 28, 16, 2);
+    drawTagChip('主动 · ' + skillTagText(a.id), rect.x + 14, rect.y + 30, attrOf(a.id), 10, rect.w - 28);
+    ctx.fillStyle = DARK; ctx.font = '11px ' + FONT; ctx.textAlign = 'left';
+    buildWrap(window.UICopy ? window.UICopy.skillShort(a.id) : def.desc, rect.x + 14, rect.y + 65, rect.w - 28, 15, 2);
     detailHint(rect);
   }
   function drawAffixEntry(entry, rect) {
@@ -155,9 +156,9 @@
     const canCharacterReforge = buildTab === 'skills' && player.characterId === 'single' && player.characterLevel >= 3;
     if (canCharacterReforge) buildButton(buildReforgeRect, CharacterRuntime.state.reforgeUsed ? '本局已重铸' : '免费重铸辅助', CharacterRuntime.canReforge());
     ctx.textAlign = 'center'; ctx.fillStyle = DARK; ctx.font = '11px ' + FONT;
-    ctx.fillText((buildPage + 1) + ' / ' + buildPageCount(), W / 2, canCharacterReforge ? 576 : 604);
+    ctx.fillText((buildPage + 1) + ' / ' + buildPageCount(), W / 2, 580);
     ctx.fillStyle = GRAY; ctx.font = '10px ' + FONT;
-    ctx.fillText('已暂停 · 点按条目看详情', W / 2, 624);
+    ctx.fillText('已暂停 · 点按条目看详情', W / 2, 630);
   }
 
   const baseApplyOptionForView = applyOption;

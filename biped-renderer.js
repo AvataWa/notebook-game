@@ -225,6 +225,8 @@
     limb(ctx, pose.arms[1], d, true, false);
     drawAccessory(ctx, pose, d);
     drawPlantDust(ctx, rig, pose);
+    /* 角色外观在同一骨架变换内绘制，潜墨、镜像和步态都不会让挂件脱节。 */
+    if (typeof o.decorate === 'function') o.decorate(ctx, pose, d);
     if (o.skeleton) drawSkeleton(ctx, pose);
     ctx.restore();
     return pose;

@@ -30,12 +30,13 @@ function assert(ok, msg) { if (!ok) throw new Error(msg); }
 function near(actual, expected) { return Math.abs(actual - expected) < 1e-8; }
 function fresh() { G.resetGame(); G.state = 'play'; }
 
-test('首级需求为 26，后续需求按新曲线加速增长', () => {
+test('经验按页内等级递增，跨页只线性小增', () => {
   fresh();
   assert(G.player.xpNext === 26, '首级需求实际为 ' + G.player.xpNext);
   assert(G.xpForNextLevel(2) === 35, '2 级需求应为 35');
-  assert(G.xpForNextLevel(10) === 133, '10 级需求应为 133');
-  assert(G.xpForNextLevel(20) > G.xpForNextLevel(10) * 2, '后期成长不足');
+  assert(G.xpForNextLevel(10) === 107, '第 1 页 Boss 级需求应为 107');
+  assert(G.xpForNextLevel(11) === 38 && G.xpForNextLevel(20) === 119, '第 2 页经验边界错误');
+  assert(G.xpForNextLevel(91) === 134 && G.xpForNextLevel(99) === 206, '第 10 页经验没有受控');
 });
 
 test('远处怪物死亡也直接加经验，不再生成经验颗粒', () => {
@@ -84,5 +85,28 @@ test('原拾取被动改为普通击杀经验加成', () => {
   assert(near(G.player.xp, e.xp * 1.15), '经验加成未直接生效');
 });
 
-console.log(failed ? 'XP_TEST_FAILURES: ' + failed : 'XP_TEST_OK (5/5)');
+test('全 100 级节奏模拟：90 次普通升级与 10 次 Boss 补级经验受控', () => {
+  const pages = Array(10).fill(0), localNeeds = Array.from({ length: 10 }, () => []);
+  let regular = 0, bosses = 0, total = 0;
+  for (let level = 1; level <= 99; level++) {
+    if (level % 10 === 0) { bosses++; continue; }
+    const page = Math.floor((level - 1) / 10), need = G.xpForNextLevel(level);
+    regular++; total += need; pages[page] += need; localNeeds[page].push(need);
+  }
+  bosses++; // 第 100 级最终 Boss，通关而不再进入 101 级。
+  assert(regular === 90 && bosses === 10, '普通升级或 Boss 次数错误：' + regular + '/' + bosses);
+  assert(total === 10440, '全 100 级普通升级总经验应为 10440，实际为 ' + total);
+  pages.forEach((xp, page) => {
+    assert(xp === 558 + page * 108, '第 ' + (page + 1) + ' 页经验预算错误：' + xp);
+    const needs = localNeeds[page];
+    assert(needs.length === 9 && needs.every((v, i) => i === 0 || v > needs[i - 1]), '第 ' + (page + 1) + ' 页内没有逐级递增');
+  });
+  assert(pages[9] < pages[0] * 3, '末页经验预算仍超过首页 3 倍');
+  // 用平均每只怪 4～13 经验的代表模型检查击杀节奏，目标仍是稳定击杀数而非拖时间。
+  const killPaces = pages.map((xp, page) => xp / (page + 4));
+  assert(killPaces.every(kills => kills >= 110 && kills <= 145), '每页代表击杀数超出 110～145：' + killPaces.join(','));
+  console.log('PACE  ' + pages.map((xp, page) => 'P' + (page + 1) + ':' + xp + 'xp/' + Math.round(killPaces[page]) + '杀').join(' | '));
+});
+
+console.log(failed ? 'XP_TEST_FAILURES: ' + failed : 'XP_TEST_OK (6/6)');
 process.exit(failed ? 1 : 0);

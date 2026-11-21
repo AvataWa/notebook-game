@@ -2,10 +2,18 @@
 (() => {
   'use strict';
   let detail = null;
-  const closeRect = { x: 118, y: 568, w: 139, h: 38 };
+  const panelRect = { x: 36, y: 150, w: 303, h: 300 };
+  const closeRect = { x: 118, y: 400, w: 139, h: 32 };
+  function desktopLayout() {
+    const panel = { x: (W - 640) / 2, y: 140, w: 640, h: 400 };
+    return { panel, close: { x: W / 2 - 90, y: panel.y + panel.h - 54, w: 180, h: 38 } };
+  }
+  function getLayout() {
+    return window.DesktopRuntime && DesktopRuntime.active ? desktopLayout() : { panel: panelRect, close: closeRect };
+  }
   function open(data) {
     if (!data) return false;
-    detail = { title: String(data.title || '详情'), subtitle: String(data.subtitle || ''), body: String(data.body || ''), color: data.color || INK };
+    detail = { title: String(data.title || '详情'), subtitle: String(data.subtitle || ''), tag: String(data.tag || ''), body: String(data.body || ''), color: data.color || INK };
     return true;
   }
   function close() { if (!detail) return false; detail = null; return true; }
@@ -26,44 +34,46 @@
     if (!detail) return;
     if (window.DesktopRuntime && DesktopRuntime.active) { DesktopRuntime.drawDetail(detail); return; }
     ctx.fillStyle = 'rgba(25,23,22,0.72)'; ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = PAPER; ctx.fillRect(24, 82, W - 48, 536);
-    jrect(24, 82, W - 48, 536, detail.color, 2.4);
-    ctx.textAlign = 'left'; ctx.fillStyle = detail.color; ctx.font = 'bold 20px ' + FONT;
-    ctx.fillText(detail.title, 42, 120, W - 84);
+    panelRect.x = 36; panelRect.w = W - 72;
+    ctx.font = '11px ' + FONT;
+    const lines = wrapLines(detail.body, panelRect.w - 32), maxLines = 12, tagOffset = detail.tag ? 22 : 0;
+    panelRect.h = Math.max(230, Math.min(400, 154 + tagOffset + Math.min(lines.length, maxLines) * 17));
+    panelRect.y = Math.max(64, (H - panelRect.h) / 2);
+    Object.assign(closeRect, { x: W / 2 - 65, y: panelRect.y + panelRect.h - 46, w: 130, h: 32 });
+    const x = panelRect.x, y = panelRect.y, w = panelRect.w;
+    ctx.fillStyle = PAPER; ctx.fillRect(x, y, w, panelRect.h);
+    jrect(x, y, w, panelRect.h, detail.color, 2.2);
+    ctx.textAlign = 'left'; ctx.fillStyle = detail.color; ctx.font = 'bold 18px ' + FONT;
+    ctx.fillText(detail.title, x + 16, y + 36, w - 32);
+    if (detail.tag) drawTagChip(detail.tag, x + 16, y + 46, detail.color, 10, w - 32);
     if (detail.subtitle) {
-      ctx.fillStyle = GRAY; ctx.font = '11px ' + FONT;
-      ctx.fillText(detail.subtitle, 42, 143, W - 84);
+      ctx.fillStyle = GRAY; ctx.font = '10px ' + FONT;
+      ctx.fillText(detail.subtitle, x + 16, y + 58 + tagOffset, w - 32);
     }
-    jline(42, 158, W - 42, 158, detail.color, 1.2);
-    ctx.fillStyle = DARK; ctx.font = '12px ' + FONT;
-    const lines = wrapLines(detail.body, W - 84);
-    const maxLines = 20;
-    lines.slice(0, maxLines).forEach((line, i) => ctx.fillText(line, 42, 184 + i * 18));
-    ctx.fillStyle = 'rgba(255,250,238,0.98)'; ctx.fillRect(closeRect.x, closeRect.y, closeRect.w, closeRect.h);
-    jrect(closeRect.x, closeRect.y, closeRect.w, closeRect.h, INK, 1.8);
-    ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.font = 'bold 13px ' + FONT;
-    ctx.fillText('返回', W / 2, closeRect.y + 25);
+    jline(x + 16, y + 74 + tagOffset, x + w - 16, y + 74 + tagOffset, detail.color, 1.1);
+    ctx.fillStyle = DARK; ctx.font = '11px ' + FONT;
+    lines.slice(0, maxLines).forEach((line, i) => ctx.fillText(line, x + 16, y + 98 + tagOffset + i * 17));
     if (lines.length > maxLines) {
-      ctx.fillStyle = GRAY; ctx.font = '9px ' + FONT;
-      ctx.fillText('部分内容较多，请在养成页逐项查看', W / 2, 552);
+      ctx.fillStyle = GRAY; ctx.textAlign = 'center'; ctx.font = '9px ' + FONT;
+      ctx.fillText('内容较多 · 可在养成页逐项查看', W / 2, closeRect.y - 12);
     }
+    ctx.fillStyle = 'rgba(255,250,238,0.98)'; ctx.fillRect(closeRect.x, closeRect.y, closeRect.w, closeRect.h);
+    jrect(closeRect.x, closeRect.y, closeRect.w, closeRect.h, INK, 1.7);
+    ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.font = 'bold 12px ' + FONT;
+    ctx.fillText('返回', W / 2, closeRect.y + 21);
   }
   const baseRenderForDetail = render;
   render = function() { baseRenderForDetail(); draw(); };
   canvas.addEventListener('pointerdown', e => {
     if (!detail) return;
     e.preventDefault(); e.stopImmediatePropagation();
-    const p = toLogical(e);
-    if (window.DesktopRuntime && DesktopRuntime.active) {
-      if (pointInRect(p, { x: W / 2 - 100, y: 566, w: 200, h: 42 }) || p.x < 250 || p.x > 1030 || p.y < 90 || p.y > 630) close();
-      return;
-    }
-    if (pointInRect(p, closeRect) || p.y < 82 || p.y > 618 || p.x < 24 || p.x > W - 24) close();
+    const p = toLogical(e), layout = getLayout(), panel = layout.panel;
+    if (pointInRect(p, layout.close) || !pointInRect(p, panel)) close();
   }, true);
   window.addEventListener('keydown', e => {
     if (!detail) return;
     e.preventDefault(); e.stopImmediatePropagation();
     if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') close();
   }, true);
-  window.UIDetail = { open, close, draw, get isOpen() { return !!detail; }, get current() { return detail; } };
+  window.UIDetail = { open, close, draw, getLayout, get isOpen() { return !!detail; }, get current() { return detail; } };
 })();

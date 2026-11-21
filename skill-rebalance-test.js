@@ -103,6 +103,19 @@ test('赦免标记期间任意来源击杀都转化为小鬼，Boss 不转化', 
   assert(e.dead && G.minions.filter(m => m.ghost).length === 1, '非光柱击杀没有触发赦免');
 });
 
+test('赦免转化纸蝶环绕目标并用激光造成真实伤害', () => {
+  fresh('absolve'); const marked = target(40, 0); cast(); marked.hp = 1;
+  G.hurtEnemy(marked, 5, 0, 0, 0, 0, 0, 0, false, 'cyclone');
+  const m = G.minions.find(v => v.ghost), e = target(140, 0);
+  m.x = 80; m.y = 0; m.orbitA = Math.PI; m.paperTarget = e; m.atkCd = 0;
+  const hp = e.hp; G.update(0.05); G.update(0.05);
+  assert(G.lightnings.some(l => l.absolveLaser && l.tgt === e), '赦免纸蝶没有向目标发射激光');
+  assert(e.hp < hp, '赦免纸蝶激光没有造成真实伤害');
+  for (let i = 0; i < 20; i++) G.update(0.05);
+  const dist = Math.hypot(e.x - m.x, e.y - m.y);
+  assert(dist >= 45 && dist <= 85 && m.paperTarget === e, '赦免纸蝶没有稳定环绕锁定目标：' + dist);
+});
+
 test('橡皮筋烙印每跳增伤 8%，最多 40%，转移保留层数', () => {
   fresh('brand'); const e = target(100, 0), next = target(150, 0); cast(); const br = G.brands[0], hp = e.hp;
   G.update(0.01); const first = hp - e.hp; br.tick = 0; G.update(0.01); const second = hp - first - e.hp;

@@ -26,7 +26,7 @@ eval(src + `
 // 本套件专测移动布局；正式网页默认 PC，测试中显式切回触屏模式。
 isDesktopLayout = () => false; resize();
 ;globalThis.G = {
-  resetGame, applyOption, update, render, floatPopScale, floatIsFlashing, drawPlayerResources,
+  resetGame, applyOption, buildOptions, update, render, floatPopScale, floatIsFlashing, drawPlayerResources,
   layoutCards, drawCards, drawCoreDamageZone, drawOuterSurgeDamageZone,
   spawnEnemy, drawMeleeTelegraph, enemySwingRange,
   get state() { return state; }, get player() { return player; }, get cards() { return cards; }, get enemies() { return enemies; },
@@ -60,6 +60,22 @@ test('经验满后等待 0.5 秒才弹出升级三选一', () => {
   assert(drawTexts.some(t => t.txt === '0.5 秒后可选择'), '输入锁期间缺少不可选提示');
   G.levelupPickAfter = 0; G.applyOption(0);
   assert(G.state === 'play' && G.cards.length === 0, '输入锁结束后无法正常选卡');
+});
+test('恢复生命按 30% 概率替换构筑卡且不增加选项数量', () => {
+  const oldRandom = Math.random;
+  try {
+    fresh(); Math.random = () => 0.31; G.buildOptions();
+    assert(G.cards.length === 3 && !G.cards.some(c => c.kind === 'heal'), '未触发概率时仍出现恢复卡');
+    Math.random = () => 0.29; G.buildOptions();
+    assert(G.cards.length === 3 && G.cards.filter(c => c.kind === 'heal').length === 1, '恢复卡没有替换一个构筑槽或新增了选项');
+    assert(G.cards.some(c => c.kind === 'heal' && c.typeLabel === '恢复 · 生命'), '恢复卡标签缺失');
+    G.player.maxhp = 100; G.player.hp = 50; G.levelupPickAfter = 0;
+    G.applyOption(G.cards.findIndex(c => c.kind === 'heal'));
+    assert(G.player.hp === 80 && G.floats.some(f => f.txt === '+30'), '恢复卡没有正确回血 30%');
+    fresh(); Math.random = () => 0.29; G.buildOptions(); G.player.maxhp = 100; G.player.hp = 90;
+    G.applyOption(G.cards.findIndex(c => c.kind === 'heal'));
+    assert(G.player.hp === 100, '恢复卡使生命超过上限');
+  } finally { Math.random = oldRandom; }
 });
 test('左下固定摇杆只在左侧启动并决定方向', () => {
   fresh(); const home = G.joyHome;
@@ -169,14 +185,26 @@ test('三选一主说明最多两行，补充机制灰字显示且无详情按�
   );
   G.layoutCards(3); drawTexts.length = 0; G.drawCards('测试');
   const r = G.cardRects[0], lines = G.cards[0].descLines, details = G.cards[0].detailLines;
-  assert(lines.length === 2 && details.length > 0 && r.h === 108 + details.length * 13, '主说明、补充说明或卡片高度错误');
+  assert(G.cards[0].typeLabel === '主动 · 打击 / 范围', '主动技能类型标签缺失');
+  assert(lines.length === 2 && details.length > 0 && r.h === 108 + 14 + details.length * 13, '主说明、补充说明或卡片高度错误');
   assert(lines.every(line => line.length * 10 <= r.w - 32), '换行后的描述仍超出卡片宽度');
-  const lastY = r.y + 59 + (lines.length - 1) * 15;
+  const lastY = r.y + 59 + 14 + (lines.length - 1) * 15;
   assert(lastY <= r.y + r.h - 25, '描述末行压到卡片底部选择提示');
   assert(!drawTexts.some(t => t.txt === G.cards[0].desc), '绘制时仍把长描述作为单行输出');
   lines.forEach(line => assert(drawTexts.some(t => t.txt === line && t.x === r.x + 16), '换行文本没有实际绘制：' + line));
   details.forEach(line => assert(drawTexts.some(t => t.txt === line && t.font.startsWith('10px')), '灰字补充说明没有实际绘制：' + line));
   assert(!drawTexts.some(t => t.txt === '详情'), '三选一仍显示详情按钮');
+});
+test('竖屏四选一收窄居中，普通三选一宽度不变', () => {
+  fresh(); G.cards.length = 0;
+  for (let i = 0; i < 4; i++) G.cards.push({ kind: 'heal', tagColor: '#2f9e68', name: '恢复生命', desc: '立即恢复 30% 最大生命值' });
+  G.layoutCards(4);
+  assert(G.cardRects.every(r => r.w === 250 && Math.abs(r.x + r.w / 2 - 187.5) < 1e-8), '四选一卡片未按 250 宽度居中');
+  assert(G.cards.every(c => c.descLines.every(line => line.length * 10 <= 218)), '四选一描述没有按收窄后的宽度换行');
+  G.cards.length = 0;
+  for (let i = 0; i < 3; i++) G.cards.push({ kind: 'heal', tagColor: '#2f9e68', name: '恢复生命', desc: '立即恢复 30% 最大生命值' });
+  G.layoutCards(3);
+  assert(G.cardRects.every(r => r.w === 280 && r.x === 47), '普通三选一卡片宽度被意外修改');
 });
 test('圆心与墨潮外圈增伤标注严格对应 50% 和 70% 半径', () => {
   fresh(); drawArcs.length = 0; drawTexts.length = 0;
@@ -232,5 +260,5 @@ test('墨迹持续伤害跳字使用低透小字且不闪白', () => {
   assert(text && text.color === '#1a2b8f' && text.shadowBlur === 0, '持续伤害跳字仍闪白或带光晕');
   assert(text.font.startsWith('10px') && Math.abs(text.alpha - 0.58) < 1e-8, '持续伤害跳字没有使用低透小字');
 });
-console.log(failed ? 'UI_TEST_FAILURES: ' + failed : 'UI_TEST_OK (19/19)');
+console.log(failed ? 'UI_TEST_FAILURES: ' + failed : 'UI_TEST_OK (20/20)');
 process.exit(failed ? 1 : 0);

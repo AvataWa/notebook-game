@@ -15,9 +15,9 @@
   };
 
   const baseLinkedTrail = addLinkedTrail;
-  addLinkedTrail = function(owner, x, y, col, hostile, r, amount, spacing, xKey, yKey, refKey) {
+  addLinkedTrail = function(owner, x, y, col, hostile, r, amount, spacing, xKey, yKey, refKey, keepTipCovered = false) {
     if (owner && owner.kind === 'reflect' && owner.inkWide) r *= owner.inkWide;
-    const covered = baseLinkedTrail(owner, x, y, col, hostile, r, amount, spacing, xKey, yKey, refKey);
+    const covered = baseLinkedTrail(owner, x, y, col, hostile, r, amount, spacing, xKey, yKey, refKey, keepTipCovered);
     if (owner === player && player.diving && covered > 0 && hasAffix('dive', 'washregen') && gameTime >= player.diveWashProcT) {
       player.diveWashProcT = gameTime + 0.4;
       refundInk(1, x, y - 18, '洗墨');
