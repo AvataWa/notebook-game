@@ -152,7 +152,7 @@ test('主循环驱动十八字每秒与整句后一点八秒自动前进', () =>
 test('黑屏实际渲染开场、跳过和继续提示', () => {
   beginIntro('draft');
   drawTexts.length = 0; G.render();
-  assert(drawTexts.includes('我穿越到笔记本了') && drawTexts.includes('跳过'), '黑屏标题或跳过未绘制');
+  assert(drawTexts.includes('纸上涂鸦幻想') && drawTexts.includes('跳过'), '黑屏标题或跳过未绘制');
   assert(drawTexts.includes('点击显示整句') && drawTexts.includes('自动播放中'), '开场操作提示未绘制');
   assert(!drawTexts.includes('轻点跳过'), '仍绘制旧战斗纸签提示');
   G.N.advanceIntro(); drawTexts.length = 0; G.render();

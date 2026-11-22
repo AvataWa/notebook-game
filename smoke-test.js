@@ -1,7 +1,10 @@
 // 无头冒烟测试：模拟一整局 10 关 100 波，验证关卡制 + Boss 链 + 胜利条件
 const src = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'procedural-locomotion.js',
   'creature-designs.js', 'creature-bio-rig.js', 'creature-design-renderer.js',
-  'biped-locomotion.js', 'biped-renderer.js', 'creature-game-runtime.js', 'main.js', 'build-runtime.js']
+  'biped-locomotion.js', 'biped-renderer.js', 'creature-game-runtime.js', 'main.js', 'build-runtime.js',
+  'hades-runtime.js', 'hades-weapons-runtime.js', 'weapon-passives-expansion.js', 'form-passives-runtime.js',
+  'evolution-runtime.js', 'support-expansion-runtime.js', 'cyclone-support-runtime.js', 'elemental-support-runtime.js',
+  'trigger-support-runtime.js', 'build-optimization-runtime.js', 'affix-dedup-runtime.js', 'option-director-runtime.js']
   .map(f => require('fs').readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
 
 const fakeCtx = new Proxy({}, {

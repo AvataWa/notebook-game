@@ -39,10 +39,11 @@ function target(x = 50, y = 0) {
 }
 function hit(e, dmg = 10, skill = 'cyclone') { G.hurtEnemy(e, dmg, 0, 0, 0, 0, 0, 0, '#1a2b8f', false, skill); }
 
-test('01 留白笔帽：第四次施放按空槽无耗墨临摹', () => {
+test('01 留白笔帽：第四次施放按空槽无耗墨临摹，临摹涂抹也参与刮蜡', () => {
   fresh(); equip('blankcap'); const e = target(), a = G.player.actives[0]; a.uc = 4;
   G.fireSkill(a, G.skillCalc(a));
-  near(10000 - e.hp, 11 * 1.12 * (1 + 4 * 0.4), '四次临摹伤害错误');
+  near(10000 - e.hp, 11 * 1.12 * (1 + 4 * 0.4) + 18 * 1.12 * 0.4, '四次临摹与刮蜡伤害错误');
+  assert(e.waxScrapes === 1 && e.waxStacks === 2, '五次涂抹没有结算一次刮蜡并保留两层蜡色');
   assert(G.S.echoes.length === 0 && G.player.ink === 100, '临摹额外耗墨或错误复爆');
 });
 test('02 高分头带：第五次主动命中生成红叉范围伤害', () => {
@@ -60,7 +61,7 @@ test('04 勇者披风：三次弹反生成纸影，结束释放墨潮', () => {
   fresh(); equip('cloak'); for (let i = 0; i < 3; i++) G.chargeParry();
   assert(G.S.decoys.length === 1 && G.S.decoys[0].t === 4, '纸影未生成');
   G.S.decoys[0].t = 0.01; G.update(0.02);
-  assert(G.S.decoys.length === 0 && G.erupts.some(er => er.dmg === 22), '纸影消失墨潮未生效');
+  assert(G.S.decoys.length === 0 && G.erupts.some(er => er.dmg === G.BATTLE.surge.damage * 0.65), '纸影消失墨潮未生效');
 });
 test('05 吸墨纸甲：吸收灰墨叠甲并按层减伤', () => {
   fresh(); G.addHostileInk(0, 0, 10, 60); equip('blotarmor'); G.update(0.16);
@@ -91,7 +92,7 @@ test('09 回墨握把：弹反储能由下一主动全部射出', () => {
   fresh(); equip('parrygrip'); target(); for (let i = 0; i < 3; i++) G.chargeParry();
   const a = G.player.actives[0]; G.fireSkill(a, G.skillCalc(a));
   assert(G.S.parryShots === 0 && G.bullets.length === 3, '返墨弹数量或消耗错误');
-  assert(G.bullets.every(b => b.dmg === 18 * 1.1 && b.homing === 4), '返墨弹伤害或追踪错误');
+  assert(G.bullets.every(b => b.dmg === 30 * 1.1 && b.homing === 4), '返墨弹伤害或追踪错误');
 });
 test('10 潮涌指套：满蓄留下潮眼，主动触发墨浪', () => {
   fresh(); equip('surgeglove'); target(); G.player.special = 100; G.castInkSurge(100, true);
@@ -114,7 +115,7 @@ test('12 墨轨滑鞋：潜墨距离产生爆点，退出依次引爆', () => {
 });
 test('13 橡皮鞋底：潜墨擦灰产生追踪橡皮屑', () => {
   fresh(); G.addHostileInk(0, 0, 10, 65); equip('erasershoes'); target(100, 0); G.enterDive(); G.update(0.13);
-  assert(G.bullets.some(b => b.col === '#d7cbb8' && b.dmg === 14), '擦灰没有发射橡皮屑');
+  assert(G.bullets.some(b => b.col === '#d7cbb8' && b.dmg === 24), '擦灰没有发射橡皮屑');
 });
 test('14 空白舞鞋：空白移动布刃，吸墨召回造成伤害', () => {
   fresh(); equip('blankshoes'); G.S.blankDistance = 89;
@@ -123,7 +124,7 @@ test('14 空白舞鞋：空白移动布刃，吸墨召回造成伤害', () => {
   const e = target(50, 0); G.player.x = 100;
   assert(G.castAbsorb(), '吸墨释放失败');
   assert(G.S.blankBlades.length === 0 && G.S.recalls.length === 1, '纸刃没有召回');
-  near(10000 - e.hp, 18, '召回纸刃伤害错误');
+  near(10000 - e.hp, 28, '召回纸刃伤害错误');
 });
 test('15 墨胆吊坠：溢出回墨形成墨滴，主动消耗发射', () => {
   fresh(); G.addInkStain(0, 0, 10, 60, '#1a2b8f'); equip('pendant'); G.player.ink = G.player.maxInk;
@@ -152,14 +153,14 @@ test('19 墨渍放大镜：覆盖灰墨留标记，墨潮全部引爆', () => {
   const count = G.S.lensMarks.length; G.player.special = 100; G.castInkSurge(100, false);
   assert(G.S.lensMarks.length === 0 && G.erupts.filter(er => er.dmg === 18 * 1.06).length === count, '墨潮没有引爆全部标记');
 });
-test('装备文案与旧数值：无生命门槛、持续回血和新鞋移速残留', () => {
+test('装备文案：无生命门槛、持续回血，所有鞋都有移速价值', () => {
   const ids = ['highscore', 'cloak', 'cliparmor'];
   for (const id of ids) for (let r = 0; r < 4; r++) {
     const text = G.itemDescription(id, r);
     assert(!/生命高于|生命低于|每秒回复|每秒回复|持续回复/.test(text), id + ' 仍有禁用设计：' + text);
   }
   for (const id of ['gridshoes', 'trackshoes', 'erasershoes', 'blankshoes']) {
-    fresh(); equip(id); assert(G.player.eqSpd === 1 && !G.itemDescription(id).includes('移速'), id + ' 旧移速仍残留');
+    fresh(); equip(id); assert(G.player.eqSpd === 1.08 && G.itemDescription(id).includes('移速'), id + ' 缺少基础移速');
   }
 });
 test('金色保护期间不会消耗纸甲或储存受击伤害', () => {

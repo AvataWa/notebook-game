@@ -2,7 +2,7 @@
 const fs = require('fs');
 const files = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'main.js', 'build-runtime.js',
   'hades-runtime.js', 'hades-weapons-runtime.js', 'weapon-passives-expansion.js', 'form-passives-runtime.js', 'evolution-runtime.js',
-  'support-expansion-runtime.js', 'elemental-support-runtime.js', 'trigger-support-runtime.js'];
+  'support-expansion-runtime.js', 'elemental-support-runtime.js', 'trigger-support-runtime.js', 'build-optimization-runtime.js', 'affix-dedup-runtime.js'];
 const src = files.map(f => fs.readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
 const fakeCtx = new Proxy({}, { get(t, k) {
   if (k === 'measureText') return txt => ({ width: String(txt).length * 10 });
@@ -38,13 +38,14 @@ function equip(key, rarity = 0) { const slot = G.ITEM_DEFS[key].slot; G.player.e
 function cast() { const a = G.player.actives[0]; return G.fireSkill(a, G.skillCalc(a)); }
 function hit(e, amount = 100) { G.hurtEnemy(e, amount, 0, 0, 0, 0, 0, 0, '#000', false, G.player.actives[0].id); }
 
-test('删除八条旧辅助，总数为七十二且不可再被匹配', () => {
+test('旧辅助全部移除，最终六十七条且不可再被匹配', () => {
   fresh();
-  assert(Object.keys(G.SUPPORTS).length === 70, '辅助总数不是 70：' + Object.keys(G.SUPPORTS).length);
-  for (const id of G.EL.removed) assert(!G.SUPPORTS[id] && !G.supportUsable(id, 'cyclone'), id + ' 仍可获取');
+  assert(Object.keys(G.SUPPORTS).length === 67, '辅助总数不是 67：' + Object.keys(G.SUPPORTS).length);
+  for (const id of [...G.EL.removed, 'soak', 'projrepeat', 'followup'])
+    assert(!G.SUPPORTS[id] && !G.supportUsable(id, 'cyclone'), id + ' 仍可获取');
 });
 
-test('十九条属性辅助描述、属性匹配和四系直接增伤正确', () => {
+test('十九条属性辅助描述和匹配正确，四系增伤均改为条件机制', () => {
   const defs = G.EL.defs; assert(Object.keys(defs).length === 19, '属性辅助不是 19 条');
   for (const [id, def] of Object.entries(defs)) {
     assert(G.supDesc(id, 1).length > 5, id + ' 缺少描述');
@@ -53,31 +54,39 @@ test('十九条属性辅助描述、属性匹配和四系直接增伤正确', ()
     const wrong = Object.keys(G.SKILL_DEFS).find(s => G.SKILL_ATTR[s] !== def[1]);
     assert(!G.supportUsable(id, wrong), id + ' 错开放给其他属性');
   }
-  for (const [skill, id] of [['cyclone','physdmg'], ['volcanic','firedmg'], ['cola','icedmg'], ['arc','thunderdmg']]) {
-    fresh(skill); const base = G.skillCalc(G.player.actives[0]).dmg;
-    fresh(skill, [id]); const boosted = G.skillCalc(G.player.actives[0]).dmg;
-    assert(near(boosted, base * 1.2), id + ' 没有增加 20%：' + base + '/' + boosted);
-  }
+  fresh('cyclone', ['physdmg']); const physical = target(); hit(physical); hit(physical);
+  assert(near(physical.maxhp - physical.hp, 204), '物理硬压没有提高第二击');
+  fresh('volcanic', ['firedmg','fireburn']); const burning = target(); hit(burning); hit(burning);
+  assert(near(burning.maxhp - burning.hp, 208), '燃烧层数没有提高火焰伤害');
+  fresh('cola', ['icedmg']); const slowed = target(); slowed.slowT = 2; hit(slowed);
+  assert(near(slowed.maxhp - slowed.hp, 112), '减速没有提高冰霜伤害');
+  fresh('arc', ['thunderdmg']); const first = target(), second = target(160); hit(first); hit(second);
+  assert(near(second.maxhp - second.hp, 108), '不同目标没有提高雷电伤害');
 });
 
-test('四系属性暴击进入真实伤害结算', () => {
-  const oldRandom = Math.random; Math.random = () => 0.05;
+test('四系属性暴击分别触发硬压、传播、寒霜和额外传导', () => {
+  const oldRandom = Math.random; Math.random = () => 0;
   try {
-    for (const [skill, id] of [['cyclone','physcrit'], ['volcanic','firecrit'], ['cola','icecrit'], ['arc','thundercrit']]) {
-      fresh(skill, [id]); const e = target(); hit(e, 100);
-      assert(near(e.maxhp - e.hp, 200), id + ' 的 8% 暴击未生效：' + (e.maxhp - e.hp));
-    }
+    fresh('cyclone', ['physcrit']); G.player.crit = 1; const physical = target(); physical.stunT = 0; hit(physical);
+    assert(physical.stunT >= 0.25 && physical.dedupPressureN === 1, '物理暴击没有僵直或叠硬压');
+    fresh('volcanic', ['firecrit']); G.player.crit = 1; const fire = target(), fireOther = target(160); hit(fire);
+    assert(fireOther.elBurns && fireOther.elBurns.length === 1, '火焰暴击没有传播燃烧');
+    fresh('cola', ['icecrit']); G.player.crit = 1; const ice = target(); hit(ice);
+    assert(ice.elFrostN === 1, '冰霜暴击没有额外叠寒霜');
+    fresh('arc', ['thundercrit']); G.player.crit = 0.1; const thunder = target(), thunderOther = target(160);
+    let rolls = 0; Math.random = () => rolls++ === 0 ? 0 : 0.99; hit(thunder);
+    assert(near(thunderOther.maxhp - thunderOther.hp, 50), '雷电暴击没有额外传导');
   } finally { Math.random = oldRandom; }
 });
 
-test('燃烧同技能真实叠到三层，爆燃不会给溅射目标继续挂燃烧', () => {
+test('燃烧同技能真实叠到三层，爆燃范围伤害会传播一层燃烧', () => {
   fresh('volcanic', ['fireburn']); const e = target(); hit(e); hit(e); hit(e);
   assert(e.elBurns.length === 3 && e.elBurns.every(b => near(b.dps, 8)), '同技能燃烧未叠三层');
   const hp = e.hp; G.update(0.5); assert(near(hp - e.hp, 12), '三层燃烧半秒伤害不是 12：' + (hp - e.hp));
   fresh('volcanic', ['fireburn','fireblast']); const dead = target(), other = target(150, 0);
   hit(dead); dead.hp = 1; const otherHp = other.hp; G.killEnemy(dead);
   assert(near(otherHp - other.hp, 60), '爆燃没有造成 60% 范围伤害：' + (otherHp - other.hp));
-  assert(!other.elBurns, '爆燃派生伤害错误触发燃烧，可能连锁');
+  assert(other.elBurns && other.elBurns.length === 1, '爆燃没有附加一层燃烧');
 });
 
 test('寒霜冻结普通怪，Boss 只减速；碎冰遵守每技能触发间隔', () => {
@@ -90,9 +99,10 @@ test('寒霜冻结普通怪，Boss 只减速；碎冰遵守每技能触发间隔
   G.gameTime = 0.3; hit(e); assert(G.bullets.length === count + 3, '碎冰冷却未恢复');
 });
 
-test('静电第四击、额外导电和雷网均进入真实结算', () => {
-  fresh('arc', ['thunderstatic']); const e = target(); hit(e); hit(e); hit(e); hit(e);
-  assert(near(e.maxhp - e.hp, 460) && G.lightnings.length > 0, '第四击没有追加 60% 静电雷');
+test('静电四个不同目标、额外导电和雷网均进入真实结算', () => {
+  fresh('arc', ['thunderstatic']); const targets = [target(), target(150), target(200), target(250)];
+  for (const e of targets) hit(e);
+  assert(near(targets[3].maxhp - targets[3].hp, 160) && G.lightnings.length > 0, '第四目标没有追加 60% 静电雷');
   fresh('arc', ['thunderchain']); const first = target(), second = target(160, 0); const hp = second.hp; hit(first);
   assert(near(hp - second.hp, 50), '额外导电没有造成 50% 伤害');
   fresh('arc', ['thundernet']); const netTarget = target(); hit(netTarget);
@@ -131,11 +141,10 @@ test('三叉冰锥将等级、辅助与装备弹数全部加算', () => {
   cast(); assert(G.bullets.length === 9, '三加六不是九支冰锥：' + G.bullets.length);
 });
 
-test('连发派生弹不会再次获得形态数量或继续派生', () => {
-  fresh('icespear', ['projrepeat']); G.player.taken.form_icespear = true; target(); cast();
-  assert(G.bullets.length === 3 && G.E.state.queue.length === 3, '初始三发或连发队列错误');
-  G.E.preUpdate(0.11); assert(G.bullets.length === 6 && G.E.state.queue.length === 0, '派生弹重复增殖');
-  assert(G.bullets.slice(3).every(b => b._noExpand && !b._exp), '派生弹仍可被再次装饰');
+test('连发已合并到多重描线，形态只扩张多重弹数', () => {
+  fresh('icespear', ['multi']); G.player.taken.form_icespear = true; target(); cast();
+  assert(G.bullets.length === 4 && G.E.state.queue.length === 0, '三叉冰锥应为 3 + 1 支，实际为 ' + G.bullets.length);
+  assert(!G.SUPPORTS.projrepeat && !G.supportUsable('projrepeat', 'icespear'), '旧连发仍可获取');
 });
 
 test('空中分弹与子母墨弹同时存在时只生成三枚子弹', () => {

@@ -13,7 +13,7 @@
   }
   function open(data) {
     if (!data) return false;
-    detail = { title: String(data.title || '详情'), subtitle: String(data.subtitle || ''), tag: String(data.tag || ''), body: String(data.body || ''), color: data.color || INK };
+    detail = { title: String(data.title || '详情'), subtitle: String(data.subtitle || ''), tag: String(data.tag || ''), body: String(data.body || ''), color: data.color || INK, icon: data.icon || null };
     return true;
   }
   function close() { if (!detail) return false; detail = null; return true; }
@@ -43,12 +43,18 @@
     const x = panelRect.x, y = panelRect.y, w = panelRect.w;
     ctx.fillStyle = PAPER; ctx.fillRect(x, y, w, panelRect.h);
     jrect(x, y, w, panelRect.h, detail.color, 2.2);
+    const icon = detail.icon && (detail.icon.kind === 'equipment' ? window.EquipmentIconRuntime : window.SkillIconRuntime);
+    if (icon) {
+      if (detail.icon.kind === 'equipment') EquipmentIconRuntime.draw(detail.icon.id, x + 14, y + 13, 48, detail.icon);
+      else SkillIconRuntime.draw(detail.icon.id, detail.icon.kind, x + 14, y + 13, 48, detail.icon);
+    }
+    const titleX = x + (icon ? 72 : 16), titleW = w - (icon ? 88 : 32);
     ctx.textAlign = 'left'; ctx.fillStyle = detail.color; ctx.font = 'bold 18px ' + FONT;
-    ctx.fillText(detail.title, x + 16, y + 36, w - 32);
-    if (detail.tag) drawTagChip(detail.tag, x + 16, y + 46, detail.color, 10, w - 32);
+    ctx.fillText(detail.title, titleX, y + 36, titleW);
+    if (detail.tag) drawTagChip(detail.tag, titleX, y + 46, detail.color, 10, titleW);
     if (detail.subtitle) {
       ctx.fillStyle = GRAY; ctx.font = '10px ' + FONT;
-      ctx.fillText(detail.subtitle, x + 16, y + 58 + tagOffset, w - 32);
+      ctx.fillText(detail.subtitle, titleX, y + 58 + tagOffset, titleW);
     }
     jline(x + 16, y + 74 + tagOffset, x + w - 16, y + 74 + tagOffset, detail.color, 1.1);
     ctx.fillStyle = DARK; ctx.font = '11px ' + FONT;

@@ -53,9 +53,16 @@ const BATTLE_CONFIG = {
     pickupRadius: 40,       // 装备自动拾取半径（原 22）
     maxLevel: 10,           // 五个部位各自独立的装备等级上限
     levelBaseStep: 0.1,     // 每级增加基础攻击与基础生命的比例；特殊词条不受影响
-    rarityXp: [1, 2, 3, 5], // 普通／稀有／传说／史诗提供的部位经验
+    rarityXp: [1, 2, 3, 5], // 绿／蓝／紫／金提供的部位经验
     duplicateXp: 1,         // 同名装备额外提供的经验，不再弹出替换窗口
-    replaceInputLock: 0.5   // 不同装备替换弹窗出现后的防误触时间（秒）
+    replaceInputLock: 0.5,  // 不同装备替换弹窗出现后的防误触时间（秒）
+    // 普通装备按页数解锁高品质；顺序固定为绿／蓝／紫／金，权重合计均为 100。
+    rarityByStage: [
+      { minStage: 1,  weights: [72, 28, 0, 0] },
+      { minStage: 5,  weights: [56, 32, 12, 0] },
+      { minStage: 10, weights: [45, 32, 18, 5] },
+      { minStage: 15, weights: [35, 30, 25, 10] }
+    ]
   },
 
   ink: {
@@ -111,7 +118,7 @@ const BATTLE_CONFIG = {
   // 全部三选一主动技能的基础冷却（秒）；实际冷却 = 本表数值 × skillCalc 的 cd 倍率
   activeCooldowns: {
     // 基础文具技能
-    cyclone: 0.45,      // 旋转蜡笔
+    cyclone: 0.45,      // 连笔蜡笔
     volcanic: 2.2,      // 火山压痕
     tornado: 0.8,       // 分叉纸飞机
     chainclip: 0.9,     // 链条回形针
@@ -119,7 +126,7 @@ const BATTLE_CONFIG = {
     spark: 1.8,         // 慢速墨滴
     ballista: 5,        // 图钉炮台
     boomerang: 2.2,     // 回力橡皮擦
-    vortex: 1.5,        // 涂改带刀阵
+    vortex: 1.5,        // 涂改带撕页
     candle: 0.4,        // 蜡烛头
     icespear: 1.1,      // 冰锥图钉
     inkrain: 2.8,       // 毒墨雨
@@ -147,11 +154,11 @@ const BATTLE_CONFIG = {
   },
 
   skills: {
-    closeRadius: 125,       // 旋转蜡笔／刀阵／蜡烛头基础半径，覆盖近战攻击圈
+    closeRadius: 125,       // 连笔蜡笔半长／蜡烛头半径等近战范围基准
     colaRadius: 150,        // 冰可乐新星基础半径
-    vortexCap: 6,           // 刀阵基础上限
-    vortexPerCast: 2,       // 刀阵每次施放新增碎片数
-    vortexDuration: 5,      // 刀阵基础持续时间
+    vortexCap: 6,           // 涂改带同时存在基础上限
+    vortexPerCast: 2,       // 每次施放铺设的涂改带数量
+    vortexDuration: 5,      // 涂改带基础持续时间
     projectileSize: 1.2,    // 全部玩家子弹视觉与命中尺寸倍率，不影响敌弹
     ballistaBulletSpeed: 820// 图钉炮台基础弹速
   },

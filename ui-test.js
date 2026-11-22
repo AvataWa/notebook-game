@@ -61,6 +61,20 @@ test('经验满后等待 0.5 秒才弹出升级三选一', () => {
   G.levelupPickAfter = 0; G.applyOption(0);
   assert(G.state === 'play' && G.cards.length === 0, '输入锁结束后无法正常选卡');
 });
+test('墨潮蓄力暂停升级三选一，释放或取消后继续倒计时并弹出', () => {
+  for (const end of ['pointerup', 'pointercancel']) {
+    fresh(); G.player.special = 100; G.player.xp = G.player.xpNext;
+    const p = center(G.specialRect), id = end === 'pointerup' ? 71 : 72;
+    pointer('pointerdown', id, p.x, p.y); G.update(0.6);
+    assert(G.player.surgeCharging && G.state === 'play' && G.player.level === 1 && G.levelupDelay === 0.5, end + ' 前蓄力仍被升级打断');
+    G.update(0.5);
+    assert(G.state === 'play' && G.cards.length === 0 && G.levelupDelay === 0.5, end + ' 前蓄力期间弹出了三选一或倒计时未暂停');
+    pointer(end, id, p.x, p.y); G.update(0.49);
+    assert(G.state === 'play' && G.player.level === 1, end + ' 后没有保留原有升级等待');
+    G.update(0.02);
+    assert(!G.player.surgeCharging && G.state === 'levelup' && G.player.level === 2 && G.cards.length === 3, end + ' 后没有继续升级三选一');
+  }
+});
 test('恢复生命按 30% 概率替换构筑卡且不增加选项数量', () => {
   const oldRandom = Math.random;
   try {
@@ -183,11 +197,15 @@ test('三选一主说明最多两行，补充机制灰字显示且无详情按�
     { tag: '[被动]', tagColor: '#333', name: '普通词条', desc: '普通长度描述' },
     { tag: '[主动]', tagColor: '#1a2b8f', name: '另一个词条', desc: '另一个普通描述' }
   );
-  G.layoutCards(3); drawTexts.length = 0; G.drawCards('测试');
+  G.layoutCards(3); drawTexts.length = 0; drawRects.length = 0; G.drawCards('测试');
   const r = G.cardRects[0], lines = G.cards[0].descLines, details = G.cards[0].detailLines;
+  assert(drawRects[0] && drawRects[0].color === 'rgba(245,241,230,0.78)', '三选一背景遮罩不足，战斗信息容易干扰阅读');
+  assert(drawRects.some(rect => rect.x === r.x && rect.y === r.y && rect.color === 'rgba(255,250,238,0.94)'), '卡片底色不够不透明');
   assert(G.cards[0].typeLabel === '主动 · 打击 / 范围', '主动技能类型标签缺失');
   assert(lines.length === 2 && details.length > 0 && r.h === 94 + 12 + details.length * 12, '主说明、补充说明或卡片高度错误');
   assert(lines.every(line => line.length * 10 <= r.w - 32), '换行后的描述仍超出卡片宽度');
+  const firstLine = drawTexts.find(t => t.txt === lines[0] && t.font.startsWith('12px'));
+  assert(firstLine && firstLine.y - 12 >= r.y + 11 + 46 + 8, '主说明与技能图标之间不足 8px 间距');
   const lastY = r.y + 50 + 12 + (lines.length - 1) * 14;
   assert(lastY <= r.y + r.h - 25, '描述末行压到卡片底部选择提示');
   const lastDetailY = r.y + 51 + 12 + lines.length * 14 + (details.length - 1) * 12;
@@ -274,5 +292,5 @@ test('墨迹持续伤害跳字使用低透小字且不闪白', () => {
   assert(text && text.color === '#1a2b8f' && text.shadowBlur === 0, '持续伤害跳字仍闪白或带光晕');
   assert(text.font.startsWith('10px') && Math.abs(text.alpha - 0.58) < 1e-8, '持续伤害跳字没有使用低透小字');
 });
-console.log(failed ? 'UI_TEST_FAILURES: ' + failed : 'UI_TEST_OK (20/20)');
+console.log(failed ? 'UI_TEST_FAILURES: ' + failed : 'UI_TEST_OK (23/23)');
 process.exit(failed ? 1 : 0);

@@ -1,9 +1,9 @@
 /* 操作技能专属辅助与装备内容。数值顺序固定为：普通 / 稀有 / 传说 / 史诗。 */
 const RARITIES = [
-  { id: 'common', name: '普通', color: '#858585', weight: 64, mul: 1 },
-  { id: 'rare', name: '稀有', color: '#3578c7', weight: 25, mul: 1.35 },
-  { id: 'legendary', name: '传说', color: '#8b52b5', weight: 8, mul: 1.75 },
-  { id: 'epic', name: '史诗', color: '#d77b24', weight: 3, mul: 2.3 }
+  { id: 'common', name: '绿色', color: '#4b8c64', weight: 64, mul: 1 },
+  { id: 'rare', name: '蓝色', color: '#3578c7', weight: 25, mul: 1.35 },
+  { id: 'legendary', name: '紫色', color: '#8b52b5', weight: 8, mul: 1.75 },
+  { id: 'epic', name: '金色', color: '#c28a24', weight: 3, mul: 2.3 }
 ];
 
 const OPERATION_AFFIXES = [
@@ -78,35 +78,42 @@ function equipmentDef(slot, name, atk, hp, v, text) { return { slot, name, atk, 
 const EQUIPMENT_ITEM_DEFS = {
   crown: equipmentDef('head', '涂鸦王冠', 15, 30, { choices: [4, 4, 4, 4] }, () => '升级时四选一'),
   cap4: equipmentDef('head', '四色笔帽', 12, 0, { dmg: [8, 11, 14, 18] }, v => '每个主动技能使伤害 +' + v.dmg + '%'),
-  blankcap: equipmentDef('head', '留白笔帽', 12, 0, { dmg: [40, 48, 58, 70] }, v => '每第 4 次主动无耗墨临摹；每空 1 槽多临摹 1 次，伤害 ' + v.dmg + '%'),
+  blankcap: equipmentDef('head', '留白笔帽', 12, 0, { dmg: [40, 48, 58, 70] }, v => '每第 4 次施放主动技能时不耗墨临摹；每空 1 个主动技能槽多临摹 1 次，伤害 ' + v.dmg + '%'),
   multicore: equipmentDef('head', '多芯头带', 10, 10, { cd: [5, 6, 8, 10], cap: [20, 24, 32, 40] }, v => '每 4 条辅助冷却 -' + v.cd + '%，最多 ' + v.cap + '%'),
-  highscore: equipmentDef('head', '高分头带', 10, 15, { dmg: [80, 95, 115, 140] }, v => '每第 5 次主动命中落下红叉，造成该次伤害 ' + v.dmg + '% 的范围伤害'),
-  rulerband: equipmentDef('head', '定规头带', 10, 15, { dmg: [70, 85, 105, 130] }, v => '同目标累计 3 次主动命中，触发 ' + v.dmg + '% 伤害的直线贯穿斩'),
+  highscore: equipmentDef('head', '高分头带', 10, 15, { dmg: [80, 95, 115, 140] }, v => '每第 5 次主动技能命中时落下红叉，造成该次伤害 ' + v.dmg + '% 的范围伤害'),
+  rulerband: equipmentDef('head', '定规头带', 10, 15, { dmg: [70, 85, 105, 130] }, v => '同一目标累计被主动技能命中 3 次，触发 ' + v.dmg + '% 伤害的直线贯穿斩'),
   scatterband: equipmentDef('head', '散墨头带', 12, 10, { count: [1, 1, 1, 2] }, v => '全部子弹技能弹数 +' + v.count),
-  cloak: equipmentDef('body', '勇者披风', 0, 50, { dmg: [40, 50, 65, 80] }, v => '每 3 次弹反生成 4 秒纸影，消失释放 ' + v.dmg + '% 伤害的墨潮'),
+  cloak: equipmentDef('body', '勇者披风', 0, 50, { dmg: [65, 80, 100, 125] }, v => '每 3 次弹反生成 4 秒纸影，消失释放 ' + v.dmg + '% 伤害的墨潮'),
   stapler: equipmentDef('body', '订书机甲', 0, 70, { invuln: [0.2, 0.25, 0.3, 0.4] }, v => '受击无敌时间 +' + v.invuln + ' 秒'),
   blotarmor: equipmentDef('body', '吸墨纸甲', 0, 55, { dr: [35, 42, 50, 60] }, v => '吸收灰墨积攒至多 3 层纸甲；受击耗 1 层，减伤 ' + v.dr + '%'),
   looseleaf: equipmentDef('body', '活页背心', 0, 45, { hp: [3, 4, 5, 7] }, v => '每次升级最大生命 +' + v.hp + ' 并回复等量生命'),
   inkarmor: equipmentDef('body', '墨囊护甲', 0, 50, { store: [40, 48, 58, 70] }, v => '储存受击伤害的 ' + v.store + '%；下一墨潮释放全部储存伤害'),
   cliparmor: equipmentDef('body', '纸夹胸甲', 0, 55, { rate: [2, 2.5, 3, 4], cap: [20, 24, 30, 36] }, v => '己方墨迹上积攒纸甲，每秒 ' + v.rate + '% 最大生命，上限 ' + v.cap + '%'),
   glove: equipmentDef('hands', '红笔指套', 10, 0, { crit: [15, 20, 26, 35], mul: [2.5, 2.6, 2.8, 3] }, v => '暴击率 +' + v.crit + '%，暴击伤害 x' + v.mul),
-  compass: equipmentDef('hands', '圆规护腕', 10, 0, { radius: [5, 7, 9, 12], cap: [20, 28, 36, 48] }, v => '每条辅助使对应技能范围 +' + v.radius + '%，最多 ' + v.cap + '%'),
+  compass: equipmentDef('hands', '圆规护腕', 10, 0, { radius: [4, 6, 8, 10], cap: [20, 24, 32, 40], dmg: [2, 3, 4, 5], dmgCap: [12, 15, 20, 25] }, v => '每条辅助使范围 +' + v.radius + '%（最多 ' + v.cap + '%）、伤害 +' + v.dmg + '%（最多 ' + v.dmgCap + '%）'),
   burstglove: equipmentDef('hands', '爆墨手套', 10, 0, { dmg: [60, 72, 88, 105] }, v => '暴击挂 1 层爆墨，3 层爆炸并造成该次暴击 ' + v.dmg + '% 的范围伤害'),
-  parrygrip: equipmentDef('hands', '回墨握把', 10, 0, { dmg: [18, 24, 32, 42] }, v => '弹反储存至多 3 枚返墨弹；下一主动全部射出，每枚 ' + v.dmg + ' 基础伤害'),
-  surgeglove: equipmentDef('hands', '潮涌指套', 10, 0, { dmg: [12, 16, 21, 28] }, v => '满蓄墨潮留下 5 秒潮眼；主动施放时发射 ' + v.dmg + ' 倍技能倍率墨浪'),
+  parrygrip: equipmentDef('hands', '回墨握把', 10, 0, { dmg: [30, 40, 52, 68] }, v => '弹反储存至多 3 枚返墨弹；下次施放主动技能时全部射出，每枚 ' + v.dmg + ' 基础伤害'),
+  surgeglove: equipmentDef('hands', '潮涌指套', 10, 0, { dmg: [12, 16, 21, 28] }, v => '满蓄墨潮留下 5 秒潮眼；施放主动技能时发射 ' + v.dmg + ' 倍技能倍率墨浪'),
   shredglove: equipmentDef('hands', '碎纸手套', 10, 0, { cd: [0.12, 0.16, 0.21, 0.28], cap: [1, 1.2, 1.5, 2] }, v => '击杀减少最长技能冷却 ' + v.cd + ' 秒，每秒最多 ' + v.cap + ' 秒'),
-  shoes: equipmentDef('feet', '弹簧拖鞋', 0, 20, { speed: [12, 16, 21, 28], hurt: [30, 40, 52, 68] }, v => '移速 +' + v.speed + '%，受击后额外 +' + v.hurt + '%'),
-  tape: equipmentDef('feet', '修正带鞋', 0, 25, { cd: [30, 27, 24, 20] }, v => '每 ' + v.cd + ' 秒抵挡一次致命伤害'),
-  gridshoes: equipmentDef('feet', '格线跑鞋', 0, 20, { dmg: [8, 10, 13, 17] }, v => '移动留下格点并连成三角，每 0.25 秒造成 ' + v.dmg + ' 基础伤害'),
-  trackshoes: equipmentDef('feet', '墨轨滑鞋', 0, 20, { dmg: [16, 21, 28, 36] }, v => '潜墨每移动 100 像素留下爆点，退出时依次造成 ' + v.dmg + ' 基础伤害'),
-  erasershoes: equipmentDef('feet', '橡皮鞋底', 0, 20, { dmg: [14, 18, 24, 32] }, v => '潜墨擦除灰墨，积累后发射 ' + v.dmg + ' 基础伤害的追踪橡皮屑'),
-  blankshoes: equipmentDef('feet', '空白舞鞋', 0, 20, { dmg: [18, 24, 32, 42] }, v => '空白纸面移动留下至多 6 个纸刃；吸墨召回，每个造成 ' + v.dmg + ' 基础伤害'),
-  pendant: equipmentDef('acc', '墨胆吊坠', 8, 20, { dmg: [16, 21, 28, 36] }, v => '每溢出 8 墨生成至多 6 颗墨滴；主动消耗 1 颗发射 ' + v.dmg + ' 基础伤害墨弹'),
+  shoes: equipmentDef('feet', '弹簧拖鞋', 0, 20, { speed: [12, 16, 21, 28], hurt: [30, 40, 52, 68] }, v => '移速 +' + v.speed + '%，受击后 2 秒额外 +' + v.hurt + '%；增速参与移速转化'),
+  tape: equipmentDef('feet', '修正带鞋', 0, 25, { speed: [6, 8, 10, 14], cd: [30, 27, 24, 20] }, v => '移速 +' + v.speed + '%；每 ' + v.cd + ' 秒抵挡一次致命伤害'),
+  gridshoes: equipmentDef('feet', '格线跑鞋', 0, 20, { speed: [8, 10, 13, 17], dmg: [8, 10, 13, 17] }, v => '移速 +' + v.speed + '%；移动留下格点并连成三角，每 0.25 秒造成 ' + v.dmg + ' 基础伤害'),
+  trackshoes: equipmentDef('feet', '墨轨滑鞋', 0, 20, { speed: [8, 10, 13, 17], dmg: [16, 21, 28, 36] }, v => '移速 +' + v.speed + '%；潜墨每移动 100 像素留下爆点，退出时依次造成 ' + v.dmg + ' 基础伤害'),
+  erasershoes: equipmentDef('feet', '橡皮鞋底', 0, 20, { speed: [8, 10, 13, 17], dmg: [24, 30, 38, 48] }, v => '移速 +' + v.speed + '%；潜墨擦除灰墨，积累后发射 ' + v.dmg + ' 基础伤害的追踪橡皮屑'),
+  blankshoes: equipmentDef('feet', '空白舞鞋', 0, 20, { speed: [8, 10, 13, 17], dmg: [28, 36, 46, 58] }, v => '移速 +' + v.speed + '%；空白纸面移动留下至多 6 个纸刃；吸墨召回，每个造成 ' + v.dmg + ' 基础伤害'),
+  pendant: equipmentDef('acc', '墨胆吊坠', 8, 20, { dmg: [16, 21, 28, 36] }, v => '每溢出 8 墨生成至多 6 颗墨滴；施放主动技能时消耗 1 颗，发射 ' + v.dmg + ' 基础伤害墨弹'),
   bookmark: equipmentDef('acc', '灵感书签', 6, 15, { levels: [3, 3, 2, 2] }, v => '每 ' + v.levels + ' 次升级，随机提升 1 个未满级已装备辅助'),
-  lowink: equipmentDef('acc', '低压墨囊', 8, 15, { dmg: [35, 42, 50, 60] }, v => '墨水低于 20 时主动命中分裂 2 枚碎墨，各造成该次伤害 ' + v.dmg + '%'),
-  fullink: equipmentDef('acc', '满墨瓶塞', 8, 15, { dmg: [50, 60, 72, 88] }, v => '施放后墨水不低于 80 时额外耗 8 墨，1 秒后复爆并造成 ' + v.dmg + '% 伤害'),
+  lowink: equipmentDef('acc', '低压墨囊', 8, 15, { dmg: [35, 42, 50, 60] }, v => '墨水低于 20 时，主动技能命中会分裂 2 枚碎墨，各造成该次伤害 ' + v.dmg + '%'),
+  fullink: equipmentDef('acc', '满墨瓶塞', 8, 15, { dmg: [50, 60, 72, 88] }, v => '施放主动技能后墨水不低于 80 时，额外耗 8 墨，1 秒后复爆并造成 ' + v.dmg + '% 伤害'),
   inklens: equipmentDef('acc', '墨渍放大镜', 6, 15, { dmg: [18, 24, 32, 42] }, v => '覆盖灰墨留下至多 8 个标记；墨潮引爆，每个造成 ' + v.dmg + ' 基础伤害'),
   rerollnote: equipmentDef('acc', '刷新便利贴', 6, 15, { reroll: [1, 1, 2, 3] }, v => '每次升级可刷新 ' + v.reroll + ' 次选项'),
-  widependant: equipmentDef('acc', '广角书签', 8, 15, { radius: [20, 26, 34, 44] }, v => '全部主动技能范围 +' + v.radius + '%')
+  widependant: equipmentDef('acc', '广角书签', 8, 15, { radius: [15, 20, 26, 34], dmg: [8, 12, 16, 22] }, v => '全部主动技能范围 +' + v.radius + '%、伤害 +' + v.dmg + '%'),
+  // 乱线猎手：金装均有独立词条，单穿不再空转；随机完成度为 50—100。
+  tailgrip: Object.assign(equipmentDef('hands', '尾棘握笔', 12, 0, { chargeDmg: [3, 3, 3, 3] }, v => '移动每 120 像素获得 1 层乱线充能，最多 5 层；施放主动技能时消耗全部层数，每层使这次技能伤害 +' + bossValue(v.chargeDmg) + '%。'), { bossSet: 'scribble', bossStage: 1, craftOnly: true }),
+  lineboots: Object.assign(equipmentDef('feet', '疾行线靴', 0, 20, { speed: [16, 16, 16, 16], speedDmg: [1, 1, 1, 1], speedDmgCap: [12, 12, 12, 12] }, v => '移速 +' + bossValue(v.speed) + '%；每 10% 额外移速使主动技能伤害 +' + bossValue(v.speedDmg) + '%，最多 +' + bossValue(v.speedDmgCap) + '%。'), { bossSet: 'scribble', bossStage: 1, craftOnly: true }),
+  scribblecrown: Object.assign(equipmentDef('head', '乱线角冠', 14, 25, { activeDmg: [20, 20, 20, 20], tailDmg: [40, 40, 40, 40] }, v => '主动技能伤害 +' + bossValue(v.activeDmg) + '%；乱线尾刺伤害额外 +' + bossValue(v.tailDmg) + '%。'), { bossSet: 'scribble', bossStage: 1, craftOnly: true }),
+  scribblehide: Object.assign(equipmentDef('body', '乱线兽皮', 0, 60, { hurtBoost: [25, 25, 25, 25], hurtDr: [15, 15, 15, 15] }, v => '受击后 3 秒移速 +' + bossValue(v.hurtBoost) + '%、乱线充能积累效率 +' + bossValue(v.hurtBoost) + '%，受伤降低 ' + bossValue(v.hurtDr) + '%。'), { bossSet: 'scribble', bossStage: 1, craftOnly: true }),
+  huntergall: Object.assign(equipmentDef('acc', '猎手墨胆', 10, 25, { castInk: [4, 4, 4, 4], ink: [2, 2, 2, 2] }, v => '每次施放主动技能后，首次命中回墨 ' + bossValue(v.castInk) + '；原始尾刺每命中一敌额外回墨 ' + bossValue(v.ink) + '（单道最多 10）。'), { bossSet: 'scribble', bossStage: 1, craftOnly: true })
 };
+function bossValue(value) { return String(Math.round((Number(value) || 0) * 10) / 10); }
 const EQUIPMENT_ITEM_KEYS = Object.keys(EQUIPMENT_ITEM_DEFS);

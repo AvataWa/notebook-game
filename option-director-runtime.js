@@ -1,15 +1,28 @@
-/* 三选一导演：相关卡、机制卡、自由卡；保留随机与满栏入库规则。 */
+/* 三选一导演：相关卡、机制卡、自由卡；同模板互斥、近期降权与满栏入库规则。 */
 (() => {
   'use strict';
 
   const NUMERIC_SUPPORTS = new Set([
-    'brutal', 'swift', 'sharpen', 'projspd', 'heavynib', 'fatpipe',
-    'wide', 'saturate', 'sheath', 'pressboss', 'heavyweight', 'firstblood',
-    'scrit', 'rapid', 'sweep', 'physdmg', 'physcrit', 'firedmg', 'firecrit',
-    'icedmg', 'icecrit', 'thunderdmg', 'thundercrit'
+    'brutal', 'projspd', 'wide', 'firstblood', 'rapid'
   ]);
   const NUMERIC_PASSIVES = new Set(['dmg', 'haste', 'spd', 'hpup', 'magnet', 'crit']);
-  const S = { relatedMiss: false, rerolling: false, lastCards: [] };
+  const SUPPORT_GROUPS = {
+    brutal: 'directDamage',
+    focus: 'vulnerability', areastack: 'vulnerability', physvuln: 'vulnerability',
+    onabsorb: 'extraCast', ondive: 'extraCast', onsurge: 'extraCast', oncrit: 'extraCast', onkill: 'extraCast',
+    multi: 'extraProjectile', projendsplit: 'extraProjectile', firespark: 'extraProjectile', iceshard: 'extraProjectile',
+    inkpool: 'groundZone', thundernet: 'groundZone', icefield: 'groundZone', cycloneresidue: 'groundZone',
+    strikecross: 'delayedBurst', strikeaftershock: 'delayedBurst', reburst: 'delayedBurst',
+    rapid: 'frequency', retick: 'frequency'
+  };
+  const PASSIVE_GROUPS = {
+    dmg: 'directDamage', haste: 'directCooldown', fountain: 'directCooldown', crit: 'directCrit',
+    perfect_mark: 'vulnerability',
+    spin_spear: 'extraProjectile', perfect_rain: 'extraProjectile', rail_double: 'extraProjectile',
+    slash_crack: 'groundZone', fist_field: 'groundZone', grenade_burn: 'groundZone',
+    slash_echo: 'delayedBurst', spin_blast: 'delayedBurst', grenade_bounce: 'delayedBurst', fist_aftershock: 'delayedBurst'
+  };
+  const S = { relatedMiss: false, rerolling: false, lastCards: [], recentCards: [] };
 
   function key(c) {
     return [c.kind, c.id || '', c.sup || '', c.skill || ''].join(':');
@@ -18,6 +31,12 @@
     if (c.kind === 'active') return c.id;
     if (c.kind === 'active+' || c.kind === 'support' || c.kind === 'support+') return c.skill;
     if (c.kind === 'passive') return c.skill || null;
+    return null;
+  }
+  function category(c) {
+    if (!c) return null;
+    if (c.kind === 'support' || c.kind === 'support+') return SUPPORT_GROUPS[c.sup] || null;
+    if (c.kind === 'passive') return PASSIVE_GROUPS[c.id] || null;
     return null;
   }
   function isRelated(c) {
@@ -53,7 +72,15 @@
     else if (c.kind === 'support' && !NUMERIC_SUPPORTS.has(c.sup)) weight = 1.15;
     else if (c.kind === 'passive') weight = 0.85;
     else if (c.kind === 'support') weight = 0.75;
-    if (S.rerolling && S.lastCards.includes(key(c)) && isPureNumeric(c)) weight *= 0.35;
+    const cardKey = key(c), recent = S.recentCards;
+    if (recent.length && recent[recent.length - 1].includes(cardKey)) weight *= 0.2;
+    else if (recent.length > 1 && recent[recent.length - 2].includes(cardKey)) weight *= 0.45;
+    if (S.rerolling && S.lastCards.includes(cardKey) && isPureNumeric(c)) weight *= 0.35;
+    const group = category(c), skill = skillOf(c), a = skill && getActive(skill);
+    if (group && a && a.supports) {
+      const owned = a.supports.filter(sp => SUPPORT_GROUPS[sp.id] === group).length;
+      if (owned >= 2) weight *= 0.3;
+    }
     return Math.max(0.01, (c.weight || 1) * weight);
   }
 
@@ -70,6 +97,11 @@
         });
         if (filtered.length) candidates = filtered;
       }
+      const usedGroups = new Set(picks.map(category).filter(Boolean));
+      if (usedGroups.size) {
+        const filtered = candidates.filter(c => !category(c) || !usedGroups.has(category(c)));
+        if (filtered.length) candidates = filtered;
+      }
       if (!candidates.length) return false;
       const wrapped = candidates.map(card => ({ card, weight: score(card) }));
       const chosen = weightedOptionPicks(wrapped, 1)[0].card;
@@ -84,8 +116,7 @@
     if (take(useRelated ? initialRelated : remaining)) slots.push(0);
 
     const mechanisms = remaining.filter(isMechanism);
-    const useMechanism = mechanisms.length > 0 && Math.random() < 0.65;
-    if (picks.length < nPick && take(useMechanism ? mechanisms : remaining)) slots.push(1);
+    if (picks.length < nPick && take(mechanisms.length ? mechanisms : remaining)) slots.push(1);
 
     while (picks.length < nPick && remaining.length) {
       if (!take(remaining)) break;
@@ -103,6 +134,8 @@
     }
     // 回血可能替换自由槽中的相关卡，补偿必须以最终展示结果为准。
     S.relatedMiss = initialRelated.length > 0 && !picks.some(isRelated);
+    S.recentCards.push(picks.map(key));
+    if (S.recentCards.length > 2) S.recentCards.shift();
     return picks;
   }
 
@@ -116,10 +149,10 @@
   const baseResetGame = resetGame;
   resetGame = function() {
     baseResetGame();
-    S.relatedMiss = false; S.rerolling = false; S.lastCards = [];
+    S.relatedMiss = false; S.rerolling = false; S.lastCards = []; S.recentCards = [];
   };
 
   window.OptionDirectorRuntime = {
-    state: S, pick, score, isRelated, isMechanism, isPureNumeric, isEvolution
+    state: S, pick, score, category, isRelated, isMechanism, isPureNumeric, isEvolution
   };
 })();

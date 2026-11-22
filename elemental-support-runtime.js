@@ -1,7 +1,7 @@
 /* 属性辅助：直接增伤、属性暴击与四系机制；删除八条低效辅助。 */
 (() => {
   'use strict';
-  const REMOVED = ['longshot', 'projpierceramp', 'projback', 'combo', 'counter', 'strikethird', 'strikeback', 'pressboss'];
+  const REMOVED = ['longshot', 'projpierceramp', 'projback', 'combo', 'counter', 'strikethird', 'strikeback', 'pressboss', 'fatpipe'];
   for (const id of REMOVED) delete SUPPORTS[id];
   const DEFS = {
     physdmg: ['硬压笔尖', 'phys', '物理伤害 +20%/级'], physcrit: ['重墨批注', 'phys', '物理暴击率 +8%/级'],

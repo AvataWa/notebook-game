@@ -3,6 +3,10 @@
   'use strict';
   function supportShort(id, l) {
     const n = Number(l) || 1;
+    const dedup = new Set(['brutal', 'swift', 'sharpen', 'heavynib', 'saturate', 'sheath', 'heavyweight', 'scrit',
+      'sweep', 'linger', 'dur', 'physdmg', 'physcrit', 'physvuln', 'firedmg', 'firecrit', 'fireblast',
+      'icedmg', 'icecrit', 'thunderdmg', 'thundercrit', 'thunderstatic', 'areaspikes']);
+    if (dedup.has(id)) return supDesc(id, n);
     const text = {
       brutal: `伤害 +${25 * n}%，冷却 +${8 * n}%`,
       swift: `冷却 -${13 * n}%`,
@@ -50,7 +54,7 @@
   }
   function skillShort(id) { return SKILL_DEFS[id] ? SKILL_DEFS[id].desc : ''; }
   function affixShort(def) { return def ? def.desc : ''; }
-  function itemShort(key, rarity) { return itemDescription(key, rarity); }
+  function itemShort(key, rarity, roll = 100) { return itemDescription(key, rarity, roll); }
   function show(data) { if (window.UIDetail) window.UIDetail.open(data); }
   function cardDetail(card) {
     if (!card) return;
@@ -62,14 +66,16 @@
       subtitle = `${SUPPORTS[card.sup].name} → ${SKILL_DEFS[card.skill].name}`;
       body = supDesc(card.sup, level);
     }
-    show({ title: card.name, subtitle, tag: cardTypeLabel(card), body, color: card.tagColor || INK });
+    show({ title: card.name, subtitle, tag: cardTypeLabel(card), body, color: card.tagColor || INK,
+      icon: window.SkillIconRuntime ? SkillIconRuntime.cardMeta(card) : null });
   }
   function skillDetail(a) {
     const def = SKILL_DEFS[a.id];
     const lines = [def.desc, `等级 Lv.${a.lvl}`, `辅助 ${a.supports.length}/${supportCap()}`];
     if (!a.supports.length) lines.push('尚未镶嵌辅助技能');
     for (const sp of a.supports) lines.push(`◆ ${SUPPORTS[sp.id].name} Lv.${sp.lvl} · ${supportTagText(sp.id)}`, supDesc(sp.id, sp.lvl));
-    show({ title: def.name, subtitle: '完整机制', tag: '主动 · ' + skillTagText(a.id), body: lines.join('\n'), color: attrOf(a.id) });
+    show({ title: def.name, subtitle: '完整机制', tag: '主动 · ' + skillTagText(a.id), body: lines.join('\n'), color: attrOf(a.id),
+      icon: window.SkillIconRuntime ? { id: a.id, kind: 'active', level: a.lvl, state: a.supports.length + '/' + supportCap() } : null });
   }
   function affixDetail(entry) {
     const def = entry.def || entry;
@@ -79,8 +85,18 @@
   }
   function itemDetail(eq, slot, growth) {
     const def = ITEM_DEFS[eq.key], ri = rarityIndex(eq), rarity = RARITY_LIST[ri], stats = equipmentBaseStats(eq, growth);
-    const body = `${equipmentProgressText(eq, growth)}　攻击 +${stats.atk}%　生命 +${stats.hp}\n每级强化部位基础攻防 +10%，所有掉落都会提供部位经验。\n\n${itemDescription(eq.key, ri)}`;
-    show({ title: def.name, subtitle: `${rarity.name} · ${SLOT_NAME[slot || def.slot]}`, body, color: rarity.color });
+    let body = `${equipmentProgressText(eq, growth)}　攻击 +${stats.atk}%　生命 +${stats.hp}\n每级强化部位基础攻防 +10%，所有掉落都会提供部位经验。\n\n${itemDescription(eq.key, ri, eq.roll)}`;
+    if (def.bossSet && window.BossCollectionRuntime) {
+      const set = BossCollectionRuntime.setById[def.bossSet];
+      if (set) {
+        const n = BossCollectionRuntime.count(set.id, window.__metaRuntime ? __metaRuntime.data.loadout : null);
+        body += `\n\n${set.name} · 当前穿戴 ${n}/5\n` + set.summary.map((line, i) =>
+          (n >= (i === 2 ? 5 : i + 2) ? '● ' : '○ ') + line).join('\n');
+      }
+    }
+    const level = +String(equipmentLevelText(eq, growth)).match(/\d+/)?.[0] || 1;
+    show({ title: def.name, subtitle: `${rarity.name} · ${SLOT_NAME[slot || def.slot]}`, body, color: rarity.color,
+      icon: window.EquipmentIconRuntime ? { id: eq.key, kind: 'equipment', level, roll: eq.roll } : null });
   }
   window.UICopy = { skillShort, supportShort, affixShort, itemShort, cardDetail, skillDetail, affixDetail, itemDetail };
 })();

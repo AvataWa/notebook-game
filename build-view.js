@@ -86,15 +86,17 @@
     ctx.fillText('详情 ›', rect.x + rect.w - 12, rect.y + rect.h - 10);
   }
   function drawSkillEntry(a, rect) {
-    const def = SKILL_DEFS[a.id];
+    const def = SKILL_DEFS[a.id], icons = window.SkillIconRuntime;
     buildCard(rect, attrOf(a.id));
+    if (icons) icons.draw(a.id, 'active', rect.x + 12, rect.y + 13, 54, { level: a.lvl, state: a.supports.length + '/' + supportCap() });
+    const textX = rect.x + (icons ? 76 : 14), textW = rect.w - (icons ? 90 : 28);
     ctx.textAlign = 'left'; ctx.fillStyle = attrOf(a.id); ctx.font = 'bold 15px ' + FONT;
-    ctx.fillText(def.name + '  Lv.' + a.lvl, rect.x + 14, rect.y + 23);
+    ctx.fillText(def.name + (icons ? '' : '  Lv.' + a.lvl), textX, rect.y + 23, textW - 60);
     ctx.textAlign = 'right'; ctx.fillStyle = PURPLE; ctx.font = 'bold 11px ' + FONT;
     ctx.fillText('辅 ' + a.supports.length + '/' + supportCap(), rect.x + rect.w - 14, rect.y + 22);
-    drawTagChip('主动 · ' + skillTagText(a.id), rect.x + 14, rect.y + 30, attrOf(a.id), 10, rect.w - 28);
+    drawTagChip('主动 · ' + skillTagText(a.id), textX, rect.y + 30, attrOf(a.id), 10, textW);
     ctx.fillStyle = DARK; ctx.font = '11px ' + FONT; ctx.textAlign = 'left';
-    buildWrap(window.UICopy ? window.UICopy.skillShort(a.id) : def.desc, rect.x + 14, rect.y + 65, rect.w - 28, 15, 2);
+    buildWrap(window.UICopy ? window.UICopy.skillShort(a.id) : def.desc, textX, rect.y + 65, textW - 45, 15, 2);
     detailHint(rect);
   }
   function drawAffixEntry(entry, rect) {
@@ -112,14 +114,17 @@
   function drawEquipmentEntry(entry, rect) {
     const eq = entry.eq, def = ITEM_DEFS[eq.key], ri = rarityIndex(eq), rarity = RARITY_LIST[ri], stats = equipmentBaseStats(eq);
     buildCard(rect, rarity.color);
+    const icons = window.EquipmentIconRuntime, level = +String(equipmentLevelText(eq)).match(/\d+/)?.[0] || 1;
+    if (icons) icons.draw(eq, rect.x + 10, rect.y + 8, 48, { level });
+    const textX = rect.x + (icons ? 68 : 14), textW = rect.w - (icons ? 82 : 28);
     ctx.textAlign = 'left'; ctx.fillStyle = rarity.color; ctx.font = 'bold 14px ' + FONT;
-    ctx.fillText(def.name, rect.x + 14, rect.y + 22);
+    ctx.fillText(def.name, textX, rect.y + 22, textW - 78);
     ctx.textAlign = 'right'; ctx.font = 'bold 11px ' + FONT;
     ctx.fillText(equipmentLevelText(eq) + ' · ' + rarity.name, rect.x + rect.w - 14, rect.y + 21);
     ctx.textAlign = 'left'; ctx.fillStyle = DARK; ctx.font = '10px ' + FONT;
-    ctx.fillText('攻击 +' + stats.atk + '%　生命 +' + stats.hp, rect.x + 14, rect.y + 41);
+    ctx.fillText('攻击 +' + stats.atk + '%　生命 +' + stats.hp, textX, rect.y + 41, textW);
     ctx.font = '11px ' + FONT;
-    buildWrap(window.UICopy ? window.UICopy.itemShort(eq.key, ri) : itemDescription(eq.key, ri), rect.x + 14, rect.y + 60, rect.w - 28, 15, 2);
+    buildWrap(window.UICopy ? window.UICopy.itemShort(eq.key, ri, eq.roll) : itemDescription(eq.key, ri, eq.roll), rect.x + 14, rect.y + 62, rect.w - 28, 15, 2);
     detailHint(rect);
   }
   function openEntry(entry) {

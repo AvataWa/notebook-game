@@ -224,7 +224,7 @@
     jline(28, 92, W - 28, 92, '#8d96bd', 1); jline(28, H - 100, W - 28, H - 100, '#8d96bd', 1);
     ctx.globalAlpha = 1;
     ctx.textAlign = 'left'; ctx.fillStyle = '#8d96bd'; ctx.font = '11px ' + FONT;
-    ctx.fillText('我穿越到笔记本了', 28, 48);
+    ctx.fillText('纸上涂鸦幻想', 28, 48);
     const skip = skipRect(); ctx.fillStyle = '#171922'; ctx.fillRect(skip.x, skip.y, skip.w, skip.h);
     jrect(skip.x, skip.y, skip.w, skip.h, '#8d96bd', 1.1);
     ctx.textAlign = 'center'; ctx.fillStyle = '#c8cde0'; ctx.font = '11px ' + FONT;

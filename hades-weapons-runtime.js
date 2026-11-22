@@ -62,7 +62,7 @@
   const COMMON = ['brutal', 'swift', 'focus', 'dot'];
   const STRIKE = ['heavyweight', 'firstblood', 'combo', 'scrit', 'counter', 'rapid', 'followup', 'leech', 'shock'];
   const AREA = ['wide', 'saturate', 'soak', 'sheath', 'pressboss', 'stain'];
-  const PROJ = ['sharpen', 'projspd', 'heavynib', 'longshot', 'fatpipe'];
+  const PROJ = ['sharpen', 'projspd', 'heavynib', 'longshot', 'inkpool'];
   const ALLOWED = {
     pageslash: COMMON.concat(STRIKE), piercerush: COMMON.concat(STRIKE), spinlance: COMMON.concat(AREA, ['dur']),
     shieldrush: COMMON.concat(STRIKE), ricoshield: COMMON.concat(PROJ), perfectarrow: COMMON.concat(PROJ),

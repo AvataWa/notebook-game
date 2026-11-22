@@ -46,12 +46,12 @@ test('笔芯连供使用同一冷却规则并保留全局伤害代价', () => {
 
 test('泼墨同步扩大墨潮、弹反判定、小墨潮与潜墨爆发', () => {
   fresh(); take('inkmaster'); G.castAbsorb();
-  assert(near(G.player.absorbRadius, 65 * 1.2), '弹反判定范围未扩大');
-  G.castMeleeInkSurge(); assert(near(G.novas[G.novas.length - 1].max, 120 * 1.2), '小墨潮范围未扩大');
+  assert(near(G.player.absorbRadius, 65 * 1.15), '弹反判定范围未扩大');
+  G.castMeleeInkSurge(); assert(near(G.novas[G.novas.length - 1].max, 120 * 1.15), '小墨潮范围未扩大');
   G.player.special = 100; G.castInkSurge();
-  assert(near(G.novas[G.novas.length - 1].max, 168 * 1.2), '墨潮范围未扩大');
+  assert(near(G.novas[G.novas.length - 1].max, 168 * 1.15), '墨潮范围未扩大');
   fresh(); take('inkmaster'); G.player.affixes.dive.exitburst = true; G.toggleDive(); G.toggleDive();
-  assert(near(G.novas[G.novas.length - 1].max, 75 * 1.2), '潜墨爆发范围未扩大');
+  assert(near(G.novas[G.novas.length - 1].max, 75 * 1.15), '潜墨爆发范围未扩大');
 });
 
 test('全局伤害与装备攻击也作用于潜墨爆发', () => {

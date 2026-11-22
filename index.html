@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>我穿越到笔记本了</title>
+<title>纸上涂鸦幻想</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23f5f1e6'/%3E%3Cpath d='M18 14h28v36H18zM14 20h8M14 32h8M14 44h8M28 25v20M23 40l5 5 5-5' fill='none' stroke='%231a2b8f' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
   html, body {
@@ -13,16 +13,15 @@
     -webkit-tap-highlight-color: transparent;
   }
   canvas {
-    touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
-    -webkit-tap-highlight-color: transparent; box-shadow: 0 0 50px rgba(0,0,0,.55); background: #f5f1e6;
+    touch-action: none; -webkit-user-select: none; -webkit-touch-callout: none; box-shadow: 0 0 50px rgba(0,0,0,.55); background: #f5f1e6;
   }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
-<script src="battle-config.js?v=20261114-dive-lookahead"></script>
+<script src="battle-config.js?v=20261122-stroke-tape-rework-v1"></script>
 <script src="enemy-config.js?v=20261109-enemy-attack-random"></script>
-<script src="content-config.js?v=20261114-equipment-mechanics"></script>
+<script src="content-config.js?v=20261122-clear-affix-text-v3"></script>
 <script src="procedural-locomotion.js?v=20261108-spider-reach"></script>
 <script src="creature-designs.js?v=20261108-all-creatures"></script>
 <script src="creature-bio-rig.js?v=20261108-all-creatures"></script>
@@ -30,38 +29,48 @@
 <script src="biped-locomotion.js?v=20261108-dive-swim"></script>
 <script src="biped-renderer.js?v=20261121-character-appearances"></script>
 <script src="creature-game-runtime.js?v=20261121-character-appearances"></script>
-<script src="main.js?v=20261122-compact-levelup-cards"></script>
+<script src="boss-collection-config.js?v=20261122-clear-affix-text-v3"></script>
+<script src="main.js?v=20261122-cyclone-supports-v1"></script>
+<script src="skill-icon-runtime.js?v=20261122-cyclone-supports-v1"></script>
+<script src="equipment-icon-runtime.js?v=20261122-craft-list-dialog-v1"></script>
 <script src="boss-ai-runtime.js?v=20261109-systemic-boss-ai"></script>
 <script src="boss-hunt-runtime.js?v=20261110-damage-stats"></script>
 <script src="boss-tape-runtime.js?v=20261110-damage-stats"></script>
 <script src="boss-standard-runtime.js?v=20261114-all-hexapod-bosses"></script>
 <script src="hexapod-runtime.js?v=20261114-all-hexapod-bosses"></script>
-<script src="build-runtime.js?v=20261121-mobile-lag-optimization"></script>
+<script src="build-runtime.js?v=20261122-equipment-choice-spacing"></script>
 <script src="hades-runtime.js?v=20261113-skill-rebalance"></script>
-<script src="hades-weapons-runtime.js?v=20261113-skill-rebalance"></script>
+<script src="hades-weapons-runtime.js?v=20261122-equipment-optimization-v2"></script>
 <script src="weapon-passives-expansion.js?v=20261113-skill-rebalance"></script>
-<script src="form-passives-runtime.js?v=20261114-build-expansion"></script>
+<script src="form-passives-runtime.js?v=20261122-straight-wax-cyclone-v1"></script>
 <script src="evolution-runtime.js?v=20261121-four-evolutions"></script>
-<script src="support-expansion-runtime.js?v=20261108-support-expansion"></script>
-<script src="elemental-support-runtime.js?v=20261114-build-expansion"></script>
+<script src="support-expansion-runtime.js?v=20261122-cyclone-target-gravity-v1"></script>
+<script src="cyclone-support-runtime.js?v=20261122-cyclone-supports-v3"></script>
+<script src="elemental-support-runtime.js?v=20261122-equipment-optimization-v2"></script>
 <script src="trigger-support-runtime.js?v=20261120-character-scroll"></script>
-<script src="build-view.js?v=20261121-idle-shield-bar"></script>
+<script src="build-view.js?v=20261122-equipment-optimization-v2"></script>
 <script src="meta-config.js?v=20261121-best-three-ranks"></script>
 <script src="character-config.js?v=20261121-idle-shield-bar"></script>
 <script src="dive-counter-runtime.js?v=20261110-damage-stats"></script>
 <script src="combat-feel-runtime.js?v=20261121-settings-shake-toggle"></script>
-<script src="equipment-rework-runtime.js?v=20261120-character-scroll"></script>
-<script src="meta-runtime.js?v=20261122-home-last-run-copy"></script>
-<script src="character-runtime.js?v=20261122-prebattle-ui-entry-fix"></script>
+<script src="equipment-rework-runtime.js?v=20261122-all-boss-sets-v1"></script>
+<script src="boss-set-runtime.js?v=20261123-progression-economy-v1"></script>
+<script src="build-optimization-runtime.js?v=20261122-clear-affix-text-v3"></script>
+<script src="affix-dedup-runtime.js?v=20261122-affix-dedup-v1"></script>
+<script src="boss-collection-runtime.js?v=20261123-progression-economy-v1"></script>
+<script src="boss-set-mechanics-a.js?v=20261122-effect-audit-v1"></script>
+<script src="boss-set-mechanics-b.js?v=20261122-all-boss-sets-v1"></script>
+<script src="meta-runtime.js?v=20261123-progression-economy-v1"></script>
+<script src="character-runtime.js?v=20261122-character-select-type-v1"></script>
 <script src="idle-runtime.js?v=20261121-idle-shield-bar2"></script>
-<script src="ui-copy.js?v=20261121-idle-shield-bar"></script>
+<script src="ui-copy.js?v=20261122-clear-affix-text-v3"></script>
 <script src="ui-detail-runtime.js?v=20261121-unified-tag-chips"></script>
 <script src="settings-runtime.js?v=20261122-prebattle-setting"></script>
-<script src="desktop-runtime.js?v=20261122-home-last-run-copy"></script>
+<script src="desktop-runtime.js?v=20261123-progression-economy-v1"></script>
 <script src="loadout-runtime.js?v=20261121-compact-tag-chips"></script>
-<script src="acquisition-runtime.js?v=20261121-full-loadout-acquisition-v2"></script>
-<script src="option-director-runtime.js?v=20261121-option-director"></script>
+<script src="acquisition-runtime.js?v=20261122-replacement-detail-cards"></script>
+<script src="option-director-runtime.js?v=20261122-equipment-optimization-v2"></script>
 <script src="narrative-copy-v2.js?v=20261122-memory-copy-96"></script>
-<script src="narrative-runtime.js?v=20261122-home-last-run-copy"></script>
+<script src="narrative-runtime.js?v=20261122-game-title-v1"></script>
 </body>
 </html>

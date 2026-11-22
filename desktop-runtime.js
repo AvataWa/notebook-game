@@ -24,7 +24,8 @@
   window.addEventListener('resize', updateControls);
 
   function txt(value, x, y, size = 14, color = DARK, align = 'left', bold = false, maxWidth) {
-    ctx.fillStyle = color; ctx.textAlign = align; ctx.font = (bold ? 'bold ' : '') + size + 'px ' + FONT;
+    const fontSize = Math.round(size * 1.12);
+    ctx.fillStyle = color; ctx.textAlign = align; ctx.font = (bold ? 'bold ' : '') + fontSize + 'px ' + FONT;
     ctx.fillText(String(value), x, y, maxWidth);
   }
   function lines(value, x, y, width, lineHeight = 20, maxLines = 3) {
@@ -88,13 +89,17 @@
       ctx.fillStyle = 'rgba(255,250,238,0.96)'; ctx.fillRect(r.x, r.y, r.w, r.h);
       jrect(r.x, r.y, r.w, r.h, color, 2.4);
       txt('[' + (i + 1) + ']', r.x + r.w - 20, r.y + 30, 13, GRAY, 'right');
-      txt(cd.name, r.x + 20, r.y + 60, 20, INK, 'left', true, r.w - 40);
-      if (cd.typeLabel) drawTagChip(cd.typeLabel, r.x + 20, r.y + 72, color, 12, r.w - 40);
+      const iconMeta = window.SkillIconRuntime && SkillIconRuntime.cardMeta(cd);
+      if (iconMeta) SkillIconRuntime.drawCard(cd, r.x + 20, r.y + 49, 58);
+      const titleX = r.x + 20 + (iconMeta ? 70 : 0);
+      const titleW = r.w - 40 - (iconMeta ? 70 : 0);
+      txt(cd.name, titleX, r.y + 66, 20, INK, 'left', true, titleW);
+      if (cd.typeLabel) drawTagChip(cd.typeLabel, titleX, r.y + 78, color, 12, titleW);
       ctx.font = '14px ' + FONT;
       const short = cd.shortDesc || String(cd.desc || '').replace(/^Lv1：/, '');
-      const count = lines(short, r.x + 20, r.y + 126, r.w - 40, 22, 4);
+      const count = lines(short, r.x + 20, r.y + 136, r.w - 40, 22, 4);
       const detail = (cd.detailLines || []).join('');
-      if (detail) { ctx.font = '12px ' + FONT; ctx.fillStyle = GRAY; lines(detail, r.x + 20, r.y + 136 + count * 22, r.w - 40, 18, 3); }
+      if (detail) { ctx.font = '12px ' + FONT; ctx.fillStyle = GRAY; lines(detail, r.x + 20, r.y + 146 + count * 22, r.w - 40, 18, 3); }
       txt(locked ? '0.5 秒后可选择' : '点击或按 ' + (i + 1) + ' 选择', r.x + 20, r.y + r.h - 24, 12, locked ? GRAY : color, 'left', true);
     });
   };
@@ -131,8 +136,9 @@
     }
     ctx.save(); ctx.shadowColor = PAPER; ctx.shadowBlur = 5;
     player.actives.forEach((a, i) => {
-      const y = 100 + i * 28;
-      txt(SKILL_DEFS[a.id].name + '  Lv.' + a.lvl, 26, y, 14, attrOf(a.id), 'left', true);
+      const y = 100 + i * 28, icons = window.SkillIconRuntime;
+      if (icons) icons.draw(a.id, 'active', 22, y - 18, 24, { level: a.lvl, state: a.supports.length + '/' + supportCap() });
+      txt(SKILL_DEFS[a.id].name + (icons ? '' : '  Lv.' + a.lvl), icons ? 54 : 26, y, 14, attrOf(a.id), 'left', true);
       txt('辅 ' + a.supports.length + '/' + supportCap(), 226, y, 11, PURPLE, 'right');
     });
     const equipCount = SLOTS.filter(s => player.equip[s]).length;
@@ -143,20 +149,24 @@
       txt(toastValue.txt, W / 2, H - 132 - i * 23, 15, DARK, 'center', true); ctx.globalAlpha = 1;
     });
     const controls = player.characterId === 'idle' ? [] : [
-      [absorbRect, '左键', player.absorbT > 0 ? '吸墨中' : '吸墨 · 弹反', player.absorbCd <= 0 ? INK : GRAY],
-      [specialRect, '右键', player.surgeCharging ? '蓄力 ' + Math.round(inkSurgeChargeRatio() * 100) + '%' : (player.special >= 100 ? '墨潮 · 长按' : '墨潮 ' + Math.floor(player.special) + '%'), player.special >= 100 ? INK : GRAY],
-      [diveRect, 'Space', player.diving ? '潜墨中' : '潜墨', player.ink > 0 && player.diveCd <= 0 ? INK : GRAY]
+      [absorbRect, 'absorb', '左键', player.absorbT > 0 ? '吸墨中' : '吸墨 · 弹反', player.absorbCd <= 0 ? INK : GRAY, player.absorbCd > 0 ? player.absorbCd.toFixed(1) : '', player.absorbCd > 0],
+      [specialRect, 'surge', '右键', player.surgeCharging ? '蓄力 ' + Math.round(inkSurgeChargeRatio() * 100) + '%' : (player.special >= 100 ? '墨潮 · 长按' : '墨潮 ' + Math.floor(player.special) + '%'), player.special >= 100 ? INK : GRAY, player.surgeCharging ? Math.round(inkSurgeChargeRatio() * 100) : Math.floor(player.special), player.special < 100 && !player.surgeCharging],
+      [diveRect, 'dive', 'Space', player.diving ? '潜墨中' : '潜墨', player.ink > 0 && player.diveCd <= 0 ? INK : GRAY, player.diveCd > 0 ? player.diveCd.toFixed(1) : '', !(player.ink > 0 && player.diveCd <= 0) && !player.diving]
     ];
-    for (const [r, key, label, color] of controls) {
+    for (const [r, id, key, label, color, iconState, disabled] of controls) {
       ctx.fillStyle = 'rgba(255,250,238,0.95)'; ctx.fillRect(r.x, r.y, r.w, r.h); jrect(r.x, r.y, r.w, r.h, color, 2);
-      txt(key, r.x + 12, r.y + 22, 12, color, 'left', true); txt(label, r.x + r.w / 2 + 8, r.y + 37, 13, color, 'center', true);
+      const icons = window.SkillIconRuntime;
+      if (icons) icons.draw(id, 'ink', r.x + 8, r.y + 9, 40, { showLevel: false, state: iconState, disabled });
+      const textX = r.x + (icons ? 56 : 12);
+      txt(key, textX, r.y + 20, icons ? 11 : 12, color, 'left', true);
+      txt(label, textX, r.y + 42, icons ? 11 : 13, color, 'left', true, icons ? r.w - 64 : r.w - 24);
     }
     if (player.characterId === 'idle' && window.IdleRuntime) IdleRuntime.drawHUD(true);
     txt(player.characterId === 'idle' ? 'WASD / 方向键移动　·　技能自动施放　·　Tab 养成　·　Esc 暂停' : 'WASD / 方向键移动　·　左键 / E 吸墨　·　右键 / Q 墨潮　·　空格潜墨　·　Esc 暂停', 26, H - 30, 13, DARK, 'left');
   };
 
   function drawHome() {
-    panel('我穿越到笔记本了', '桌面试玩版 · v' + '0.2.0');
+    panel('纸上涂鸦幻想', '桌面试玩版 · v' + '0.2.0');
     const m = meta();
     if (window.HomeDoodles) window.HomeDoodles.draw(true);
     txt(m ? m.rankInfo().name : '', 64, 142, 30, INK, 'left', true);
@@ -267,7 +277,7 @@
       ctx.fillStyle = 'rgba(255,250,238,0.95)'; ctx.fillRect(r.x, r.y, r.w, r.h); jrect(r.x, r.y, r.w, r.h, rarity.color, 1.8);
       txt(def.name, r.x + 18, r.y + 34, 19, rarity.color, 'left', true);
       txt(equipmentProgressText(eq, m.data.equipment) + ' · ' + rarity.name, r.x + 18, r.y + 60, 12, GRAY);
-      ctx.font = '13px ' + FONT; ctx.fillStyle = DARK; lines(window.UICopy ? window.UICopy.itemShort(eq.key, eq.rarity) : itemDescription(eq.key, eq.rarity), r.x + 18, r.y + 92, 330, 20, 3);
+      ctx.font = '13px ' + FONT; ctx.fillStyle = DARK; lines(window.UICopy ? window.UICopy.itemShort(eq.key, eq.rarity, eq.roll) : itemDescription(eq.key, eq.rarity, eq.roll), r.x + 18, r.y + 92, 330, 20, 3);
       button({ x: r.x + 390, y: r.y + 36, w: 150, h: 42 }, inherited ? '已继承' : '设为继承', () => m.setInherited(eq.key, eq.rarity), { enabled: !inherited, active: inherited });
       button({ x: r.x + 390, y: r.y + 100, w: 150, h: 42 }, '重铸 ' + META_CONFIG.reforgeCostByRarity[eq.rarity], () => { reforgePending = eq; }, { enabled: m.data.paper >= META_CONFIG.reforgeCostByRarity[eq.rarity] });
       hits.push({ rect: { x: r.x, y: r.y, w: 365, h: r.h }, action: () => window.UICopy && window.UICopy.itemDetail(eq, def.slot, m.data.equipment), enabled: true });
@@ -278,10 +288,26 @@
       hits = []; const eq = reforgePending;
       ctx.fillStyle = 'rgba(16,16,16,0.58)'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = PAPER; ctx.fillRect(W / 2 - 280, 220, 560, 270); jrect(W / 2 - 280, 220, 560, 270, INK, 2.4);
       txt('确认重铸？', W / 2, 278, 23, INK, 'center', true);
-      txt(ITEM_DEFS[eq.key].name + ' · 同部位同品质随机换装 · 等级不变', W / 2, 326, 14, DARK, 'center');
+      txt(ITEM_DEFS[eq.key].name + ' · 同部位同品质三选一 · 等级不变', W / 2, 326, 14, DARK, 'center');
       txt('消耗 ' + META_CONFIG.reforgeCostByRarity[eq.rarity] + ' 碎纸', W / 2, 360, 14, PURPLE, 'center');
       button({ x: W / 2 - 220, y: 410, w: 190, h: 44 }, '取消', () => { reforgePending = null; });
       button({ x: W / 2 + 30, y: 410, w: 190, h: 44 }, '确认重铸', () => { m.reforge(eq.key, eq.rarity); reforgePending = null; }, { active: true });
+    } else if (m.reforgeOffers) {
+      hits = []; const offer = m.reforgeOffers, count = offer.candidates.length, cardW = 260, gap = 20;
+      const startX = W / 2 - (count * cardW + (count - 1) * gap) / 2;
+      ctx.fillStyle = 'rgba(16,16,16,0.62)'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = PAPER; ctx.fillRect(W / 2 - 450, 150, 900, 420); jrect(W / 2 - 450, 150, 900, 420, INK, 2.4);
+      txt('选择重铸结果', W / 2, 204, 25, INK, 'center', true);
+      txt(RARITY_LIST[offer.rarity].name + ' · ' + SLOT_NAME[ITEM_DEFS[offer.key].slot] + ' · 选定后消耗 ' + offer.cost + ' 碎纸', W / 2, 238, 14, PURPLE, 'center');
+      offer.candidates.forEach((key, i) => {
+        const r = { x: startX + i * (cardW + gap), y: 275, w: cardW, h: 180 };
+        ctx.fillStyle = 'rgba(255,250,238,0.97)'; ctx.fillRect(r.x, r.y, r.w, r.h); jrect(r.x, r.y, r.w, r.h, INK, 1.8);
+        txt('[' + (i + 1) + '] ' + ITEM_DEFS[key].name, r.x + 16, r.y + 35, 18, INK, 'left', true, r.w - 32);
+        ctx.font = '13px ' + FONT; ctx.fillStyle = DARK;
+        lines(window.UICopy ? window.UICopy.itemShort(key, offer.rarity) : itemDescription(key, offer.rarity), r.x + 16, r.y + 72, r.w - 32, 21, 3);
+        hits.push({ rect: r, enabled: true, action: () => m.chooseReforge(i) });
+      });
+      button({ x: W / 2 - 130, y: 495, w: 260, h: 44 }, '取消 · 不消耗碎纸', () => m.cancelReforge());
     }
   }
 
@@ -318,7 +344,7 @@
       let name = '', color = INK, desc = '', right = '';
       if (m.summaryTab === 'skills') { name = SKILL_DEFS[entry.id].name + ' Lv.' + entry.lvl; color = attrOf(entry.id); desc = window.UICopy ? window.UICopy.skillShort(entry.id) : SKILL_DEFS[entry.id].desc; right = '辅 ' + entry.supports.length + '/' + supportCap(); }
       else if (m.summaryTab === 'affixes') { name = entry.def.name + (entry.count > 1 ? ' ×' + entry.count : ''); desc = window.UICopy ? window.UICopy.affixShort(entry.def) : entry.def.desc; }
-      else if (m.summaryTab === 'equipment') { const eq = entry.eq; name = ITEM_DEFS[eq.key].name; color = RARITY_LIST[rarityIndex(eq)].color; desc = window.UICopy ? window.UICopy.itemShort(eq.key, rarityIndex(eq)) : itemDescription(eq.key, rarityIndex(eq)); right = equipmentLevelText(eq, s.growth); }
+      else if (m.summaryTab === 'equipment') { const eq = entry.eq; name = ITEM_DEFS[eq.key].name; color = RARITY_LIST[rarityIndex(eq)].color; desc = window.UICopy ? window.UICopy.itemShort(eq.key, rarityIndex(eq), eq.roll) : itemDescription(eq.key, rarityIndex(eq), eq.roll); right = equipmentLevelText(eq, s.growth); }
       else { const names = { surge: '墨潮', absorb: '吸墨／弹反', dive: '潜墨', other: '其他／墨迹' }; name = (SKILL_DEFS[entry.id] && SKILL_DEFS[entry.id].name) || names[entry.id] || entry.id; color = entry.id === 'other' ? GRAY : attrOf(entry.id); right = Math.round(entry.value).toLocaleString() + ' 伤害'; desc = '伤害占比 ' + (entry.total ? (entry.value / entry.total * 100).toFixed(1) : '0.0') + '%'; }
       ctx.fillStyle = 'rgba(255,250,238,0.94)'; ctx.fillRect(r.x, r.y, r.w, r.h); jrect(r.x, r.y, r.w, r.h, color, 1.6);
       txt(name, r.x + 16, r.y + 30, 16, color, 'left', true); txt(right, r.x + r.w - 16, r.y + 29, 12, DARK, 'right');
@@ -341,11 +367,13 @@
       ctx.fillStyle = 'rgba(255,250,238,0.95)'; ctx.fillRect(r.x, r.y, r.w, r.h); jrect(r.x, r.y, r.w, r.h, rarity.color, selected ? 2.8 : 1.6);
       txt(def.name, r.x + 18, r.y + 34, 18, rarity.color, 'left', true);
       txt(rarity.name + ' · ' + SLOT_NAME[def.slot] + ' · ' + equipmentLevelText(eq, s.growth), r.x + 18, r.y + 60, 12, GRAY);
-      ctx.font = '13px ' + FONT; ctx.fillStyle = DARK; lines(window.UICopy ? window.UICopy.itemShort(eq.key, eq.rarity) : itemDescription(eq.key, eq.rarity), r.x + 18, r.y + 92, 350, 20, 3);
+      ctx.font = '13px ' + FONT; ctx.fillStyle = DARK; lines(window.UICopy ? window.UICopy.itemShort(eq.key, eq.rarity, eq.roll) : itemDescription(eq.key, eq.rarity, eq.roll), r.x + 18, r.y + 92, 350, 20, 3);
       txt('部位经验 +' + eq.xp, r.x + 18, r.y + 158, 12, GRAY);
       button({ x: r.x + 410, y: r.y + 70, w: 130, h: 46 }, selected ? '已装订' : '装订', () => m.toggleSettlement(eq.uid), { enabled: selected || s.selected.length < s.slots, active: selected });
     });
     if (!shown.length) txt('本局没有新装备', W / 2, 340, 17, GRAY, 'center');
+    const salvage = m.settlementSalvage();
+    txt('未装订／重复普通装备回收 ' + salvage.count + ' 件 · 碎纸 +' + salvage.paper, W / 2, 120, 13, salvage.count ? PURPLE : GRAY, 'center');
     pager(s.found.length, per, 590);
     button({ x: W / 2 - 150, y: 648, w: 300, h: 44 }, '完成结算', () => m.finishSettlement(), { size: 16 });
   }
@@ -394,14 +422,21 @@
     const entries = view.entries(), per = view.tab === 'affixes' ? 6 : 4, shown = entries.slice(view.page * per, view.page * per + per);
     shown.forEach((entry, i) => {
       const col = i % 2, row = Math.floor(i / 2), r = { x: 70 + col * 580, y: 196 + row * (per === 6 ? 108 : 174), w: 550, h: per === 6 ? 90 : 150 };
-      let name = '', desc = '', color = INK, right = '', tag = '';
-      if (view.tab === 'skills') { name = SKILL_DEFS[entry.id].name + ' Lv.' + entry.lvl; desc = window.UICopy ? window.UICopy.skillShort(entry.id) : SKILL_DEFS[entry.id].desc; color = attrOf(entry.id); right = '辅 ' + entry.supports.length + '/' + supportCap(); tag = '主动 · ' + skillTagText(entry.id); }
+      let name = '', desc = '', color = INK, right = '', tag = '', iconMeta = null, equipmentIcon = null;
+      if (view.tab === 'skills') { name = SKILL_DEFS[entry.id].name; desc = window.UICopy ? window.UICopy.skillShort(entry.id) : SKILL_DEFS[entry.id].desc; color = attrOf(entry.id); right = '辅 ' + entry.supports.length + '/' + supportCap(); tag = '主动 · ' + skillTagText(entry.id); iconMeta = { id: entry.id, kind: 'active', level: entry.lvl, state: entry.supports.length + '/' + supportCap() }; }
       else if (view.tab === 'affixes') { name = entry.def.name + (entry.count > 1 ? ' ×' + entry.count : ''); desc = window.UICopy ? window.UICopy.affixShort(entry.def) : entry.def.desc; }
-      else { const eq = entry.eq, ri = rarityIndex(eq); name = ITEM_DEFS[eq.key].name; desc = window.UICopy ? window.UICopy.itemShort(eq.key, ri) : itemDescription(eq.key, ri); color = RARITY_LIST[ri].color; right = equipmentLevelText(eq) + ' · ' + RARITY_LIST[ri].name; }
+      else { const eq = entry.eq, ri = rarityIndex(eq); name = ITEM_DEFS[eq.key].name; desc = window.UICopy ? window.UICopy.itemShort(eq.key, ri, eq.roll) : itemDescription(eq.key, ri, eq.roll); color = RARITY_LIST[ri].color; right = equipmentLevelText(eq) + ' · ' + RARITY_LIST[ri].name; equipmentIcon = eq; }
       ctx.fillStyle = 'rgba(255,250,238,0.95)'; ctx.fillRect(r.x, r.y, r.w, r.h); jrect(r.x, r.y, r.w, r.h, color, 1.7);
-      txt(name, r.x + 16, r.y + 30, 17, color, 'left', true); txt(right, r.x + r.w - 16, r.y + 29, 12, PURPLE, 'right');
-      if (tag) drawTagChip(tag, r.x + 16, r.y + 39, color, 11, r.w - 32);
-      ctx.font = '13px ' + FONT; ctx.fillStyle = DARK; lines(desc, r.x + 16, r.y + (tag ? 76 : 62), r.w - 32, 19, tag ? 2 : 3);
+      const hasIcon = (iconMeta && window.SkillIconRuntime) || (equipmentIcon && window.EquipmentIconRuntime);
+      if (iconMeta && window.SkillIconRuntime) SkillIconRuntime.draw(iconMeta.id, iconMeta.kind, r.x + 14, r.y + 14, 66, iconMeta);
+      else if (equipmentIcon && window.EquipmentIconRuntime) {
+        const level = +String(equipmentLevelText(equipmentIcon)).match(/\d+/)?.[0] || 1;
+        EquipmentIconRuntime.draw(equipmentIcon, r.x + 14, r.y + 14, 66, { level });
+      }
+      const entryTextX = r.x + (hasIcon ? 94 : 16), entryTextW = r.w - (hasIcon ? 110 : 32);
+      txt(name, entryTextX, r.y + 30, 17, color, 'left', true, entryTextW - 90); txt(right, r.x + r.w - 16, r.y + 29, 12, PURPLE, 'right');
+      if (tag) drawTagChip(tag, entryTextX, r.y + 39, color, 11, entryTextW);
+      ctx.font = '13px ' + FONT; ctx.fillStyle = DARK; lines(desc, entryTextX, r.y + (tag ? 76 : 62), entryTextW, 19, tag ? 2 : 3);
       txt('详情 ›', r.x + r.w - 16, r.y + r.h - 12, 11, GRAY, 'right');
       hits.push({ rect: r, action: () => { if (!window.UICopy) return; if (view.tab === 'skills') window.UICopy.skillDetail(entry); else if (view.tab === 'affixes') window.UICopy.affixDetail(entry); else window.UICopy.itemDetail(entry.eq, entry.slot); }, enabled: true });
     });
@@ -421,12 +456,17 @@
     ctx.fillStyle = 'rgba(32,30,29,0.76)'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = PAPER; ctx.fillRect(180, 72, 920, 576); jrect(180, 72, 920, 576, INK, 2.5);
     txt('捡到' + SLOT_NAME[it.slot] + '装备', W / 2, 124, 25, INK, 'center', true);
     txt(locked ? '请看清装备 · ' + remaining + ' 秒后可选择' : '点击装备卡直接选择 · 换装共用部位等级', W / 2, 154, 13, GRAY, 'center');
-    [[cur, 250, '当前装备', false], [{ key: dr.item, rarity: rarityIndex(dr) }, 680, '新装备', true]].forEach(([eq, x, title, replace]) => {
+    [[cur, 250, '当前装备', false], [{ key: dr.item, rarity: rarityIndex(dr), roll: dr.roll }, 680, '新装备', true]].forEach(([eq, x, title, replace]) => {
       const def = ITEM_DEFS[eq.key], rarity = RARITY_LIST[rarityIndex(eq)], stats = equipmentBaseStats(eq);
       ctx.fillStyle = 'rgba(255,250,238,0.96)'; ctx.fillRect(x, 190, 350, 280); jrect(x, 190, 350, 280, rarity.color, 2.2);
       txt(title, x + 175, 224, 14, DARK, 'center'); txt(rarity.name + ' · ' + equipmentLevelText(eq), x + 175, 254, 13, rarity.color, 'center');
-      txt(def.name, x + 175, 298, 22, INK, 'center', true); txt('攻击 +' + stats.atk + '%　生命 +' + stats.hp, x + 175, 330, 14, DARK, 'center');
-      ctx.font = '13px ' + FONT; ctx.fillStyle = DARK; lines(itemDescription(eq.key, rarityIndex(eq)), x + 24, 366, 302, 21, 4);
+      if (window.EquipmentIconRuntime) {
+        const level = +String(equipmentLevelText(eq)).match(/\d+/)?.[0] || 1;
+        EquipmentIconRuntime.draw(eq, x + 24, 270, 62, { level });
+        txt(def.name, x + 102, 301, 20, INK, 'left', true, 222);
+      } else txt(def.name, x + 175, 298, 22, INK, 'center', true);
+      txt('攻击 +' + stats.atk + '%　生命 +' + stats.hp, x + 175, 352, 14, DARK, 'center');
+      ctx.font = '13px ' + FONT; ctx.fillStyle = DARK; lines(itemDescription(eq.key, rarityIndex(eq), eq.roll), x + 24, 382, 302, 21, 4);
       hits.push({ rect: { x, y: 190, w: 350, h: 280 }, action: () => window.__buildRuntime.resolveEquipment(replace), enabled: !locked });
     });
     button({ x: 250, y: 524, w: 350, h: 54 }, locked ? remaining + ' 秒后可选择' : '替换新装备 [1]', () => window.__buildRuntime.resolveEquipment(true), { enabled: !locked });
@@ -438,9 +478,15 @@
     const x = p.x, y = p.y, w = p.w, h = p.h;
     ctx.fillStyle = 'rgba(25,23,22,0.74)'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = PAPER; ctx.fillRect(x, y, w, h); jrect(x, y, w, h, detail.color, 2.2);
     const tagOffset = detail.tag ? 22 : 0;
-    txt(detail.title, x + 24, y + 42, 21, detail.color, 'left', true, w - 48);
-    if (detail.tag) drawTagChip(detail.tag, x + 24, y + 50, detail.color, 12, w - 48);
-    if (detail.subtitle) txt(detail.subtitle, x + 24, y + 68 + tagOffset, 12, GRAY, 'left', false, w - 48);
+    const icon = detail.icon && (detail.icon.kind === 'equipment' ? window.EquipmentIconRuntime : window.SkillIconRuntime);
+    if (icon) {
+      if (detail.icon.kind === 'equipment') EquipmentIconRuntime.draw(detail.icon.id, x + 22, y + 15, 62, detail.icon);
+      else SkillIconRuntime.draw(detail.icon.id, detail.icon.kind, x + 22, y + 15, 62, detail.icon);
+    }
+    const titleX = x + (icon ? 98 : 24), titleW = w - (icon ? 122 : 48);
+    txt(detail.title, titleX, y + 42, 21, detail.color, 'left', true, titleW);
+    if (detail.tag) drawTagChip(detail.tag, titleX, y + 50, detail.color, 12, titleW);
+    if (detail.subtitle) txt(detail.subtitle, titleX, y + 68 + tagOffset, 12, GRAY, 'left', false, titleW);
     jline(x + 24, y + 86 + tagOffset, x + w - 24, y + 86 + tagOffset, detail.color, 1.1);
     ctx.font = '13px ' + FONT; ctx.fillStyle = DARK; lines(detail.body, x + 24, y + 116 + tagOffset, w - 48, 21, 10);
     button(r, '返回  Esc', () => window.UIDetail.close());

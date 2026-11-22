@@ -10,10 +10,12 @@ const files = [
   'desktop-runtime.js', 'loadout-runtime.js', 'acquisition-runtime.js', 'option-director-runtime.js'
 ];
 const src = files.map(f => fs.readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
+const drawTexts = [], drawFonts = [];
 const fakeCtx = new Proxy({}, { get(t, k) {
   if (k === 'measureText') return txt => ({ width: String(txt).length * 10 });
+  if (k === 'fillText') return txt => { drawTexts.push(String(txt)); drawFonts.push(t.font); };
   return () => {};
-}, set() { return true; } });
+}, set(t, k, v) { t[k] = v; return true; } });
 const fakeCanvas = {
   getContext: () => fakeCtx, width: 0, height: 0, style: {}, addEventListener() {},
   setPointerCapture() {}, releasePointerCapture() {},
@@ -40,7 +42,8 @@ eval(src + `\n;globalThis.G = { render, buildOptions, applyOption, weightedOptio
   get cards() { return cards; }, set cards(v) { cards = v; },
   get levelupPickAfter() { return levelupPickAfter; }, set levelupPickAfter(v) { levelupPickAfter = v; },
   get M() { return window.__metaRuntime; }, get C() { return window.CharacterRuntime; },
-  get L() { return window.LoadoutRuntime; }, get A() { return window.AcquisitionRuntime; }
+  get L() { return window.LoadoutRuntime; }, get A() { return window.AcquisitionRuntime; },
+  get zoom() { return ZOOM; }, get view() { return { w: VIEW_W, h: VIEW_H }; }
 };`);
 let failed = 0, passed = 0;
 const realRandom = Math.random;
@@ -161,9 +164,12 @@ test('选卡输入锁与新局清理替换状态均有效', () => {
   G.M.beginRun(false); assert(!G.A.pending && G.state !== 'acquireReplace', '新局残留替换状态');
 });
 
-test('手机替换页点选与确认按钮可完成完整操作', () => {
-  const p = fresh(); fillReserve(p); G.cards = [activeCard()]; G.applyOption(0); G.render();
-  const hits = G.A.hits; assert(hits.length >= 6, '替换页没有绘制目标与按钮');
+test('手机替换页显示槽位、类型、效果和辅助损失并可完成替换', () => {
+  const p = fresh(); fillReserve(p); G.cards = [activeCard()]; G.applyOption(0);
+  drawTexts.length = 0; G.render();
+  const hits = G.A.hits; assert(hits.length >= 6 && hits[0].rect.h === 94, '替换页没有绘制详情目标卡与按钮');
+  assert(drawTexts.includes('场上主动 1') && drawTexts.some(t => t.startsWith('主动 ·')), '旧技能槽位或类型标签缺失');
+  assert(drawTexts.some(t => t.startsWith('失去辅助：')), '主动替换没有展示将失去的辅助');
   const target = hits[0].rect; fireWindow('pointerdown', { clientX: target.x + 5, clientY: target.y + 5 });
   assert(G.A.selected && G.A.selected.type === 'active', '手机点选替换目标无响应');
   G.render(); const updated = G.A.hits, confirm = updated[updated.length - 1];
@@ -172,19 +178,27 @@ test('手机替换页点选与确认按钮可完成完整操作', () => {
   assert(G.state === 'play' && p.actives[0].id === 'cola' && p.actives[0].lvl === 1, '手机确认按钮未完成替换');
 });
 
-test('桌面二十个替换目标分两页绘制，分页与底部按钮不重叠', () => {
+test('桌面二十个替换目标分四页显示详情，分页与底部按钮不重叠', () => {
   const oldWidth = global.innerWidth, oldHeight = global.innerHeight, oldMatch = global.matchMedia;
   try {
     const p = fresh(), sets = [['brutal', 'swift', 'focus', 'wide'], ['brutal', 'swift', 'focus', 'pierce'],
       ['brutal', 'swift', 'focus', 'chain'], ['brutal', 'swift', 'focus', 'projspd']];
     p.actives.forEach((a, i) => { a.supports = sets[i].map((id, j) => ({ id, lvl: j + 1 })); });
     fillReserve(p); global.innerWidth = 1280; global.innerHeight = 720; global.matchMedia = () => ({ matches: false });
-    fireWindow('resize'); G.cards = [supportCard('unleash')]; G.applyOption(0); G.render();
+    fireWindow('resize'); G.cards = [supportCard('unleash')]; G.applyOption(0);
+    assert(Math.abs(G.zoom - 0.92) < 1e-8 && Math.abs(G.view.w - 1280 / 0.92) < 1e-8, '横版镜头没有独立拉近到 0.92');
+    G.state = 'play'; drawFonts.length = 0; G.render();
+    assert(drawFonts.some(font => font && font.startsWith('bold 18px')), '横版 HUD 字号没有按比例放大');
+    G.state = 'acquireReplace'; drawTexts.length = 0; G.render();
     assert(DesktopRuntime.active && G.A.targets().length === 20 && G.A.page === 0, '桌面替换目标或分页数量错误');
-    const hits = G.A.hits, next = hits[13], cancel = hits[14];
-    assert(hits.length === 16 && next.rect.y + next.rect.h <= cancel.rect.y, '分页按钮与底部操作重叠');
+    const hits = G.A.hits, next = hits[7], cancel = hits[8];
+    assert(hits.length === 10 && hits[0].rect.h === 100 && next.rect.y + next.rect.h <= cancel.rect.y,
+      '详情卡、分页或底部操作重叠：' + JSON.stringify({ count: hits.length, first: hits[0], next, cancel }));
+    assert(drawTexts.some(t => t.startsWith('辅助 ·')) && drawTexts.some(t => t.includes('裂地直尺')), '旧辅助类型或所在主动信息缺失');
     G.A.setPage(1); G.render();
-    assert(G.A.page === 1 && G.A.hits.length === 12, '第二页目标或按钮绘制不完整');
+    assert(G.A.page === 1 && G.A.hits.length === 10, '第二页目标或按钮绘制不完整');
+    G.A.setPage(3); G.render();
+    assert(G.A.page === 3 && G.A.hits.length === 6, '最后一页两个目标或按钮绘制不完整');
   } finally {
     global.innerWidth = oldWidth; global.innerHeight = oldHeight; global.matchMedia = oldMatch; fireWindow('resize');
   }

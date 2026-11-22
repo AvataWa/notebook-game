@@ -1,6 +1,6 @@
 'use strict';
 /* ============================================================
-   《我穿越到笔记本了》 M2 原型 v12
+   《纸上涂鸦幻想》 M2 原型 v12
    关卡制：A-B（关卡-波数）· 10 种作业本底纹 · 每关一个 Boss
    升级=波数+1，每 10 波换一关，涂掉第 10 关 Boss 即胜利
    18 个主动技能 × 12 种辅助（辅助按技能过滤有效组合）· 技能/辅助 1-5 级 · 装备系统
@@ -8,7 +8,7 @@
    ============================================================ */
 
 let W = 375, H = 667;
-const ZOOM = 0.8;
+let ZOOM = 0.8;
 let VIEW_W = W / ZOOM, VIEW_H = H / ZOOM;
 function isDesktopLayout() {
   // 桌面网页与 Windows 成品使用 PC 横屏；手机浏览器和小游戏使用竖屏触控。
@@ -71,6 +71,7 @@ function renderDprCap() {
 function resize() {
   const desktop = isDesktopLayout();
   W = desktop ? 1280 : 375; H = desktop ? 720 : 667;
+  ZOOM = desktop ? 0.92 : 0.8;
   VIEW_W = W / ZOOM; VIEW_H = H / ZOOM;
   const dpr = Math.min(window.devicePixelRatio || 1, renderDprCap());
   const s = Math.min(window.innerWidth / W, window.innerHeight / H);
@@ -162,7 +163,7 @@ function drawStick(x, y, size, walk, color) {
 
 /* ---------- Build 定义 ---------- */
 const SKILL_DEFS = {
-  cyclone:  { name: '旋转蜡笔',   desc: '蜡笔环绕切割身边敌人' },
+  cyclone:  { name: '连笔蜡笔',   desc: '在怪物身上画短直线；同线多怪叠2层，满3层刮蜡' },
   volcanic: { name: '火山压痕',   desc: '重击纸面，裂缝朝最近的怪物连续喷发' },
   tornado:  { name: '分叉纸飞机', desc: '纸飞机命中后向四周分裂' },
   chainclip:{ name: '链条回形针', desc: '连锁弹跳；无新目标时以 45% 伤害续击原目标' },
@@ -170,7 +171,7 @@ const SKILL_DEFS = {
   spark:    { name: '慢速墨滴',   desc: '前两颗瞄准敌人；反弹后增伤 50% 并弱追踪' },
   ballista: { name: '图钉炮台',   desc: '自动射击；集火同一目标时逐发加速' },
   boomerang:{ name: '回力橡皮擦', desc: '返程伤害 +35%；接回后当前冷却 -35%' },
-  vortex:   { name: '涂改带刀阵', desc: '六枚碎片组成连续整圈刀阵，越叠越多' },
+  vortex:   { name: '涂改带撕页', desc: '封住怪物所在区域，短暂延迟后整片撕起' },
   candle:   { name: '蜡烛头',     desc: '持续灼烧周围敌人，单圈伤害提升' },
   icespear: { name: '冰锥图钉',   desc: '优先 Boss/精英；对减速目标伤害 +25%' },
   inkrain:  { name: '毒墨雨',     desc: '召唤数片毒墨云，持续淋伤下方敌人' },
@@ -182,7 +183,7 @@ const SKILL_DEFS = {
   cola:     { name: '冰可乐新星', desc: '冻慢周围敌人；命中已减速目标追加碎冰' }
 };
 const SKILL_EVOLUTIONS = {
-  cyclone:  { 3: '质变：增加反向旋转的外圈笔迹', 5: '觉醒：三重蜡笔风暴，范围和频率提升' },
+  cyclone:  { 3: '质变：追加一条 60% 伤害的短直涂抹', 5: '觉醒：三重短直涂抹，施法间隔缩短 28%' },
   volcanic: { 3: '质变：裂缝向左右分支', 5: '觉醒：延长火山带，末端大范围喷发' },
   tornado:  { 3: '质变：纸飞机额外分裂一代', 5: '觉醒：大飞机编队，连续分裂' },
   arc:      { 3: '质变：主电弧额外分叉', 5: '觉醒：连锁落点留下持续雷网' },
@@ -295,6 +296,7 @@ const SUPPORTS = {
 };
 function supportUsable(sid, aid) {
   const sp = SUPPORTS[sid];
+  if (!sp) return false;
   if (sp.skills && !sp.skills.includes(aid)) return false;
   return sp.tag === 'all' || (SKILL_TAGS[aid] || []).includes(sp.tag);
 }
@@ -351,7 +353,7 @@ const PASSIVES = [
   { id: 'hpup', name: '厚纸', desc: '最大生命 +20 并回复 20', fx: () => { player.maxhp += 20; player.hp = Math.min(player.maxhp, player.hp + 20); } },
   { id: 'magnet', name: '灵感', desc: '普通怪物击杀经验 +15%', fx: () => player.xpMul *= 1.15 },
   { id: 'crit', name: '重墨', desc: '暴击率 +10%（双倍伤害）', fx: () => player.crit += 0.1 },
-  { id: 'inkmaster', name: '泼墨', desc: '全部技能与弹反范围 +20%', once: true, fx: () => { player.taken.inkmaster = true; player.radMul *= 1.2; } },
+  { id: 'inkmaster', name: '泼墨', desc: '全部技能与弹反范围 +15%；弹反后 2 秒内下一主动伤害 +15%', once: true, fx: () => { player.taken.inkmaster = true; player.radMul *= 1.15; } },
   { id: 'fountain', name: '笔芯连供', desc: '全部技能冷却与墨潮蓄力时间 -12%，但全部伤害 -8%', once: true, fx: () => { player.taken.fountain = true; player.cdMul *= 0.88; player.dmgMul *= 0.92; } },
   { id: 'inkarmor', name: '墨层护膜', desc: '站在己方墨迹上，受到伤害 -20%', once: true, fx: () => player.taken.inkarmor = true },
   { id: 'inkpower', name: '领地笔意', desc: '站在己方墨迹上，全部伤害 +20%', once: true, fx: () => player.taken.inkpower = true }
@@ -427,31 +429,45 @@ function grantEquipmentExperience(growth, slot, amount) {
   track.level = level; track.xp = level >= equipmentRule().maxLevel ? 0 : xp;
   return { levels, overflow, level, xp: track.xp };
 }
-function itemValues(key, rarity = 0) {
+function itemValues(key, rarity = 0, roll = 100) {
   const def = ITEM_DEFS[key], out = {};
-  if (def && def.v) for (const k in def.v) out[k] = def.v[k][rarity];
+  if (def && def.v) for (const k in def.v) {
+    const value = def.v[k][rarity];
+    out[k] = def.bossSet ? value * Math.max(50, Math.min(100, Number(roll) || 100)) / 100 : value;
+  }
   return out;
 }
 function itemV(key, prop, legacy = 0) {
   const eq = equipped(key); if (!eq) return 0;
   const def = ITEM_DEFS[key];
-  return def.v && def.v[prop] ? def.v[prop][rarityIndex(eq)] : legacy;
+  return def.v && def.v[prop] ? itemValues(key, rarityIndex(eq), eq.roll)[prop] : legacy;
 }
-function itemDescription(key, rarity = 0) {
+function itemDescription(key, rarity = 0, roll = 100) {
   const def = ITEM_DEFS[key];
-  return def.text ? def.text(itemValues(key, rarity)) : (def.fx || '');
+  return def.text ? def.text(itemValues(key, rarity, roll)) : (def.fx || '');
 }
 function rollRarity() {
   let roll = Math.random() * RARITY_LIST.reduce((s, r) => s + r.weight, 0);
   for (let i = 0; i < RARITY_LIST.length; i++) { roll -= RARITY_LIST[i].weight; if (roll < 0) return i; }
   return 0;
 }
+function equipmentDropRarity() {
+  const tiers = equipmentRule().rarityByStage || [{ minStage: 1, weights: [72, 28, 0, 0] }], stage = player ? curSt() : 1;
+  let weights = tiers[0].weights;
+  for (const tier of tiers) if (stage >= tier.minStage) weights = tier.weights;
+  let roll = Math.random() * weights.reduce((sum, weight) => sum + weight, 0);
+  for (let i = 0; i < weights.length; i++) { roll -= weights[i]; if (roll < 0) return i; }
+  return 0;
+}
 function makeEquipmentDrop(x, y) {
-  return { x, y, item: ITEM_KEYS[Math.floor(Math.random() * ITEM_KEYS.length)], rarity: rollRarity(), bob: Math.random() * 6 };
+  // 普通随机池始终排除 Boss 套装；品质随当前页数提升，Boss 专属奖励仍由套装系统接管。
+  const pool = ITEM_KEYS.filter(key => !ITEM_DEFS[key].bossSet);
+  const rarity = equipmentDropRarity();
+  return { x, y, item: pool[Math.floor(Math.random() * pool.length)], rarity, bob: Math.random() * 6 };
 }
 
 /* ---------- 游戏状态 ---------- */
-let state, gameTime, kills, camX, camY, shakeT, cycAng, crumpleT, hitStopT, levelupDelayT;
+let state, gameTime, kills, camX, camY, shakeT, cycAng, crumpleT, hitStopT, levelupDelayT, finalRewardsPending;
 let levelupPickAfter = 0;   // 三选一出现后的 0.5 秒输入锁，避免升级瞬间误触
 let equipmentPickAfter = 0; // 装备替换弹窗同样使用独立的真实时间输入锁
 let player, enemies, bullets, ebullets, drops, floats, lightnings, erupts, minions, totems, sparks, toasts, cards, cardRects, cardDetailRects, hazards, blades, clouds, brands, novas, followups, fields, erases;
@@ -822,7 +838,7 @@ const joy = { active: false, id: -1, bx: JOY_HOME.x, by: JOY_HOME.y, dx: 0, dy: 
 
 let pendingEquipment = null, diveDecoys = [], absorbShatters = [];
 function resetGame() {
-  state = 'start'; gameTime = 0; kills = 0; shakeT = 0; cycAng = 0; crumpleT = 0; hitStopT = 0; levelupDelayT = -1;
+  state = 'start'; gameTime = 0; kills = 0; shakeT = 0; cycAng = 0; crumpleT = 0; hitStopT = 0; levelupDelayT = -1; finalRewardsPending = false;
   levelupPickAfter = 0; equipmentPickAfter = 0; damageStats = Object.create(null);
   joy.active = false; joy.id = -1; joy.dx = 0; joy.dy = 0;
   camX = 0; camY = 0; spawnAcc = 0; nextId = 1; pendingEquipment = null; diveDecoys = []; absorbShatters = [];
@@ -871,7 +887,8 @@ function recomputeEquip() {
     player.eqAtk += stats.atk; hpBonus += stats.hp;
   }
   player.eqCrit += itemV('glove', 'crit', 15) / 100;
-  player.eqSpd *= 1 + itemV('shoes', 'speed', 12) / 100;
+  const feet = player.equip.feet;
+  if (feet) player.eqSpd *= 1 + itemV(feet.key, 'speed') / 100;
   const hpRatio = player.maxhp > 0 ? player.hp / player.maxhp : 1;
   player.maxhp = BATTLE.player.hp + (player.metaHpBonus || 0) + hpBonus + player.bonusHp;
   player.hp = Math.max(1, Math.round(player.maxhp * hpRatio));
@@ -929,11 +946,12 @@ function skillCalc(a) {
   }
   if (isStrike && rapid) cd /= 1 + rapid;
   const supportCount = a.supports.length;
-  const compassRadius = Math.min(itemV('compass', 'cap', 20), itemV('compass', 'radius', 5) * supportCount) / 100;
+  const compassRadius = Math.min(itemV('compass', 'cap', 20), itemV('compass', 'radius', 4) * supportCount) / 100;
+  const compassDamage = Math.min(itemV('compass', 'dmgCap'), itemV('compass', 'dmg') * supportCount) / 100;
   const totalSupports = player.actives.reduce((n, sk) => n + sk.supports.length, 0);
   const coreCd = Math.min(itemV('multicore', 'cap'), Math.floor(totalSupports / 4) * itemV('multicore', 'cd')) / 100;
   return {
-    dmg: dmg * player.dmgMul * (1 + player.eqAtk / 100) * player.condDmg * (player.itemAmbushT > 0 ? 1.45 : 1),
+    dmg: dmg * player.dmgMul * (1 + player.eqAtk / 100) * player.condDmg * (1 + compassDamage) * (player.itemAmbushT > 0 ? 1.45 : 1) * (player.itemParryT > 0 && player.taken.inkmaster ? 1.15 : 1),
     cd: cd * player.cdMul * Math.max(0.35, 1 - coreCd),
     count, rad: rad * player.radMul * player.eqRad * (1 + compassRadius),
     pierce, chain, dot, proj, areaT, unleash, vuln,
@@ -946,10 +964,11 @@ function skillCalc(a) {
 function toast(txt) { toasts.push({ txt, t: 2.8 }); if (toasts.length > 3) toasts.shift(); }
 
 /* ---------- 敌人（基础生命/攻击在 enemy-config.js 中配置） ---------- */
-/* ---------- 关卡定义：10 页作业本 ---------- */
-const STAGE_NAMES = ['横线练习本', '数学方格本', '田字格本', '英语本', '米字格本', '作文本', '五线谱本', '点阵本', '坐标纸', '草稿纸', '纸缝荒原·样板'];
-// 每关纸色：米白/淡绿/米黄/淡蓝/暖黄/奶油/灰白/淡紫灰/淡青/旧黄
-const STAGE_PAPER = ['#f5f1e6', '#eaf2e6', '#f7efdc', '#ecf1f8', '#f6eeda', '#fdf4e8', '#f0eee8', '#efeff4', '#eaf2f6', '#eee2cc', '#f5f1e6'];
+/* ---------- 关卡定义：20 页作业本，每页十波 ---------- */
+const STAGE_NAMES = ['横线练习本', '数学方格本', '田字格本', '英语本', '米字格本', '作文本', '五线谱本', '点阵本', '坐标纸', '草稿纸',
+  '纸缝荒原', '墨壳山脊', '缚根花圃', '钉角车道', '百荚温室', '盲根沼泽', '折光羽林', '百眼石阵', '断线刀谱', '混生终页'];
+const STAGE_PAPER = ['#f5f1e6', '#eaf2e6', '#f7efdc', '#ecf1f8', '#f6eeda', '#fdf4e8', '#f0eee8', '#efeff4', '#eaf2f6', '#eee2cc',
+  '#f2e9d8', '#e7ecdf', '#edf2df', '#f2e5d9', '#e9edda', '#e1eeea', '#e4f0f5', '#eee7f3', '#e6edef', '#f1e3eb'];
 const BOSS_DEFS = [
   { name: '乱线魔王',       arch: 'charger', hp: 2200,  r: 51, dmg: 30, sp: 64 },
   { name: '涂改巨灵',       arch: 'blob',    hp: 3400,  r: 40, dmg: 32, sp: 36 },
@@ -961,7 +980,7 @@ const BOSS_DEFS = [
   { name: '暴走橡皮',       arch: 'charger', hp: 13500, r: 42, dmg: 52, sp: 84 },
   { name: '万墨之渊',       arch: 'blob',    hp: 16500, r: 54, dmg: 55, sp: 36 },
   { name: '笔记本之主',     arch: 'caster',  hp: 22000, r: 70, dmg: 60, sp: 46 },
-  // 内部挑战编号 11—20，对应扩展方案第 19—28 页；暂不改动原有关卡流程。
+  // 正式主线第 11—20 页：六足与混生 Boss 沿用各自独立战斗行为。
   { name: '荒原六足狸',     arch: 'charger', hp: 69520,  r: 58, dmg: 125, sp: 88, page: 19, hexapod: 'feral' },
   { name: '墨壳山龟',       arch: 'blob',    hp: 77800,  r: 72, dmg: 130, sp: 34, page: 20, hexapod: 'turtle' },
   { name: '缚根捕笼花',     arch: 'caster',  hp: 87200,  r: 64, dmg: 136, sp: 38, page: 21, hexapod: 'flower' },
@@ -973,7 +992,7 @@ const BOSS_DEFS = [
   { name: '断线螳王',       arch: 'charger', hp: 172700, r: 63, dmg: 181, sp: 82, page: 27, hexapod: 'mantis' },
   { name: '终页·混生母体',  arch: 'blob',    hp: 193500, r: 82, dmg: 190, sp: 58, page: 28, hexapod: 'mother' }
 ];
-function curSt() { return Math.min(10, Math.ceil(player.level / 10)); }
+function curSt() { return Math.min(20, Math.ceil(player.level / 10)); }
 function scaledEnemyStats(d0) {
   const g = ENEMY_GROWTH, minutes = gameTime / 60, stage = curSt(), wave = Math.max(1, player.level);
   return {
@@ -1337,14 +1356,18 @@ function killEnemy(e) {
   if (e.boss) {
     shakeT = 0.5;
     const bossTest = typeof window !== 'undefined' && window.__metaRuntime && window.__metaRuntime.run && window.__metaRuntime.run.mode === 'bossTest';
-    if (!bossTest) drops.push({ ...makeEquipmentDrop(e.x, e.y), bob: 0 });
-    if (bossTest || e.stage >= 10) { crumpleT = 0.8; state = 'win'; }
+    if (!bossTest) {
+      const special = typeof BossSetRuntime !== 'undefined' && BossSetRuntime.spawnBossRewards(e);
+      if (!special) drops.push({ ...makeEquipmentDrop(e.x, e.y), bob: 0 });
+    }
+    if (bossTest) { crumpleT = 0.8; state = 'win'; }
+    else if (e.stage >= 20) { finalRewardsPending = true; toast('终页完成 · 拾取地面战利品后完成本局'); }
     else toast(e.name + ' 被涂掉了！第 ' + e.stage + ' 页通过！');
     return;
   }
   erases.push({ x: e.x, y: e.y, r: e.r, t: 0.28, seed: e.id });
   if (erases.length > 140) erases.shift();
-  const rate = e.elite ? 0.35 : (e.type === 'rage' ? 0.15 : 0.025);
+  const rate = e.elite ? 0.05 : (e.type === 'rage' ? 0.01 : 0.002);
   if (Math.random() < rate && drops.length < 12) {
     drops.push(makeEquipmentDrop(e.x, e.y));
   }
@@ -1964,18 +1987,106 @@ function projOpts(c, life) {
     blast: c.blast, chainN: c.chain, col: c.col, hadesSkill: c.hadesSkill
   };
 }
+// 连笔蜡笔：短直线独立落在主目标身上；同线多怪只是碰撞收益，不追踪、不拐弯。
+function triggerCycloneScrape(e, bl, damageScale = 1) {
+  if (e.dead) return;
+  e.waxStacks = 0;
+  e.waxScrapes = (e.waxScrapes || 0) + 1;
+  sparks.push({ kind: 'wax', x: e.x, y: e.y, r: Math.max(16, e.r), t: 0.38, maxT: 0.38, color: e.waxColor, seed: e.id });
+  areaHit(e, 18 * bl.c.dmg * damageScale, bl.c, bl.x, bl.y, bl.length * 0.5, Math.hypot(e.x - bl.x, e.y - bl.y));
+}
+function applyCycloneWax(e, bl, combo) {
+  if (e.dead) return;
+  e.waxStacks = (e.waxStacks || 0) + (combo ? 2 : 1);
+  e.waxColor = bl.c.col || INK;
+  if (e.waxStacks >= 3) triggerCycloneScrape(e, bl);
+}
+function resolveCycloneStroke(bl) {
+  if (bl.resolved) return;
+  bl.resolved = true;
+  const hits = [];
+  for (const e of enemies) {
+    if (e.dead) continue;
+    const distance = pointSegDist(e, bl.points[0], bl.points[1]);
+    if (distance < e.r + bl.width) hits.push(e);
+  }
+  bl.hitIds = hits.map(e => e.id);
+  bl.comboCount = hits.length;
+  const combo = hits.length >= 2;
+  for (const e of hits) areaHit(e, bl.damage, bl.c, bl.x, bl.y, bl.length * 0.5, Math.hypot(e.x - bl.x, e.y - bl.y));
+  for (const e of hits) applyCycloneWax(e, bl, combo);
+  if (combo) floats.push({ x: bl.x, y: bl.y - 24, txt: '连笔 ×' + hits.length + '  厚涂 +2', t: 0.65, color: bl.c.col || INK });
+  addInkStroke(bl.points[0].x, bl.points[0].y, bl.points[1].x, bl.points[1].y, bl.c.col, false);
+}
+function spawnCycloneStroke(c, angle, damageScale = 1, delay = 0, focus = null, options = null) {
+  if (!focus || focus.dead) return null;
+  const variant = options && options.variant || 0;
+  const length = (focus.r * 2 + 42) * c.rad * (1 + (c.sweep || 0));
+  const width = 8 * c.rad * (1 + (c.sweep || 0));
+  const strokeAngle = options && Number.isFinite(options.angle) ? options.angle :
+    ((focus.id * 53 + Math.floor(gameTime * 10) * 29 + variant * 67) % 180) * Math.PI / 180;
+  const cs = Math.cos(strokeAngle), sn = Math.sin(strokeAngle);
+  const points = options && options.points ? options.points : [
+    { x: focus.x - cs * length * 0.5, y: focus.y - sn * length * 0.5 },
+    { x: focus.x + cs * length * 0.5, y: focus.y + sn * length * 0.5 }
+  ];
+  const bl = { kind: 'scribble', x: (points[0].x + points[1].x) * 0.5, y: (points[0].y + points[1].y) * 0.5,
+    angle: strokeAngle, points, length, width, hitIds: [], comboCount: 0,
+    t: 0.32 + delay, maxT: 0.32, delay, damage: 11 * c.dmg * damageScale, c, resolved: false };
+  blades.push(bl);
+  const strokes = blades.filter(b => b.kind === 'scribble');
+  while (strokes.length > 24) { const old = strokes.shift(), index = blades.indexOf(old); if (index >= 0) blades.splice(index, 1); }
+  if (delay <= 0) resolveCycloneStroke(bl);
+  return bl;
+}
+function drawCycloneWax(e) {
+  if (!e.waxStacks) return;
+  const r = Math.max(5, e.r), color = e.waxColor || INK;
+  setSeed(7650 + e.id * 17);
+  ctx.globalAlpha = 0.72;
+  jline(e.x - r * 0.58, e.y - r * 0.2, e.x + r * 0.58, e.y + r * 0.12, color, 2.2);
+  if (e.waxStacks > 1) {
+    jline(e.x - r * 0.48, e.y + r * 0.38, e.x + r * 0.42, e.y - r * 0.42, color, 2.1);
+    jline(e.x - r * 0.5, e.y + r * 0.08, e.x + r * 0.5, e.y + r * 0.34, color, 1.4);
+  }
+  ctx.globalAlpha = 1;
+}
+function tapeContains(bl, e) {
+  const dx = e.x - bl.x, dy = e.y - bl.y, cs = Math.cos(bl.ang), sn = Math.sin(bl.ang);
+  const lx = dx * cs + dy * sn, ly = -dx * sn + dy * cs;
+  return Math.abs(lx) <= bl.length * 0.5 + e.r && Math.abs(ly) <= bl.width * 0.5 + e.r;
+}
+function resolveVortexTape(bl, damageScale = 1) {
+  for (const e of enemies) {
+    if (e.dead || !tapeContains(bl, e)) continue;
+    e.slowT = Math.max(e.slowT || 0, 1.2);
+    areaHit(e, bl.damage * damageScale, bl.c, bl.x, bl.y, bl.length * 0.5, Math.hypot(e.x - bl.x, e.y - bl.y));
+  }
+}
+function spawnVortexTape(c, target, damageScale = 1, angleOffset = 0) {
+  const hasTarget = target && Number.isFinite(target.x) && Number.isFinite(target.y);
+  const x = hasTarget ? target.x : player.x + Math.cos(player.faceA) * 85;
+  const y = hasTarget ? target.y : player.y + Math.sin(player.faceA) * 85;
+  const angle = (hasTarget ? Math.atan2(y - player.y, x - player.x) : player.faceA) + angleOffset;
+  const length = 150 * c.rad * (1 + (c.sweep || 0)), width = 32 * c.rad * (1 + (c.sweep || 0));
+  const bl = { kind: 'tape', x, y, ang: angle, length, width, t: BATTLE.skills.vortexDuration * c.areaT,
+    maxT: BATTLE.skills.vortexDuration * c.areaT, arm: 0.35, tearT: 0, tick: 0.7,
+    damage: 10 * c.dmg * damageScale, c, torn: false };
+  blades.push(bl);
+  const tapes = blades.filter(b => b.kind === 'tape'), cap = BATTLE.skills.vortexCap + c.count;
+  while (tapes.length > cap) { const old = tapes.shift(), index = blades.indexOf(old); if (index >= 0) blades.splice(index, 1); }
+  addInkStroke(x - Math.cos(angle) * length * 0.5, y - Math.sin(angle) * length * 0.5,
+    x + Math.cos(angle) * length * 0.5, y + Math.sin(angle) * length * 0.5, c.col, false);
+  return bl;
+}
 function fireSkill(a, c) {
   const px = player.x, py = player.y;
   if (a.id === 'cyclone') {
-    const baseRad = BATTLE.skills.closeRadius * c.rad * (1 + c.sweep);
-    const rings = a.lvl >= 5 ? [1, 1.32, 1.64] : (a.lvl >= 3 ? [1, 1.35] : [1]);
-    for (let ri = 0; ri < rings.length; ri++) {
-      const rad = baseRad * rings[ri];
-      for (const e of enemies) {
-        const d = Math.hypot(e.x - px, e.y - py);
-        if (!e.dead && d < rad + e.r) areaHit(e, 11 * c.dmg * (ri ? 0.6 : 1), c, px, py, rad, d);
-      }
-    }
+    const target = nearestEnemy(px, py, 420 * c.rad);
+    if (!target) return;
+    const angle = Math.atan2(target.y - py, target.x - px);
+    const strokes = a.lvl >= 5 ? 3 : (a.lvl >= 3 ? 2 : 1);
+    for (let i = 0; i < strokes; i++) spawnCycloneStroke(c, angle, i ? 0.6 : 1, i * 0.06, target, { variant: i });
   } else if (a.id === 'volcanic') {
     const tgt = nearestEnemy(px, py, 520 * c.rad);   // 朝最近的怪物方向喷发
     const va = tgt ? Math.atan2(tgt.y - py, tgt.x - px) : player.faceA;
@@ -2066,15 +2177,21 @@ function fireSkill(a, c) {
       fireBullet(px, py, base + (i - (n - 1) / 2) * 0.35, 330 * c.proj, 18 * c.dmg * (1 + c.bdmg), 'boom',
         Object.assign(projOpts(c, 2.4), { hits: 999, traveled: 0, returning: false }));
     }
-  } else if (a.id === 'vortex') {      // 涂改带刀阵：均匀整圈分布，施放一次补两枚
-    const cap = BATTLE.skills.vortexCap + c.count;
+  } else if (a.id === 'vortex') {      // 涂改带撕页：封住目标位置，0.35 秒后撕起并留下持续伤害区
+    const first = nearestEnemy(px, py, 430 * c.rad);
     for (let i = 0; i < BATTLE.skills.vortexPerCast; i++) {
-      const ang = blades.length ? blades[0].ang : cycAng;
-      blades.push({ ang, t: BATTLE.skills.vortexDuration * c.areaT, dmg: 10 * c.dmg, c, rad: c.rad,
-        x: px + Math.cos(ang) * BATTLE.skills.closeRadius * c.rad,
-        y: py + Math.sin(ang) * BATTLE.skills.closeRadius * c.rad });
+      let target = i === 0 ? first : nearestEnemy(px, py, 430 * c.rad, first);
+      if (!target && first) {
+        const angle = Math.atan2(first.y - py, first.x - px), side = i ? 1 : -1;
+        target = { x: first.x - Math.sin(angle) * 52 * side, y: first.y + Math.cos(angle) * 52 * side };
+      }
+      if (!target) {
+        const side = i ? 1 : -1;
+        target = { x: px + Math.cos(player.faceA) * 85 - Math.sin(player.faceA) * 42 * side,
+          y: py + Math.sin(player.faceA) * 85 + Math.cos(player.faceA) * 42 * side };
+      }
+      spawnVortexTape(c, target);
     }
-    while (blades.length > cap) blades.shift();
   } else if (a.id === 'candle') {      // 0.4 秒一次：约 17.5 秒伤、2.5 墨/秒，避免拖垮墨水循环
     const rad = BATTLE.skills.closeRadius * c.rad;
     for (const e of enemies) {
@@ -2696,6 +2813,7 @@ canvas.addEventListener('pointercancel', endPointer);
 
 /* ---------- 主更新 ---------- */
 function update(dt) {
+  if (finalRewardsPending && !drops.some(dr => dr.bossSet)) { finalRewardsPending = false; crumpleT = 0.8; state = 'win'; return; }
   gameTime += dt;
   regenInkResourceBudgets(dt);
   crumpleT = Math.max(0, crumpleT - dt);
@@ -2751,7 +2869,7 @@ function update(dt) {
   player.goldT = Math.max(0, player.goldT - dt);
   shakeT = Math.max(0, shakeT - dt);
 
-  const bossAlive = enemies.some(e => e.boss && !e.dead);
+  const bossAlive = finalRewardsPending || enemies.some(e => e.boss && !e.dead);
   if (!bossAlive) {   // Boss 在场：停刷小怪、冻结波数，Boss 死后才翻页继续
     const interval = Math.max(0.18, 1.1 - gameTime * 0.0015);
     const density = gameTime < 30 ? 2 : (gameTime < 90 ? 3 : 4);
@@ -2763,10 +2881,10 @@ function update(dt) {
     }
     if (levelupDelayT < 0 && player.xp >= player.xpNext) levelupDelayT = BATTLE.feedback.levelupDelay;
   }
-  // 经验满后先留出 0.5 秒看清战斗结果，再升级并弹出三选一
+  // 经验满后先留出 0.5 秒看清战斗结果；墨潮蓄力期间暂停倒计时，松手或取消后再升级。
   if (levelupDelayT >= 0) {
-    levelupDelayT -= dt;
-    if (levelupDelayT <= 0) {
+    if (!player.surgeCharging) levelupDelayT -= dt;
+    if (levelupDelayT <= 0 && !player.surgeCharging) {
       levelupDelayT = -1;
       player.xp -= player.xpNext; player.level++;
       player.xpNext = xpForNextLevel(player.level);
@@ -3122,26 +3240,24 @@ function update(dt) {
   }
   totems = totems.filter(tt => tt.t > 0);
 
-  // 涂改带刀阵：均匀整圈；上一位置到当前位置的整段轨迹都能命中，避免高速漏怪
-  for (let i = 0; i < blades.length; i++) {
-    const bl = blades[i], oldX = bl.x, oldY = bl.y;
-    bl.t -= dt; bl.ang += dt * 3.2;
-    const orbit = bl.ang + i / Math.max(1, blades.length) * Math.PI * 2;
-    const radius = BATTLE.skills.closeRadius * bl.rad * (1 + (bl.c.sweep || 0));
-    bl.x = player.x + Math.cos(orbit) * radius;
-    bl.y = player.y + Math.sin(orbit) * radius;
-    if (!bl.orbitReady) {
-      bl.orbitReady = true; bl.trailX = bl.x; bl.trailY = bl.y; bl.trailS = null;
-      addLinkedTrail(bl, bl.x, bl.y, bl.c.col, false, 9, 0.55, 10, 'trailX', 'trailY', 'trailS');
-      continue;   // 新生成的一帧只落下当前笔触，不从角色中心拉出错误扫线
+  // 连笔与涂改带都固定在世界坐标：笔痕一次结算，涂改带先封区再撕起并持续伤害。
+  for (const bl of blades) {
+    bl.t -= dt;
+    if (bl.kind === 'scribble') {
+      if (bl.delay > 0) {
+        bl.delay -= dt;
+        if (bl.delay <= 0) resolveCycloneStroke(bl);
+      } else if (!bl.resolved) resolveCycloneStroke(bl);
+      continue;
     }
-    addLinkedTrail(bl, bl.x, bl.y, bl.c.col, false, 9, 0.55, 10, 'trailX', 'trailY', 'trailS');
-    for (const e of enemies) {
-      if (e.dead || e.vorCd > 0) continue;
-      if (pointSegDist(e, { x: oldX, y: oldY }, bl) < e.r + 10 * (1 + (bl.c.sweep || 0))) {
-        e.vorCd = 0.35;
-        areaHit(e, bl.dmg, bl.c, bl.x, bl.y);
-      }
+    bl.arm -= dt; bl.tick -= dt; bl.tearT = Math.max(0, bl.tearT - dt);
+    if (!bl.torn && bl.arm <= 0) {
+      bl.torn = true; bl.tearT = 0.28;
+      resolveVortexTape(bl);
+      sparks.push({ x: bl.x, y: bl.y, t: 0.24, color: bl.c.col });
+    } else if (bl.torn && bl.tick <= 0) {
+      bl.tick = 0.7 / (1 + (bl.c.retick || 0));
+      resolveVortexTape(bl, 0.35);
     }
   }
   blades = blades.filter(b => b.t > 0);
@@ -4191,6 +4307,7 @@ function render() {
   for (const e of enemies) {
     if (e.x < camX - 70 || e.x > camX + VIEW_W + 70 || e.y < camY - 70 || e.y > camY + VIEW_H + 70) continue;
     drawEnemy(e);
+    drawCycloneWax(e);
   }
   for (const m of minions) {
     setSeed(m.walk * 1000 | 0);
@@ -4275,21 +4392,50 @@ function render() {
     if (f.kind === 'ice') drawIceCrystal(f.x, f.y, Math.min(48, f.r * 0.38), boilT * 0.015, 0.85);
     ctx.globalAlpha = 1;
   }
-  // 涂改带刀阵：淡整圈轨迹 + 均匀分布的锯齿碎片
-  if (blades.length) {
-    const guide = blades[0], radius = BATTLE.skills.closeRadius * guide.rad * (1 + (guide.c.sweep || 0));
-    setSeed(7599); ctx.globalAlpha = 0.16;
-    jcircle(player.x, player.y, radius, guide.c.col || INK, 5);
-    ctx.globalAlpha = 1;
-  }
+  // 连笔使用怪物中心短直线厚涂，以细蜡笔主线和少量蜡屑显影；涂改带保持纸面封条。
   for (const bl of blades) {
-    setSeed(7600 + Math.floor(bl.ang * 10));
-    const bc0 = bl.c.col || INK;
-    ctx.globalAlpha = Math.min(1, bl.t * 2);
-    const ba = Math.atan2(bl.y - player.y, bl.x - player.x) + Math.PI / 2, bc = Math.cos(ba), bs = Math.sin(ba);
-    jline(bl.x + bc * 7, bl.y + bs * 7, bl.x - bc * 7 - bs * 4, bl.y - bs * 7 + bc * 4, bc0, 2.5);
-    jline(bl.x + bc * 7, bl.y + bs * 7, bl.x - bc * 7 + bs * 4, bl.y - bs * 7 - bc * 4, bc0, 2.5);
-    jline(bl.x - bc * 7 - bs * 4, bl.y - bs * 7 + bc * 4, bl.x - bc * 7 + bs * 4, bl.y - bs * 7 - bc * 4, bc0, 1.5);
+    if (bl.kind === 'scribble') {
+      if (bl.delay > 0) continue;
+      setSeed(7600 + Math.floor(bl.x * 0.13 + bl.y * 0.17 + bl.angle * 20));
+      const fade = Math.min(0.9, bl.t / bl.maxT * 1.45);
+      const progress = Math.min(1, Math.max(0.08, (bl.maxT - bl.t) / 0.11));
+      const visible = Math.max(2, Math.min(bl.points.length, Math.ceil(bl.points.length * progress)));
+      const color = bl.c.col || INK;
+      for (let i = 1; i < visible; i++) {
+        const a = bl.points[i - 1], b = bl.points[i];
+        ctx.globalAlpha = fade * 0.13;
+        jline(a.x, a.y, b.x, b.y, color, bl.width * 0.82);
+        ctx.globalAlpha = fade * 0.9;
+        jline(a.x, a.y, b.x, b.y, color, Math.max(2.8, bl.width * 0.36));
+        if (i % 3 === 0) {
+          ctx.globalAlpha = fade * 0.24;
+          jline(a.x + 2, a.y - 1, b.x + 1, b.y - 2, color, 1.1);
+        }
+      }
+      const tip = bl.points[visible - 1];
+      ctx.globalAlpha = fade;
+      jcircle(tip.x, tip.y, 2.2, color, 1.3);
+    } else {
+      setSeed(7700 + Math.floor(bl.x * 0.2 + bl.y * 0.2));
+      const cs = Math.cos(bl.ang), sn = Math.sin(bl.ang), nx = -sn, ny = cs;
+      const point = (u, v) => ({ x: bl.x + cs * u + nx * v, y: bl.y + sn * u + ny * v });
+      const lift = bl.torn ? (1 - bl.tearT / 0.28) * 13 : 0;
+      const p1 = point(-bl.length / 2, -bl.width / 2), p2 = point(bl.length / 2, -bl.width / 2 - lift);
+      const p3 = point(bl.length / 2 - 7, bl.width / 2 - lift), p4 = point(-bl.length / 2, bl.width / 2);
+      ctx.globalAlpha = Math.min(0.92, bl.t * 1.5);
+      ctx.fillStyle = '#fffdf5'; ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+      ctx.lineTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y); ctx.closePath(); ctx.fill();
+      const bc0 = bl.c.col || INK;
+      jline(p1.x, p1.y, p2.x, p2.y, bc0, 2.2); jline(p4.x, p4.y, p3.x, p3.y, bc0, 2.2);
+      jline(p1.x, p1.y, p4.x, p4.y, bc0, 1.4);
+      const c1 = point(-bl.length * 0.42, 0), c2 = point(bl.length * 0.38, -lift);
+      jline(c1.x, c1.y, c2.x, c2.y, bc0, bl.torn ? 3.8 : 2.2);
+      for (let k = 0; k < 5; k++) {
+        const v = -bl.width / 2 + k * bl.width / 4 - lift;
+        const a = point(bl.length / 2 - (k % 2 ? 7 : 0), v), b = point(bl.length / 2 + 7, v + bl.width / 8);
+        jline(a.x, a.y, b.x, b.y, bc0, 1.6);
+      }
+    }
     ctx.globalAlpha = 1;
   }
   // 橡皮筋烙印：目标身上的拉伸橡皮筋圈
@@ -4327,21 +4473,6 @@ function render() {
     jline(s.x - c * half - sn * 2, s.y - sn * half + c * 2, s.x + c * half - sn * 2, s.y + sn * half + c * 2, inkFriendlyColor, 1.1);
   }
   ctx.globalAlpha = 1;
-  if (getActive('cyclone') && !player.diving) {
-    const ca = getActive('cyclone'), cc = skillCalc(ca), baseRad = BATTLE.skills.closeRadius * cc.rad * (1 + cc.sweep);
-    const rings = ca.lvl >= 5 ? [1, 1.32, 1.64] : (ca.lvl >= 3 ? [1, 1.35] : [1]);
-    for (let ri = 0; ri < rings.length; ri++) {
-      const rad = baseRad * rings[ri], n = ca.lvl >= 5 ? 4 : 3;
-      if (cc.core) drawCoreDamageZone(player.x, player.y, rad, cc, ri === 0);
-      for (let i = 0; i < n; i++) {
-        const a = cycAng * (ri % 2 ? -1 : 1) + ri * 0.4 + i * Math.PI * 2 / n;
-        const x1 = player.x + Math.cos(a) * rad, y1 = player.y + Math.sin(a) * rad;
-        const x2 = player.x + Math.cos(a + 0.9) * rad, y2 = player.y + Math.sin(a + 0.9) * rad;
-        setSeed(8800 + i + ri * 10);
-        jline(x1, y1, x2, y2, cc.col, ri === 2 ? 5 : 4);
-      }
-    }
-  }
   for (const b of bullets) {
     ctx.save();
     ctx.translate(b.x, b.y); ctx.scale(b.size || 1, b.size || 1); ctx.translate(-b.x, -b.y);
@@ -4507,9 +4638,25 @@ function render() {
   }
   drawPlayerResources();
   for (const s of sparks) {
-    const k = 1 - s.t / 0.18, sc = s.color || DARK;
-    ctx.globalAlpha = 1 - k;
-    setSeed(4000 + Math.floor(s.x * 3));
+    const k = 1 - s.t / (s.maxT || 0.18), sc = s.color || DARK;
+    ctx.globalAlpha = Math.max(0, 1 - k);
+    setSeed(4000 + Math.floor(s.x * 3) + (s.seed || 0));
+    if (s.kind === 'wax') {
+      const r = s.r || 16;
+      for (let i = 0; i < 6; i++) {
+        const a = i / 6 * Math.PI * 2 + 0.25, d = r * (0.55 + k * 0.95), size = 3 + k * 3;
+        jrect(s.x + Math.cos(a) * d - size * 0.5, s.y + Math.sin(a) * d - size * 0.5, size, size, sc, 1.5);
+      }
+      for (let i = 0; i < 4; i++) {
+        const start = i / 4 * Math.PI * 2 + 0.15;
+        for (let j = 1; j < 5; j++) {
+          const a0 = start + (j - 1) / 5 * 0.72, a1 = start + j / 5 * 0.72, rr = r * (0.88 + k * 0.18);
+          jline(s.x + Math.cos(a0) * rr, s.y + Math.sin(a0) * rr, s.x + Math.cos(a1) * rr, s.y + Math.sin(a1) * rr, sc, 2.8);
+        }
+      }
+      ctx.globalAlpha = 1;
+      continue;
+    }
     for (let i = 0; i < 6; i++) {
       const a = i / 6 * Math.PI * 2 + 0.3;
       const r0 = 3 + k * 4, r1 = 6 + k * 12;
@@ -4569,7 +4716,8 @@ function drawHUD() {
   setSeed(42);
   const boss = enemies.find(e => e.boss && !e.dead);
   const skillTop = boss && boss.huntBoss ? 88 : (boss ? 70 : 58);
-  const equipTop = skillTop + 12 + player.actives.length * 15 + 6;
+  const skillRow = window.SkillIconRuntime ? 24 : 15;
+  const equipTop = skillTop + 12 + player.actives.length * skillRow + 6;
   // 顶部只保留关卡、经验与击杀；技能下紧跟装备，不再占用底部操作区
   ctx.fillStyle = 'rgba(255,250,238,0.88)';
   ctx.fillRect(7, 4, W - 14, 45);
@@ -4613,11 +4761,14 @@ function drawHUD() {
   ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
   ctx.textAlign = 'left'; ctx.font = 'bold 11px ' + FONT;
   player.actives.forEach((a, i) => {
-    const nameTxt = SKILL_DEFS[a.id].name + ' Lv' + a.lvl;
-    const y = skillTop + 12 + i * 15;
-    ctx.fillStyle = INK; ctx.fillText(nameTxt, 16, y);
+    const hasIcon = !!window.SkillIconRuntime;
+    const nameTxt = SKILL_DEFS[a.id].name + (hasIcon ? '' : ' Lv' + a.lvl);
+    const y = skillTop + 12 + i * skillRow;
+    if (hasIcon) SkillIconRuntime.draw(a.id, 'active', 12, y - 15, 20, { level: a.lvl, state: a.supports.length + '/' + supportCap() });
+    const nameX = hasIcon ? 38 : 16;
+    ctx.fillStyle = INK; ctx.fillText(nameTxt, nameX, y);
     ctx.fillStyle = PURPLE;
-    ctx.fillText('辅 ' + a.supports.length + '/' + supportCap(), 16 + ctx.measureText(nameTxt).width + 10, y);
+    ctx.fillText('辅 ' + a.supports.length + '/' + supportCap(), nameX + ctx.measureText(nameTxt).width + 8, y);
   });
   const equipCount = SLOTS.filter(s => player.equip[s]).length;
   ctx.fillStyle = equipCount ? INK : GRAY; ctx.font = 'bold 10px ' + FONT;
@@ -4634,29 +4785,37 @@ function drawHUD() {
   if (player.characterId === 'idle' && window.IdleRuntime) {
     IdleRuntime.drawHUD(false);
   } else {
+    const icons = window.SkillIconRuntime;
     const absorbReady = player.absorbCd <= 0;
     ctx.fillStyle = player.absorbT > 0 ? 'rgba(210,225,255,0.96)' : 'rgba(255,250,238,0.94)';
     ctx.fillRect(absorbRect.x, absorbRect.y, absorbRect.w, absorbRect.h);
     jrect(absorbRect.x, absorbRect.y, absorbRect.w, absorbRect.h, absorbReady ? INK : GRAY, player.absorbT > 0 ? 3 : 2.2);
-    ctx.fillStyle = absorbReady ? INK : GRAY; ctx.font = 'bold 13px ' + FONT;
-    ctx.fillText(player.absorbT > 0 ? '吸墨中' : '吸墨', absorbRect.x + absorbRect.w / 2, absorbRect.y + 23);
+    if (icons) icons.draw('absorb', 'ink', absorbRect.x + 4, absorbRect.y + (absorbRect.h - 38) / 2, 38, { showLevel: false, state: absorbReady ? '' : player.absorbCd.toFixed(1), disabled: !absorbReady });
+    const absorbTextX = absorbRect.x + (icons ? 38 + (absorbRect.w - 38) / 2 : absorbRect.w / 2);
+    ctx.fillStyle = absorbReady ? INK : GRAY; ctx.font = 'bold ' + (icons ? 11 : 13) + 'px ' + FONT;
+    ctx.fillText(player.absorbT > 0 ? '吸墨中' : '吸墨', absorbTextX, absorbRect.y + 23, icons ? absorbRect.w - 40 : absorbRect.w);
     ctx.font = '8px ' + FONT;
-    ctx.fillText(absorbReady ? '弹反' : player.absorbCd.toFixed(1) + ' 秒', absorbRect.x + absorbRect.w / 2, absorbRect.y + 40);
+    ctx.fillText(absorbReady ? '弹反' : player.absorbCd.toFixed(1) + ' 秒', absorbTextX, absorbRect.y + 40, icons ? absorbRect.w - 40 : absorbRect.w);
     ctx.fillStyle = player.surgeCharging ? 'rgba(190,215,250,0.96)' : (player.special >= 100 ? 'rgba(210,225,255,0.96)' : 'rgba(255,250,238,0.94)');
     ctx.fillRect(specialRect.x, specialRect.y, specialRect.w, specialRect.h);
     jrect(specialRect.x, specialRect.y, specialRect.w, specialRect.h, player.special >= 100 ? INK : GRAY, player.surgeCharging ? 3 : 2.2);
-    ctx.fillStyle = player.special >= 100 ? INK : GRAY; ctx.font = 'bold 14px ' + FONT;
-    ctx.fillText(player.surgeCharging ? '蓄力中' : '墨潮', specialRect.x + specialRect.w / 2, specialRect.y + 18);
-    ctx.font = '9px ' + FONT;
-    ctx.fillText(player.surgeCharging ? Math.round(inkSurgeChargeRatio() * 100) + '% · 松开' : (player.special >= 100 ? '长按' : Math.floor(player.special) + '%'), specialRect.x + specialRect.w / 2, specialRect.y + 33);
+    const surgeState = player.surgeCharging ? Math.round(inkSurgeChargeRatio() * 100) : Math.floor(player.special);
+    if (icons) icons.draw('surge', 'ink', specialRect.x + 4, specialRect.y + (specialRect.h - 34) / 2, 34, { showLevel: false, state: surgeState, disabled: player.special < 100 && !player.surgeCharging });
+    const surgeTextX = specialRect.x + (icons ? 38 + (specialRect.w - 38) / 2 : specialRect.w / 2);
+    ctx.fillStyle = player.special >= 100 ? INK : GRAY; ctx.font = 'bold ' + (icons ? 11 : 14) + 'px ' + FONT;
+    ctx.fillText(player.surgeCharging ? '蓄力中' : '墨潮', surgeTextX, specialRect.y + 18, icons ? specialRect.w - 40 : specialRect.w);
+    ctx.font = icons ? '8px ' + FONT : '9px ' + FONT;
+    ctx.fillText(player.surgeCharging ? Math.round(inkSurgeChargeRatio() * 100) + '% · 松开' : (player.special >= 100 ? '长按' : Math.floor(player.special) + '%'), surgeTextX, specialRect.y + 34, icons ? specialRect.w - 40 : specialRect.w);
     const canDive = player.ink > 0 && player.diveCd <= 0;
     ctx.fillStyle = player.diving ? 'rgba(210,225,255,0.96)' : 'rgba(255,250,238,0.94)';
     ctx.fillRect(diveRect.x, diveRect.y, diveRect.w, diveRect.h);
     jrect(diveRect.x, diveRect.y, diveRect.w, diveRect.h, player.diving ? INK : (canDive ? INK : GRAY), 2.2);
-    ctx.fillStyle = player.diving || canDive ? INK : GRAY; ctx.font = 'bold 13px ' + FONT;
-    ctx.fillText(player.diving ? '潜墨中' : '潜墨', diveRect.x + diveRect.w / 2, diveRect.y + 18);
+    if (icons) icons.draw('dive', 'ink', diveRect.x + 4, diveRect.y + (diveRect.h - 34) / 2, 34, { showLevel: false, state: player.diveCd > 0 ? player.diveCd.toFixed(1) : '', disabled: !canDive && !player.diving });
+    const diveTextX = diveRect.x + (icons ? 38 + (diveRect.w - 38) / 2 : diveRect.w / 2);
+    ctx.fillStyle = player.diving || canDive ? INK : GRAY; ctx.font = 'bold ' + (icons ? 11 : 13) + 'px ' + FONT;
+    ctx.fillText(player.diving ? '潜墨中' : '潜墨', diveTextX, diveRect.y + 18, icons ? diveRect.w - 40 : diveRect.w);
     ctx.font = '8px ' + FONT;
-    ctx.fillText(player.diving ? '无敌 · ' + diveInkCost() + '/秒' : (player.diveCd > 0 ? player.diveCd.toFixed(1) + ' 秒' : '位移'), diveRect.x + diveRect.w / 2, diveRect.y + 33);
+    ctx.fillText(player.diving ? '无敌 · ' + diveInkCost() + '/秒' : (player.diveCd > 0 ? player.diveCd.toFixed(1) + ' 秒' : '位移'), diveTextX, diveRect.y + 34, icons ? diveRect.w - 40 : diveRect.w);
   }
   // 固定左下摇杆始终可见，让玩家明确左手移动、右手技能的分区
   const jx = joy.active ? joy.bx : JOY_HOME.x, jy = joy.active ? joy.by : JOY_HOME.y;
@@ -4671,7 +4830,7 @@ function drawHUD() {
 }
 
 function drawCards(title) {
-  ctx.fillStyle = 'rgba(245,241,230,0.2)';
+  ctx.fillStyle = 'rgba(245,241,230,0.78)';
   ctx.fillRect(0, 0, W, H);
   setSeed(777);
   const titleY = cardRects.length ? Math.min(100, cardRects[0].y - 22) : 100;
@@ -4682,21 +4841,26 @@ function drawCards(title) {
   cards.forEach((cd, i) => {
     const r = cardRects[i];
     setSeed(1000 + i);
-    ctx.fillStyle = 'rgba(255,250,238,0.7)';
+    ctx.fillStyle = 'rgba(255,250,238,0.94)';
     ctx.fillRect(r.x, r.y, r.w, r.h);
     jrect(r.x, r.y, r.w, r.h, cd.tagColor, compact ? 2 : 2.5);
+    const iconMeta = window.SkillIconRuntime && SkillIconRuntime.cardMeta(cd), iconSize = compact ? 42 : 46;
+    if (iconMeta) SkillIconRuntime.drawCard(cd, r.x + 12, r.y + 11, iconSize);
+    const titleX = r.x + 16 + (iconMeta ? iconSize + 8 : 0);
+    const titleW = r.w - 32 - (iconMeta ? iconSize + 8 : 0);
     ctx.textAlign = 'left';
     ctx.fillStyle = INK; ctx.font = 'bold ' + (compact ? 14 : 15) + 'px ' + FONT;
-    ctx.fillText(cd.name, r.x + 16, r.y + (compact ? 28 : 27), r.w - 32);
+    ctx.fillText(cd.name, titleX, r.y + (compact ? 32 : 31), titleW);
     const tagOffset = cd.typeLabel ? 12 : 0;
-    if (cd.typeLabel) drawTagChip(cd.typeLabel, r.x + 16, r.y + (compact ? 36 : 34), cd.tagColor, compact ? 9 : 10, r.w - 32);
+    if (cd.typeLabel) drawTagChip(cd.typeLabel, titleX, r.y + (compact ? 40 : 38), cd.tagColor, compact ? 9 : 10, titleW);
     ctx.fillStyle = DARK; ctx.font = (compact ? '11px ' : '12px ') + FONT;
     const lines = cd.descLines || wrapCardDescription(cd.shortDesc || cd.desc, r.w - 32).slice(0, 2);
-    lines.forEach((line, row) => ctx.fillText(line, r.x + 16, r.y + (compact ? 53 : 50) + tagOffset + row * (compact ? 13 : 14)));
+    const descriptionY = r.y + (compact ? 59 : 68) + tagOffset;
+    lines.forEach((line, row) => ctx.fillText(line, r.x + 16, descriptionY + row * 12));
     ctx.fillStyle = GRAY; ctx.font = (compact ? '9px ' : '10px ') + FONT;
-    const detailY = r.y + (compact ? 54 : 51) + tagOffset + lines.length * (compact ? 13 : 14);
-    (cd.detailLines || []).forEach((line, row) => ctx.fillText(line, r.x + 16, detailY + row * (compact ? 11 : 12)));
-    ctx.fillText(inputLocked ? '0.5 秒后可选择' : '点按选择', r.x + 16, r.y + r.h - 9);
+    const detailY = descriptionY + lines.length * 12;
+    (cd.detailLines || []).forEach((line, row) => ctx.fillText(line, r.x + 16, detailY + row * 10));
+    ctx.fillText(inputLocked ? '0.5 秒后可选择' : '点按选择', r.x + 16, r.y + r.h - 5);
   });
 }
 

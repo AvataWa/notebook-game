@@ -356,7 +356,8 @@
 
   /* 角色页面：手机与桌面共用交互，主界面和每次开局使用同一组件。 */
   function text(txt, x, y, size = 13, color = DARK, align = 'left', bold = false, maxWidth) {
-    ctx.fillStyle = color; ctx.textAlign = align; ctx.font = (bold ? 'bold ' : '') + size + 'px ' + FONT; ctx.fillText(String(txt), x, y, maxWidth);
+    const fontSize = isDesktopLayout() ? Math.round(size * 1.25) : size;
+    ctx.fillStyle = color; ctx.textAlign = align; ctx.font = (bold ? 'bold ' : '') + fontSize + 'px ' + FONT; ctx.fillText(String(txt), x, y, maxWidth);
   }
   function wrapText(txt, x, y, width, lineHeight = 17, maxLines = 2) {
     const lines = [], size = parseFloat(ctx.font) || 13; let line = '';

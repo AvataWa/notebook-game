@@ -13,10 +13,29 @@
   const validSkill = id => !!SKILL_DEFS[id] || C.inkSpecs.some(s => s.id === id);
   const validItem = eq => eq && ITEM_DEFS[eq.key] && Number.isFinite(+eq.rarity);
 
+  function defaultBossSets() {
+    const result = { scribble: { cores: 0, horns: 0, kills: 0, hornDry: 0, firstHorn: false } };
+    if (typeof BOSS_SET_COLLECTION !== 'undefined') for (const set of BOSS_SET_COLLECTION.list) {
+      result[set.id] = { cores: 0, horns: 0, kills: 0, hornDry: 0, firstHorn: false };
+    }
+    return result;
+  }
   function defaults() {
-    return { version: 3, ink: 0, paper: 0, talents: {}, specs: {}, inventory: [], inherited: null, equipment: createEquipmentGrowth(),
+    return { version: 3, ink: 0, paper: 0, talents: {}, specs: {}, inventory: [], inherited: null,
+      loadout: { head: null, body: null, hands: null, feet: null, acc: null }, bossSets: defaultBossSets(), equipment: createEquipmentGrowth(),
       character: 'draft', characters: { draft: 1 },
       rank: 0, rankScores: [], firstStages: [], firstBosses: [], stats: { runs: 0, wins: 0, highestStage: 1 } };
+  }
+  function cleanEquipment(eq) {
+    if (!validItem(eq)) return null;
+    const clean = { key: eq.key, rarity: clampInt(eq.rarity, 0, 3, 0) };
+    if (ITEM_DEFS[clean.key].bossSet) {
+      // 所有 Boss 装备统一为金色制作；旧紫装保留词条并自动升级。
+      clean.rarity = 3;
+      clean.roll = clampInt(eq.roll, 50, 100, 100);
+      clean.rerollFloor = clampInt(eq.rerollFloor, 50, 100, 50);
+    }
+    return clean;
   }
   function validate(raw) {
     const d = defaults();
@@ -34,26 +53,40 @@
     }
     const seen = new Set();
     if (Array.isArray(raw.inventory)) for (const eq of raw.inventory) {
-      if (!validItem(eq)) continue;
-      const clean = { key: eq.key, rarity: clampInt(eq.rarity, 0, 3, 0) }, id = clean.key + ':' + clean.rarity;
+      const clean = cleanEquipment(eq); if (!clean) continue;
+      const id = clean.key + ':' + clean.rarity;
       if (seen.has(id)) continue;
       seen.add(id); d.inventory.push(clean);
     }
-    if (validItem(raw.inherited)) {
-      const eq = { key: raw.inherited.key, rarity: clampInt(raw.inherited.rarity, 0, 3, 0) };
-      if (d.inventory.some(x => x.key === eq.key && x.rarity === eq.rarity)) d.inherited = eq;
+    const owned = eq => eq && d.inventory.some(x => x.key === eq.key && x.rarity === eq.rarity);
+    if (raw.loadout && typeof raw.loadout === 'object') for (const slot of SLOTS) {
+      const eq = cleanEquipment(raw.loadout[slot]);
+      if (owned(eq)) d.loadout[slot] = eq;
+    }
+    const legacy = cleanEquipment(raw.inherited);
+    if (owned(legacy)) {
+      d.inherited = legacy;
+      const slot = ITEM_DEFS[legacy.key].slot;
+      if (!d.loadout[slot]) d.loadout[slot] = clone(legacy);
+    }
+    for (const id of Object.keys(d.bossSets)) {
+      const boss = raw.bossSets && raw.bossSets[id]; if (!boss) continue;
+      d.bossSets[id] = {
+        cores: clampInt(boss.cores, 0, 999999, 0), horns: clampInt(boss.horns, 0, 999999, 0),
+        kills: clampInt(boss.kills, 0, 999999, 0), hornDry: clampInt(boss.hornDry, 0, 2, 0), firstHorn: !!boss.firstHorn
+      };
     }
     // 装备等级与部位经验只属于单局；旧存档中的成长数据读取时直接归零。
-    d.firstStages = Array.isArray(raw.firstStages) ? [...new Set(raw.firstStages.map(x => clampInt(x, 1, 10, 1)))] : [];
-    d.firstBosses = Array.isArray(raw.firstBosses) ? [...new Set(raw.firstBosses.map(x => clampInt(x, 1, 10, 1)))] : [];
+    d.firstStages = Array.isArray(raw.firstStages) ? [...new Set(raw.firstStages.map(x => clampInt(x, 1, 20, 1)))] : [];
+    d.firstBosses = Array.isArray(raw.firstBosses) ? [...new Set(raw.firstBosses.map(x => clampInt(x, 1, 20, 1)))] : [];
     d.stats = { runs: clampInt(raw.stats && raw.stats.runs, 0, 999999, 0),
-      wins: clampInt(raw.stats && raw.stats.wins, 0, 999999, 0), highestStage: clampInt(raw.stats && raw.stats.highestStage, 1, 10, 1) };
+      wins: clampInt(raw.stats && raw.stats.wins, 0, 999999, 0), highestStage: clampInt(raw.stats && raw.stats.highestStage, 1, 20, 1) };
     return d;
   }
   let meta;
   try { meta = validate(JSON.parse(storage.get(C.storageKey) || 'null')); } catch (_) { meta = defaults(); }
   function save() { storage.set(C.storageKey, JSON.stringify(meta)); }
-  let run = null, settlement = null, metaTab = 'basic', summaryTab = 'damage', metaPage = 0, inventorySlot = 'all', resetArmed = false, reforgePending = null, uiMessage = '';
+  let run = null, settlement = null, metaTab = 'basic', summaryTab = 'damage', metaPage = 0, inventorySlot = 'all', resetArmed = false, reforgePending = null, reforgeOffers = null, uiMessage = '';
   let lastRenderState = '', defeatInputAfter = 0;
 
   function rankInfo(index = meta.rank) {
@@ -105,9 +138,13 @@
     player.metaEnemyAttackMul = 1; player.metaEliteEarly = 0;
     player.metaBossPhaseAt = 0.5; player.metaRegenMul = 1; player.metaNoRevive = false;
     player.equipGrowth = run ? run.growth : createEquipmentGrowth();
-    if (meta.inherited) {
-      const eq = clone(meta.inherited), slot = ITEM_DEFS[eq.key].slot;
-      player.equip[slot] = eq;
+    const selected = meta.loadout && SLOTS.some(slot => meta.loadout[slot]) ? meta.loadout :
+      (meta.inherited ? { [ITEM_DEFS[meta.inherited.key].slot]: meta.inherited } : {});
+    for (const slot of SLOTS) {
+      const eq = selected[slot]; if (!eq || !ITEM_DEFS[eq.key]) continue;
+      player.equip[slot] = clone(eq);
+      // 局外配置带入时统一为 Lv.1，后续局内成长仍只留在本局。
+      player.equipGrowth[slot].level = 1; player.equipGrowth[slot].xp = 0;
     }
     recomputeEquip();
   }
@@ -140,6 +177,7 @@
     const paper = result.overflow > 0 ? Math.max(1, Math.round((C.scrapByRarity[rarity] || 0) * result.overflow / xp)) : 0;
     run.overflowPaper += paper;
     const found = { uid: run.uid++, key: dr.item, rarity, xp, paper, levels: result.levels };
+    if (ITEM_DEFS[dr.item].bossSet) found.roll = clampInt(dr.roll, 50, 100, 100);
     run.found.push(found);
     player.equipGrowth = run.growth; recomputeEquip();
     return found;
@@ -149,14 +187,16 @@
       uiMessage = ITEM_DEFS[eq.key].name + ' 已收录 · 经验已计入部位等级';
       return false;
     }
-    meta.inventory.push({ key: eq.key, rarity: eq.rarity }); return true;
+    const clean = cleanEquipment(eq); if (!clean) return false;
+    meta.inventory.push(clean); return true;
   }
   function settleRun(win) {
     if (!run || run.settled) return false;
     run.settled = true;
     meta.equipment = createEquipmentGrowth(); meta.paper += run.overflowPaper;
-    const waves = clampInt(player.level, 1, 100, 1), bossCount = run.bossStages.length;
-    const base = waves + bossCount * 15 + (win ? 50 : 0);
+    // 墨点收益最多计 200 级；段位表现分仍只计前 100 级，避免肝度替代发挥。
+    const inkLevel = clampInt(player.level, 1, 200, 1), waves = Math.min(100, inkLevel), bossCount = run.bossStages.length;
+    const base = inkLevel + bossCount * 15 + (win ? 50 : 0);
     let firstBonus = 0;
     for (let st = 1; st <= curSt(); st++) if (!meta.firstStages.includes(st)) { meta.firstStages.push(st); firstBonus += 10; }
     for (const st of run.bossStages) if (!meta.firstBosses.includes(st)) { meta.firstBosses.push(st); firstBonus += 20; }
@@ -199,28 +239,60 @@
     else if (settlement.selected.length < settlement.slots && settlement.found.some(x => x.uid === uid)) settlement.selected.push(uid);
     return true;
   }
+  function settlementSalvage() {
+    const result = { count: 0, paper: 0 };
+    if (!settlement) return result;
+    const owned = new Set(meta.inventory.map(eq => eq.key + ':' + eq.rarity));
+    for (const eq of settlement.found) {
+      // Boss 金装只可通过制作和重描培养，不参与普通散件碎纸循环。
+      if (ITEM_DEFS[eq.key].bossSet) continue;
+      const id = eq.key + ':' + eq.rarity, selected = settlement.selected.includes(eq.uid);
+      if (selected && !owned.has(id)) { owned.add(id); continue; }
+      result.count++; result.paper += C.scrapByRarity[eq.rarity] || 0;
+    }
+    return result;
+  }
   function finishSettlement() {
     if (!settlement) return false;
+    const salvage = settlementSalvage();
     for (const eq of settlement.found) if (settlement.selected.includes(eq.uid)) addInventory(eq);
+    meta.paper += salvage.paper;
     save(); settlement = null; goHome(); return true;
   }
   function setInherited(key, rarity) {
     const eq = meta.inventory.find(x => x.key === key && x.rarity === rarity);
     if (!eq) return false;
-    meta.inherited = { key, rarity }; save(); uiMessage = '已设为下局继承装备'; return true;
+    const picked = clone(eq), slot = ITEM_DEFS[key].slot;
+    meta.inherited = picked; meta.loadout[slot] = clone(picked);
+    save(); uiMessage = '已设为下局穿戴装备 · Lv.1'; return true;
   }
   function reforge(key, rarity) {
     const index = meta.inventory.findIndex(x => x.key === key && x.rarity === rarity);
-    if (index < 0) return false;
+    if (index < 0 || ITEM_DEFS[key].bossSet) return false;
     const cost = C.reforgeCostByRarity[rarity], slot = ITEM_DEFS[key].slot;
     if (meta.paper < cost) { uiMessage = '碎纸不足'; return false; }
-    const candidates = Object.keys(ITEM_DEFS).filter(k => ITEM_DEFS[k].slot === slot && k !== key && !meta.inventory.some(x => x.key === k && x.rarity === rarity));
-    if (!candidates.length) { uiMessage = '该部位同品质已集齐'; return false; }
-    const next = candidates[Math.floor(Math.random() * candidates.length)];
-    meta.inventory[index].key = next; meta.paper -= cost;
-    if (meta.inherited && meta.inherited.key === key && meta.inherited.rarity === rarity) meta.inherited.key = next;
-    save(); uiMessage = '重铸为 ' + ITEM_DEFS[next].name; return true;
+    const pool = Object.keys(ITEM_DEFS).filter(k => !ITEM_DEFS[k].bossSet && ITEM_DEFS[k].slot === slot && k !== key && !meta.inventory.some(x => x.key === k && x.rarity === rarity));
+    if (!pool.length) { uiMessage = '该部位同品质已集齐'; return false; }
+    const candidates = [];
+    while (pool.length && candidates.length < 3) candidates.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    reforgeOffers = { key, rarity, cost, candidates };
+    return candidates.slice();
   }
+  function chooseReforge(index) {
+    const offer = reforgeOffers;
+    if (!offer || !Number.isInteger(index) || !offer.candidates[index]) return false;
+    const { key, rarity } = offer, next = offer.candidates[index], itemIndex = meta.inventory.findIndex(x => x.key === key && x.rarity === rarity);
+    if (itemIndex < 0 || !ITEM_DEFS[next] || ITEM_DEFS[next].bossSet || ITEM_DEFS[next].slot !== ITEM_DEFS[key].slot) { reforgeOffers = null; return false; }
+    if (meta.inventory.some(x => x.key === next && x.rarity === rarity)) { reforgeOffers = null; uiMessage = '候选装备已收录，请重新重铸'; return false; }
+    const cost = C.reforgeCostByRarity[rarity];
+    if (meta.paper < cost) { uiMessage = '碎纸不足'; return false; }
+    const slot = ITEM_DEFS[key].slot;
+    meta.inventory[itemIndex].key = next; meta.paper -= cost;
+    if (meta.inherited && meta.inherited.key === key && meta.inherited.rarity === rarity) meta.inherited.key = next;
+    if (meta.loadout[slot] && meta.loadout[slot].key === key && meta.loadout[slot].rarity === rarity) meta.loadout[slot].key = next;
+    reforgeOffers = null; save(); uiMessage = '重铸为 ' + ITEM_DEFS[next].name; return true;
+  }
+  function cancelReforge() { reforgePending = null; reforgeOffers = null; return true; }
   function talentEntries() {
     if (metaTab === 'basic') return C.basics.map(b => ({ id: b.id, name: b.name, desc: b.desc, level: meta.talents[b.id] || 0, max: b.max, costs: C.basicCosts, per: b.per, unit: b.unit }));
     if (metaTab === 'active') return Object.keys(SKILL_DEFS).map(id => ({ id, name: SKILL_DEFS[id].name, desc: '技能伤害', level: meta.specs[id] || 0, max: 3, costs: C.specCosts, per: 5, unit: '%' }));
@@ -247,7 +319,7 @@
     for (const id of Object.keys(meta.specs)) meta.specs[id] = 0;
     save(); uiMessage = '天赋已重置，墨点全部返还'; return true;
   }
-  function goHome() { run = null; resetGame(); state = 'metaHome'; metaPage = 0; resetArmed = false; reforgePending = null; }
+  function goHome() { run = null; resetGame(); state = 'metaHome'; metaPage = 0; resetArmed = false; reforgePending = null; reforgeOffers = null; }
 
   /* 战斗接入：主动专精、Boss 击杀与无伤认证。 */
   const baseSkillCalc = skillCalc;
@@ -346,7 +418,7 @@
     }
   };
   function drawHome() {
-    panel('我穿越到笔记本了', '局外手账');
+    panel('纸上涂鸦幻想', '局外手账');
     window.HomeDoodles.draw(false);
     text('每一页，都是一个没画完的梦。', W / 2, 73, 11, GRAY, 'center');
     text(rankInfo().name, W / 2, 108, 23, INK, 'center', true);
@@ -440,6 +512,9 @@
       .slice().sort((a, b) => SLOTS.indexOf(ITEM_DEFS[a.key].slot) - SLOTS.indexOf(ITEM_DEFS[b.key].slot) || b.rarity - a.rarity);
   }
   function reforgeRects() { return { cancel: { x: 58, y: 371, w: 118, h: 38 }, confirm: { x: 199, y: 371, w: 118, h: 38 } }; }
+  function reforgeOfferRects(count) {
+    return { cards: Array.from({ length: count }, (_, i) => ({ x: 36, y: 225 + i * 72, w: 303, h: 62 })), cancel: { x: 102, y: 462, w: 171, h: 38 } };
+  }
   function drawInventory() {
     panel('文具盒', '碎纸 ' + meta.paper); button(backButton(), '返回');
     text('下局继承：' + inheritedDescription(), 24, 72, 11, PURPLE);
@@ -452,7 +527,7 @@
       ctx.fillStyle = 'rgba(255,250,238,0.94)'; ctx.fillRect(24, y, 327, 96); jrect(24, y, 327, 96, rarity.color, 1.7);
       text(def.name, 36, y + 23, 14, rarity.color, 'left', true);
       text(equipmentProgressText(eq, meta.equipment) + ' · ' + rarity.name, 36, y + 42, 10, GRAY);
-      ctx.font = '10px ' + FONT; ctx.fillStyle = DARK; ctx.textAlign = 'left'; wrap(window.UICopy ? window.UICopy.itemShort(eq.key, eq.rarity) : itemDescription(eq.key, eq.rarity), 36, y + 61, 204, 13, 2);
+      ctx.font = '10px ' + FONT; ctx.fillStyle = DARK; ctx.textAlign = 'left'; wrap(window.UICopy ? window.UICopy.itemShort(eq.key, eq.rarity, eq.roll) : itemDescription(eq.key, eq.rarity, eq.roll), 36, y + 61, 204, 13, 2);
       text('详情 ›', 238, y + 88, 9, GRAY, 'right');
       button({ x: 250, y: y + 14, w: 88, h: 31 }, inherited ? '已继承' : '继承', !inherited, inherited);
       button({ x: 250, y: y + 53, w: 88, h: 31 }, '重铸 ' + C.reforgeCostByRarity[eq.rarity], meta.paper >= C.reforgeCostByRarity[eq.rarity]);
@@ -466,9 +541,23 @@
       ctx.fillStyle = PAPER; ctx.fillRect(38, 225, 299, 204); jrect(38, 225, 299, 204, INK, 2.2);
       text('确认重铸？', W / 2, 267, 18, INK, 'center', true);
       text(ITEM_DEFS[eq.key].name + ' · ' + RARITY_LIST[eq.rarity].name + ' · ' + equipmentLevelText(eq, meta.equipment), W / 2, 298, 12, DARK, 'center');
-      text('同部位同品质随机换装 · 等级不变', W / 2, 326, 11, DARK, 'center');
+      text('同部位同品质三选一 · 等级不变', W / 2, 326, 11, DARK, 'center');
       text('消耗 ' + C.reforgeCostByRarity[eq.rarity] + ' 碎纸', W / 2, 349, 11, PURPLE, 'center');
       button(r.cancel, '取消'); button(r.confirm, '确认重铸', true, true);
+    } else if (reforgeOffers) {
+      const r = reforgeOfferRects(reforgeOffers.candidates.length);
+      ctx.fillStyle = 'rgba(16,16,16,0.58)'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = PAPER; ctx.fillRect(18, 142, 339, 374); jrect(18, 142, 339, 374, INK, 2.2);
+      text('选择重铸结果', W / 2, 180, 18, INK, 'center', true);
+      text(RARITY_LIST[reforgeOffers.rarity].name + ' · ' + SLOT_NAME[ITEM_DEFS[reforgeOffers.key].slot] + ' · 选定后消耗 ' + reforgeOffers.cost + ' 碎纸', W / 2, 205, 10, PURPLE, 'center');
+      reforgeOffers.candidates.forEach((key, i) => {
+        const card = r.cards[i];
+        ctx.fillStyle = 'rgba(255,250,238,0.97)'; ctx.fillRect(card.x, card.y, card.w, card.h); jrect(card.x, card.y, card.w, card.h, INK, 1.4);
+        text((i + 1) + '. ' + ITEM_DEFS[key].name, card.x + 12, card.y + 23, 13, INK, 'left', true);
+        ctx.font = '9px ' + FONT; ctx.fillStyle = DARK; ctx.textAlign = 'left';
+        wrap(window.UICopy ? window.UICopy.itemShort(key, reforgeOffers.rarity) : itemDescription(key, reforgeOffers.rarity), card.x + 12, card.y + 44, card.w - 24, 12, 1);
+      });
+      button(r.cancel, '取消 · 不消耗碎纸');
     }
   }
   function summaryEntries() {
@@ -530,7 +619,7 @@
       text(def.name, 36, r.y + 21, 13, rarity.color, 'left', true);
       text(equipmentLevelText(eq, settlement.growth) + ' · ' + rarity.name, 339, r.y + 20, 10, rarity.color, 'right');
       text('攻击 +' + stats.atk + '%　生命 +' + stats.hp, 36, r.y + 40, 10, DARK);
-      ctx.font = '10px ' + FONT; ctx.fillStyle = DARK; ctx.textAlign = 'left'; wrap(window.UICopy ? window.UICopy.itemShort(eq.key, rarityIndex(eq)) : itemDescription(eq.key, rarityIndex(eq)), 36, r.y + 59, 270, 14, 2);
+      ctx.font = '10px ' + FONT; ctx.fillStyle = DARK; ctx.textAlign = 'left'; wrap(window.UICopy ? window.UICopy.itemShort(eq.key, rarityIndex(eq), eq.roll) : itemDescription(eq.key, rarityIndex(eq), eq.roll), 36, r.y + 59, 270, 14, 2);
       text('详情 ›', 339, r.y + 76, 9, GRAY, 'right');
     });
     if (summaryTab === 'damage') {
@@ -563,13 +652,14 @@
       ctx.fillStyle = 'rgba(255,250,238,0.94)'; ctx.fillRect(24, y, 327, 116); jrect(24, y, 327, 116, rarity.color, selected ? 2.8 : 1.5);
       text(def.name, 36, y + 23, 13, rarity.color, 'left', true);
       text(rarity.name + '·' + SLOT_NAME[def.slot] + '·' + equipmentLevelText(eq, settlement.growth) + '　攻 +' + stats.atk + '%　生 +' + stats.hp, 36, y + 43, 10, GRAY);
-      ctx.font = '10px ' + FONT; ctx.fillStyle = DARK; ctx.textAlign = 'left'; wrap(window.UICopy ? window.UICopy.itemShort(eq.key, eq.rarity) : itemDescription(eq.key, eq.rarity), 36, y + 63, 299, 14, 2);
+      ctx.font = '10px ' + FONT; ctx.fillStyle = DARK; ctx.textAlign = 'left'; wrap(window.UICopy ? window.UICopy.itemShort(eq.key, eq.rarity, eq.roll) : itemDescription(eq.key, eq.rarity, eq.roll), 36, y + 63, 299, 14, 2);
       text('部位经验 +' + eq.xp + (eq.paper ? ' · 溢出碎纸 +' + eq.paper : ''), 36, y + 102, 10, GRAY);
       text('详情 ›', 250, y + 102, 9, GRAY, 'right');
       button({ x: 263, y: y + 12, w: 74, h: 32 }, selected ? '已装订' : '装订', selected || settlement.selected.length < settlement.slots, selected);
     });
     if (!shown.length) text('本局没有新装备', W / 2, 285, 12, GRAY, 'center');
-    const pg = pager(settlement.found.length, per, 526); drawSettlement.pg = pg;
+    const salvage = settlementSalvage(), pg = pager(settlement.found.length, per, 526); drawSettlement.pg = pg;
+    text('未装订／重复普通装备回收 ' + salvage.count + ' 件 · 碎纸 +' + salvage.paper, W / 2, 563, 10, salvage.count ? PURPLE : GRAY, 'center');
     button({ x: 62, y: 583, w: 251, h: 43 }, '完成结算');
   }
   function testEndRects() { return { retry: { x: 75, y: 292, w: 225, h: 40 }, select: { x: 75, y: 344, w: 225, h: 40 }, home: { x: 75, y: 396, w: 225, h: 40 } }; }
@@ -581,6 +671,7 @@
     const r = testEndRects(); button(r.retry, '再次挑战'); button(r.select, '选择其他 Boss'); button(r.home, '返回局外手账');
   }
   function drawMeta() {
+    if (state === 'metaInventory' && window.BossSetRuntime && BossSetRuntime.drawInventory()) return;
     if (window.DesktopRuntime && DesktopRuntime.active && DesktopRuntime.drawMeta()) return;
     if (state === 'metaHome') drawHome();
     else if (state === 'metaRankDetails') drawRankDetails();
@@ -604,6 +695,9 @@
     if (window.UIDetail && window.UIDetail.isOpen) return;
     // 设置入口属于全局 UI，不能被主界面的统一热区提前截获。
     if (state === 'metaHome' && window.SettingsRuntime && hit(toLogical(e), SettingsRuntime.entryRect)) return;
+    if (state === 'metaInventory' && window.BossSetRuntime && BossSetRuntime.handlePointer(e)) {
+      e.preventDefault(); e.stopImmediatePropagation(); return;
+    }
     if (window.DesktopRuntime && DesktopRuntime.active && DesktopRuntime.handleMetaPointer(e)) {
       e.preventDefault(); e.stopImmediatePropagation(); return;
     }
@@ -653,6 +747,12 @@
       const r = reforgeRects(), eq = reforgePending;
       if (hit(p, r.confirm)) { reforge(eq.key, eq.rarity); reforgePending = null; }
       else if (hit(p, r.cancel)) reforgePending = null;
+      return;
+    }
+    if (state === 'metaInventory' && reforgeOffers) {
+      const r = reforgeOfferRects(reforgeOffers.candidates.length);
+      for (let i = 0; i < r.cards.length; i++) if (hit(p, r.cards[i])) { chooseReforge(i); return; }
+      if (hit(p, r.cancel)) cancelReforge();
       return;
     }
     if ((state === 'metaTalents' || state === 'metaInventory') && hit(p, backButton())) { goHome(); return; }
@@ -714,13 +814,18 @@
   }, true);
   window.addEventListener('keydown', e => {
     if (window.UIDetail && window.UIDetail.isOpen) return;
-    if (state === 'metaRankDetails' || state === 'metaBossChallenge' || state === 'metaTalents' || state === 'metaInventory') { if (e.key === 'Escape') { e.preventDefault(); goHome(); } }
+    if (state === 'metaInventory' && reforgeOffers && /^[1-3]$/.test(e.key)) {
+      e.preventDefault(); chooseReforge(Number(e.key) - 1); return;
+    }
+    if (state === 'metaRankDetails' || state === 'metaBossChallenge' || state === 'metaTalents' || state === 'metaInventory') {
+      if (e.key === 'Escape') { e.preventDefault(); if (state === 'metaInventory' && (reforgePending || reforgeOffers)) cancelReforge(); else goHome(); }
+    }
   }, true);
 
   window.__metaRuntime = {
-    beginRun, beginBossTest, openBossChallenge, settleRun, confirmDefeat, recordEquipment, continueSettlement, finishSettlement, toggleSettlement, upgradeTalent, resetTalents,
-    setInherited, reforge, rankInfo, rankAverage, rankForScores, rankProgress, nextRankText, applyPlayer, save, goHome,
-    get data() { return meta; }, get run() { return run; }, get settlement() { return settlement; },
+    beginRun, beginBossTest, openBossChallenge, settleRun, confirmDefeat, recordEquipment, continueSettlement, finishSettlement, toggleSettlement, settlementSalvage, upgradeTalent, resetTalents,
+    setInherited, reforge, chooseReforge, cancelReforge, addInventory, rankInfo, rankAverage, rankForScores, rankProgress, nextRankText, applyPlayer, save, goHome,
+    get data() { return meta; }, get run() { return run; }, get settlement() { return settlement; }, get reforgeOffers() { return reforgeOffers; },
     get tab() { return metaTab; }, set tab(v) { metaTab = v; metaPage = 0; },
     get summaryTab() { return summaryTab; }, set summaryTab(v) { summaryTab = v; metaPage = 0; },
     resetAll() { storage.remove(C.storageKey); meta = defaults(); save(); goHome(); }

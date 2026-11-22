@@ -32,15 +32,15 @@ function assert(ok, msg) { if (!ok) throw new Error(msg); }
 function fresh() { G.resetGame(); G.state = 'play'; G.player.xpNext = 999999; G.player.hp = G.player.maxhp = 9999; G.player.actives = [{ id: 'cyclone', lvl: 1, supports: [], t: 999, uc: 0 }]; }
 function equip(key, rarity = 0) { const slot = G.EQUIPMENT_ITEM_DEFS[key].slot; G.player.equip[slot] = { key, rarity }; G.recomputeEquip(); }
 
-test('内容数量完整：10 被动、62 辅助、32 装备，潜墨 22 条', () => {
+test('内容数量完整：10 被动、62 辅助、37 装备，潜墨 22 条', () => {
   fresh();
   assert(G.PASSIVES.length === 10, '通用被动数量错误');
   assert(G.OPERATION_AFFIXES.length === 62, '专属辅助数量错误');
   assert(new Set(G.OPERATION_AFFIXES.map(a => a.id)).size === 62, '辅助 ID 重复');
   for (const [skill, count] of [['dive', 22], ['surge', 20], ['absorb', 20]]) assert(G.OPERATION_AFFIXES.filter(a => a.skill === skill).length === count, skill + ' 数量错误');
-  assert(Object.keys(G.EQUIPMENT_ITEM_DEFS).length === 32, '装备数量错误');
+  assert(Object.keys(G.EQUIPMENT_ITEM_DEFS).length === 37, '装备数量错误');
   for (const slot of ['head', 'body', 'hands', 'feet', 'acc']) {
-    const expected = slot === 'head' || slot === 'acc' ? 7 : 6;
+    const expected = slot === 'head' || slot === 'acc' ? 8 : 7;
     assert(Object.values(G.EQUIPMENT_ITEM_DEFS).filter(d => d.slot === slot).length === expected, slot + ' 装备数量错误');
   }
 });
@@ -70,6 +70,17 @@ test('相邻两件装备只走新拾取逻辑，不再弹出 undefined', () => {
   G.update(0.016); drawTexts.length = 0; G.render();
   assert(G.state === 'equipment' && G.pendingEquipment.drop.item === 'compass', '第二件装备未进入替换弹窗');
   assert(!G.toasts.some(t => String(t.txt).includes('undefined')) && !drawTexts.some(t => t.includes('undefined')), '拾取提示或弹窗仍含 undefined');
+});
+test('墨潮蓄力期间装备留在原地，结束后才拾取', () => {
+  fresh(); equip('glove', 0);
+  G.drops = [{ x: 0, y: 0, item: 'compass', rarity: 2, bob: 0 }];
+  G.player.surgeCharging = true; G.player.surgeChargeT = 0; G.player.special = 100;
+  const drop = G.drops[0];
+  assert(G.runtime.collectEquipment(drop) === false && G.drops.length === 1, '直接拾取入口没有拦截蓄力状态');
+  G.update(0.016);
+  assert(G.state === 'play' && !G.pendingEquipment && G.drops[0] === drop && G.player.surgeCharging, '蓄力中拾取装备或打断蓄力');
+  G.player.surgeCharging = false; G.update(0.016);
+  assert(G.state === 'equipment' && G.pendingEquipment.drop === drop && G.drops.length === 0, '蓄力结束后没有正常拾取装备');
 });
 test('Boss 掉落通过统一入口生成并带有合法品质', () => {
   fresh(); G.killEnemy({ id: 999, boss: true, stage: 1, name: '测试 Boss', x: 100, y: 100, r: 20, dead: false });
@@ -172,7 +183,7 @@ test('选择升级词条后获得完整 1 秒无敌，结束后才恢复受伤',
 test('装备品质框在世界层绘制，不覆盖 HUD 和升级卡片', () => {
   fresh(); G.drops = [{ x: 0, y: 0, item: 'glove', rarity: 3, bob: 0 }]; G.state = 'levelup';
   drawTexts.length = 0; G.render();
-  const drop = drawTexts.indexOf('史诗'), hud = drawTexts.indexOf('击杀 0');
+  const drop = drawTexts.indexOf('金色'), hud = drawTexts.indexOf('击杀 0');
   const card = drawTexts.findIndex(t => t.startsWith('升级！'));
   assert(drop >= 0 && hud >= 0 && card >= 0, '缺少掉落、HUD 或升级卡片绘制');
   assert(drop < hud && drop < card, '装备品质框仍绘制在 HUD 或卡片之上');

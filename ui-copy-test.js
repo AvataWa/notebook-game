@@ -102,9 +102,12 @@ test('文具盒重铸先确认，详情与按钮输入互不串联', () => {
   pointer(180, 585); assert(!G.detail.isOpen && G.state === 'metaInventory', '装备详情关闭异常');
   pointer(290, 196);
   assert(G.meta.data.inventory[0].key === 'glove' && G.meta.data.paper === 200, '点击重铸未等待确认就扣费换装');
-  drawTexts.length = 0; G.render(); assert(drawTexts.some(t => t.includes('同部位同品质随机换装')), '重铸确认缺少规则');
+  drawTexts.length = 0; G.render(); assert(drawTexts.some(t => t.includes('同部位同品质三选一')), '重铸确认缺少规则');
   pointer(250, 390);
-  assert(G.meta.data.inventory[0].key !== 'glove' && G.meta.data.paper === 160, '确认重铸没有正确执行');
+  assert(G.meta.reforgeOffers && G.meta.data.inventory[0].key === 'glove' && G.meta.data.paper === 200, '生成重铸候选提前扣费或换装');
+  drawTexts.length = 0; G.render(); assert(drawTexts.includes('选择重铸结果') && drawTexts.includes('取消 · 不消耗碎纸'), '重铸候选界面未展示');
+  pointer(100, 250);
+  assert(G.meta.data.inventory[0].key !== 'glove' && G.meta.data.paper === 160 && !G.meta.reforgeOffers, '选择重铸候选没有正确执行');
 });
 
 console.log(failed ? 'UI_COPY_TEST_FAILURES: ' + failed : 'UI_COPY_TEST_OK (' + passed + '/' + passed + ')');

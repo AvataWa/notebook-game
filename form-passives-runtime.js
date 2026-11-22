@@ -2,7 +2,7 @@
 (() => {
   'use strict';
   const FORMS = {
-    cyclone: ['双星笔轨', '瞬时圆环变为 2 枚绕身蜡笔，持续 1.2 秒接触切割'],
+    cyclone: ['回锋连写', '每次连笔后沿同一直线反向回锋，造成 70% 伤害并叠加蜡色'],
     volcanic: ['环形火山带', '直线喷发改为围绕目标的环形喷发，最后中央收尾'],
     tornado: ['折线飞行', '纸飞机飞出一段距离后折转 90°，再命中分裂'],
     chainclip: ['闭环电网', '首目标与附近敌人形成闭合电网，持续伤害穿线敌人'],
@@ -10,7 +10,7 @@
     spark: ['悬浮墨雷', '墨滴首次命中或撞墙后变为感应墨雷'],
     ballista: ['双联炮管', '炮台每轮改为 2 发平行图钉，单发 70% 伤害'],
     boomerang: ['镜像橡皮', '每次投出 2 枚镜像橡皮，单枚 70% 伤害'],
-    vortex: ['内外双阵', '碎片分到内外两圈反向旋转，内圈更快'],
+    vortex: ['十字封页', '每条涂改带追加一条垂直封条，造成 65% 伤害'],
     candle: ['回旋火舌', '周身灼烧改为旋转的 120° 火舌'],
     icespear: ['三叉冰锥', '每次射出 3 支冰锥，单支 70% 伤害并保留贯穿'],
     inkrain: ['移动积雨云', '毒云排成云带并缓慢向前移动'],
@@ -37,7 +37,7 @@
     PASSIVES.push({ id, form: true, skill, name: def[0], desc: def[1], once: true,
       available: () => player.actives.some(a => a.id === skill), fx: () => { player.taken[id] = true; } });
   }
-  const S = { orbitals: [], mines: [], wires: [], polys: [], sweeps: [], waves: [], cones: [], noProc: false };
+  const S = { mines: [], wires: [], polys: [], sweeps: [], waves: [], cones: [], noProc: false };
   const has = id => !!(player && player.taken && player.taken['form_' + id]);
   const cap = (arr, value, max) => { if (arr.length >= max) arr.shift(); arr.push(value); return value; };
   const copyC = (c, mul) => Object.assign({}, c, mul === undefined ? {} : { dmg: c.dmg * mul });
@@ -67,7 +67,13 @@
     if (!has(a.id)) return baseFireSkill(a, c);
     const px = player.x, py = player.y;
     if (a.id === 'cyclone') {
-      cap(S.orbitals, { skill: a.id, t: 1.2, age: 0, c, damage: 11 * c.dmg, hits: Object.create(null) }, 12); return true;
+      const t = baseTarget(420 * c.rad), angle = t ? Math.atan2(t.y - py, t.x - px) : player.faceA;
+      const old = blades.length, result = baseFireSkill(a, c);
+      const primary = blades.slice(old).find(b => b.kind === 'scribble');
+      if (primary) spawnCycloneStroke(c, angle + Math.PI, 0.7, 0.14, t, {
+        points: primary.points.slice().reverse(), angle: primary.angle + Math.PI
+      });
+      return result;
     }
     if (a.id === 'volcanic') {
       const t = baseTarget(520 * c.rad); if (!t) return false;
@@ -114,11 +120,10 @@
       return true;
     }
     if (a.id === 'vortex') {
-      const max = BATTLE.skills.vortexCap + c.count;
-      for (let i = 0; i < BATTLE.skills.vortexPerCast; i++) cap(S.orbitals, { skill: 'vortex', t: 5 * c.areaT, age: 0, c, damage: 10 * c.dmg,
-        ring: S.orbitals.filter(o => o.skill === 'vortex').length % 2, slot: S.orbitals.filter(o => o.skill === 'vortex').length, next: Object.create(null) }, 36);
-      const mine = S.orbitals.filter(o => o.skill === 'vortex'); while (mine.length > max) { const idx = S.orbitals.indexOf(mine[0]); S.orbitals.splice(idx, 1); mine.shift(); }
-      return true;
+      const old = blades.length, result = baseFireSkill(a, c);
+      const created = blades.slice(old).filter(b => b.kind === 'tape');
+      for (const tape of created) spawnVortexTape(copyC(c, 0.65), tape, 1, Math.PI / 2);
+      return result;
     }
     if (a.id === 'candle') {
       const t = baseTarget(400), angle = t ? Math.atan2(t.y - py, t.x - px) : player.faceA;
@@ -272,21 +277,6 @@
       const d = Math.hypot(b.x - b.formStartX, b.y - b.formStartY);
       if (d >= 160) { const angle = Math.atan2(b.vy, b.vx) + b.formTurn * Math.PI / 2, speed = Math.hypot(b.vx, b.vy); b.vx = Math.cos(angle) * speed; b.vy = Math.sin(angle) * speed; b.formTurned = true; }
     }
-    for (const o of S.orbitals) {
-      o.t -= dt; o.age += dt;
-      if (o.skill === 'cyclone') {
-        for (let i = 0; i < 2; i++) { const ang = o.age * 7 + i * Math.PI, x = player.x + Math.cos(ang) * 125 * o.c.rad, y = player.y + Math.sin(ang) * 125 * o.c.rad;
-          for (const e of enemies) { const key = e.id + '_' + i; if (e.dead || (o.hits[key] || 0) >= 2 || Math.hypot(e.x - x, e.y - y) > e.r + 22) continue;
-            o.hits[key] = (o.hits[key] || 0) + 1; areaHit(e, o.damage, o.c, x, y); } }
-      } else {
-        const group = S.orbitals.filter(x => x.skill === 'vortex'), index = group.indexOf(o), sameRing = group.filter(x => x.ring === o.ring), ringIndex = sameRing.indexOf(o);
-        const dir = o.ring ? -1 : 1, speed = o.ring ? 4.8 : 3.2, radius = (o.ring ? 150 : 80) * o.c.rad * (1 + (o.c.sweep || 0));
-        const ang = o.age * speed * dir + ringIndex / Math.max(1, sameRing.length) * Math.PI * 2, x = player.x + Math.cos(ang) * radius, y = player.y + Math.sin(ang) * radius;
-        o.x = x; o.y = y;
-        for (const e of enemies) if (!e.dead && (o.next[e.id] || 0) <= gameTime && Math.hypot(e.x - x, e.y - y) < e.r + 13) { o.next[e.id] = gameTime + 0.35; areaHit(e, o.damage, o.c, x, y); }
-      }
-    }
-    S.orbitals = S.orbitals.filter(o => o.t > 0);
     for (const m of S.mines) {
       m.t -= dt;
       if (m.state === 'fly') { m.x += m.vx * dt; m.y += m.vy * dt; const hit = enemies.find(e => !e.dead && Math.hypot(e.x - m.x, e.y - m.y) < e.r + 10);
@@ -338,8 +328,6 @@
   }
 
   function draw() {
-    for (const o of S.orbitals) if (o.skill === 'cyclone') { for (let i = 0; i < 2; i++) { const a = o.age * 7 + i * Math.PI; jcircle(player.x + Math.cos(a) * 125 * o.c.rad, player.y + Math.sin(a) * 125 * o.c.rad, 17, o.c.col, 6); } }
-      else { jcircle(o.x || player.x, o.y || player.y, 10, o.c.col, 4); }
     for (const m of S.mines) { jcircle(m.x, m.y, m.state === 'fly' ? 8 : 13 + Math.sin(gameTime * 12) * 2, m.c.col, 3); if (m.state !== 'fly') jcircle(m.x, m.y, 28 * m.c.rad, m.c.col, 1); }
     for (const w of S.wires) { ctx.globalAlpha = Math.min(0.65, w.t); jline(w.x1, w.y1, w.x2, w.y2, w.c.col, 3); }
     for (const p of S.polys) { ctx.globalAlpha = 0.8; for (let i = 0; i < p.points.length; i++) { const a = p.points[i], b = p.points[(i + 1) % p.points.length]; jline(a.x, a.y, b.x, b.y, p.c.col, p.kind === 'brand' ? 5 : 3); } }

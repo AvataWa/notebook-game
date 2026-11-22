@@ -3,7 +3,7 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
 
-app.setName('我穿越到笔记本了');
+app.setName('纸上涂鸦幻想');
 let mainWindow = null;
 
 function createWindow() {
@@ -15,7 +15,7 @@ function createWindow() {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#292931',
-    title: '我穿越到笔记本了',
+    title: '纸上涂鸦幻想',
     icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
       nodeIntegration: false,

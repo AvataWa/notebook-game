@@ -11,12 +11,12 @@ const files = [
   'meta-runtime.js', 'character-runtime.js', 'idle-runtime.js', 'ui-copy.js', 'ui-detail-runtime.js'
 ];
 const src = files.map(f => fs.readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
-const drawTexts = [];
+const drawTexts = [], drawFonts = [];
 const fakeCtx = new Proxy({}, { get(t, k) {
   if (k === 'measureText') return txt => ({ width: String(txt).length * 10 });
-  if (k === 'fillText') return txt => { drawTexts.push(String(txt)); };
+  if (k === 'fillText') return txt => { drawTexts.push(String(txt)); drawFonts.push(t.font); };
   return () => {};
-}, set() { return true; } });
+}, set(t, k, v) { t[k] = v; return true; } });
 const fakeCanvas = {
   getContext: () => fakeCtx, width: 0, height: 0, style: {}, addEventListener() {},
   getBoundingClientRect: () => ({ left: 0, top: 0, width: 375, height: 667 })
@@ -33,7 +33,7 @@ global.document = { getElementById: () => fakeCanvas, createElement: () => fakeC
 global.requestAnimationFrame = () => {};
 eval(src + `
 ;globalThis.G = {
-  resetGame, render, skillCalc, buildOptions, applyOption, rerollOptions,
+  resetGame, render, resize, skillCalc, buildOptions, applyOption, rerollOptions,
   applyLevelEquipment: (...args) => window.__buildRuntime.applyLevelEquipment(...args),
   chargeParry, updateSkills, enterDive, exitDive, update, castInkSurge, hurtEnemy, killEnemy, spawnEnemy,
   supportUsable,
@@ -203,6 +203,21 @@ test('角色手账、开局选角与构筑界面实际绘制角色信息', () =>
   assert(drawTexts.includes('选择出战角色') && drawTexts.some(t => t.includes('开始战斗')), '开局选角界面不完整');
   G.C.selectCharacter('single'); G.C.confirmSelection(); window.__buildView.open(); drawTexts.length = 0; G.render();
   assert(drawTexts.some(t => t.includes('一笔到底 Lv.1 · 单技能极限')), '构筑界面缺少角色名称、等级或流派');
+});
+
+test('横版选角页独立放大名称、说明与按钮，手机字号保持不变', () => {
+  const oldWidth = global.innerWidth, oldHeight = global.innerHeight, oldMatch = global.matchMedia;
+  try {
+    G.M.resetAll(); G.C.requestRun(false); drawFonts.length = 0; G.render();
+    assert(drawFonts.some(font => font && font.startsWith('bold 13px')), '手机角色名称字号被横版规则影响');
+    global.innerWidth = 1280; global.innerHeight = 720; global.matchMedia = () => ({ matches: false }); G.resize();
+    drawFonts.length = 0; G.render();
+    assert(drawFonts.some(font => font && font.startsWith('bold 21px')), '横版角色名称没有放大到 21px');
+    assert(drawFonts.some(font => font && font.startsWith('16px')), '横版角色说明没有放大到 16px');
+    assert(drawFonts.some(font => font && font.startsWith('bold 15px')), '横版返回或战斗按钮没有放大到 15px');
+  } finally {
+    global.innerWidth = oldWidth; global.innerHeight = oldHeight; global.matchMedia = oldMatch; G.resize();
+  }
 });
 
 test('八名角色战斗本体使用各自颜色与骨架挂件，潜墨沿用同一外观', () => {

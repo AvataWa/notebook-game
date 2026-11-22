@@ -97,7 +97,7 @@
     preBullets: [], preBolts: [], strike: Object.create(null), inBonus: false, inDeath: false
   };
   const ZONE_DEFS = {
-    cyclone: { follow: true, r: 150, duration: 1.2, base: 11 }, volcanic: { target: 520, r: 130, duration: 1.2, base: 26 },
+    cyclone: { target: 420, r: 150, duration: 1.2, base: 11 }, volcanic: { target: 520, r: 130, duration: 1.2, base: 26 },
     arc: { target: 330, r: 150, duration: 1.2, base: 22 }, vortex: { follow: true, r: 150, duration: 1.2, base: 10 },
     candle: { follow: true, r: 150, duration: 1.2, base: 4 }, inkrain: { target: 300, r: 55, duration: 2.5, base: 8 },
     ruler: { target: 520, r: 125, duration: 1.2, base: 22 }, chalk: { target: 550, r: 70, duration: 1.2, base: 35 },
@@ -264,8 +264,10 @@
             const a = Math.random() * Math.PI * 2, d = Math.random() * z.r;
             const x = e ? e.x + (Math.random() - 0.5) * 18 : z.x + Math.cos(a) * d;
             const y = e ? e.y + (Math.random() - 0.5) * 18 : z.y + Math.sin(a) * d;
-            for (const other of enemies) if (!other.dead && Math.hypot(other.x - x, other.y - y) < 22 + other.r)
+            for (const other of enemies) if (!other.dead && Math.hypot(other.x - x, other.y - y) < 22 + other.r) {
               deal(other, z.base * z.c.dmg * 0.25, z.c, x, y);
+              if (window.AffixDedupRuntime) AffixDedupRuntime.spikeHit(other, z.c);
+            }
             addFx('spike', x, y, 22, z.c.col, 0.32);
           }
         }

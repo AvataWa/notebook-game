@@ -6,7 +6,7 @@ global.window = { addEventListener() {}, devicePixelRatio: 1, innerWidth: 375, i
 global.document = { getElementById: () => fakeCanvas }; global.requestAnimationFrame = () => {};
 eval(src + `
 ;globalThis.G = {
-  resetGame, addInkStroke, fireBullet, update, render, updateInkStains, inkCellAt, inkCircleHas, inkStats,
+  resetGame, addInkStroke, fireBullet, spawnVortexTape, update, render, updateInkStains, inkCellAt, inkCircleHas, inkStats,
   get bullets() { return bullets; }, get ebullets() { return ebullets; }, get lightnings() { return lightnings; },
   get erupts() { return erupts; }, get blades() { return blades; }, get player() { return player; }, set state(v) { state = v; }
 };`);
@@ -31,11 +31,11 @@ test('电弧和冲刺类闪电路径连续铺墨', () => {
   fresh(); G.lightnings.push({ x1: -60, y1: 0, x2: 60, y2: 0, t: 0.3, delay: 0, prog: 1, c: { col: '#5b5bd6' } }); G.update(0.02);
   assertPath(-55, 55, 0, 1, '闪电路径不连续');
 });
-test('地面爆发与环绕刀阵都会在攻击位置铺墨', () => {
+test('地面爆发与涂改带封条都会在攻击位置铺墨', () => {
   fresh(); G.erupts.push({ x: 20, y: 0, delay: 0, dmg: 0, r: 20, c: { col: '#e67e22' }, done: false, t: 0 });
-  G.blades.push({ x: 0, y: 0, ang: 0, t: 1, dmg: 0, c: { col: '#6b6b6b' }, rad: 1 }); G.update(0.02);
+  G.spawnVortexTape({ col: '#6b6b6b', rad: 1, sweep: 0, dmg: 1, areaT: 1, count: 0 }, { x: -40, y: 30 }); G.update(0.02);
   assert(G.inkCellAt(20, 0).owner === 1, '地面爆发没有铺墨'); const bl = G.blades[0];
-  assert(G.inkCellAt(bl.x, bl.y).owner === 1, '刀阵路径没有铺墨');
+  assert(G.inkCellAt(bl.x, bl.y).owner === 1, '涂改带封条没有铺墨');
 });
 test('攻击路径持久保留并积攒墨潮，但不改变普通墨水', () => {
   fresh(); G.player.ink = 50; G.addInkStroke(0, 0, 80, 0, '#7ec8e3', false); const before = G.inkStats().friendly;

@@ -167,11 +167,14 @@
     ctx.fillStyle = fill; ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
     jrect(rect.x, rect.y, rect.w, rect.h, border, width);
     if (item && showLabel) {
-      const label = slotName(item), tag = (item.kind === 'active' ? '主动 · ' + skillTagText(item.value.id) : '辅助 · ' + supportTagText(item.value.id));
-      txt(label, rect.x + rect.w / 2, rect.y + (compactChip ? 10 : 19), compactChip ? 9 : 11, labelColor, 'center', true, rect.w - 6);
-      ctx.font = (compactChip ? 8 : 9) + 'px ' + FONT;
-      const chipWidth = Math.min(rect.w - 8, ctx.measureText(tag).width + 6);
-      drawTagChip(tag, rect.x + (rect.w - chipWidth) / 2, rect.y + (compactChip ? 12 : 31), slotColor(item), compactChip ? 8 : 9, rect.w - 8);
+      const icons = window.SkillIconRuntime, iconSize = compactChip ? 26 : 34;
+      if (icons) icons.drawItem(item, rect.x + 3, rect.y + (compactChip ? 2 : 7), iconSize, { connected: ref.type === 'support' });
+      const textX = rect.x + (icons ? iconSize + 8 : 6), textW = rect.w - (icons ? iconSize + 12 : 12);
+      const name = item.kind === 'active' ? SKILL_DEFS[item.value.id].name : SUPPORTS[item.value.id].name;
+      const label = icons ? name : slotName(item), tag = (item.kind === 'active' ? '主动 · ' + skillTagText(item.value.id) : '辅助 · ' + supportTagText(item.value.id));
+      txt(label, icons ? textX : rect.x + rect.w / 2, rect.y + (compactChip ? 11 : 20), compactChip ? 9 : 11, labelColor, icons ? 'left' : 'center', true, icons ? textW : rect.w - 6);
+      const tagSize = compactChip ? 7 : 8;
+      drawTagChip(tag, icons ? textX : rect.x + 4, rect.y + (compactChip ? 14 : 31), slotColor(item), tagSize, icons ? textW : rect.w - 8);
     } else if (!item && !compactChip) txt(ref.type === 'reserve' ? '空备用格' : '空主动位', rect.x + rect.w / 2, rect.y + rect.h / 2 + 4, 11, GRAY, 'center');
     regions.push({ ref, rect });
   }
@@ -186,11 +189,14 @@
     const item = active ? { kind: 'active', value: active } : null;
     drawSlot({ type: 'active', index }, rect, item, false, false);
     if (!active) return;
+    const icons = window.SkillIconRuntime, iconSize = desktop ? 50 : 36;
+    if (icons) icons.draw(active.id, 'active', rect.x + 8, rect.y + (desktop ? 7 : 5), iconSize, { level: active.lvl, state: active.supports.length + '/' + supportCap() });
+    const textX = rect.x + (icons ? iconSize + 16 : 12), textW = rect.w - (icons ? iconSize + 100 : 90);
     // 主动标题单独绘制，槽位本体仍负责整卡拖动与详情。
-    txt(SKILL_DEFS[active.id].name + '  Lv.' + active.lvl, rect.x + 12, rect.y + 21, desktop ? 16 : 14, attrOf(active.id), 'left', true, rect.w - 90);
-    drawTagChip('主动 · ' + skillTagText(active.id), rect.x + 12, rect.y + 26, attrOf(active.id), desktop ? 10 : 8, rect.w - 90);
+    txt(SKILL_DEFS[active.id].name + (icons ? '' : '  Lv.' + active.lvl), textX, rect.y + 21, desktop ? 16 : 14, attrOf(active.id), 'left', true, textW);
+    drawTagChip('主动 · ' + skillTagText(active.id), textX, rect.y + 26, attrOf(active.id), desktop ? 10 : 8, textW + 65);
     txt('辅 ' + active.supports.length + '/' + supportCap(), rect.x + rect.w - 12, rect.y + 20, 10, PURPLE, 'right');
-    if (desktop) txt(window.UICopy ? UICopy.skillShort(active.id) : SKILL_DEFS[active.id].desc, rect.x + 12, rect.y + 58, 11, GRAY, 'left', false, rect.w - 24);
+    if (desktop) txt(window.UICopy ? UICopy.skillShort(active.id) : SKILL_DEFS[active.id].desc, textX, rect.y + 58, 11, GRAY, 'left', false, rect.w - iconSize - 32);
     const cap = supportCap(), columns = desktop && cap === 8 ? 8 : 4, gap = 5, pad = 10;
     const chipW = (rect.w - pad * 2 - gap * (columns - 1)) / columns;
     const chipY = rect.y + (desktop ? 78 : 45), chipH = desktop ? 33 : 31;
@@ -260,7 +266,8 @@
   function openDetails(ref) {
     const item = readSlot(ref); if (!item || !window.UIDetail) return;
     if (item.kind === 'active') UICopy.skillDetail(item.value);
-    else UIDetail.open({ title: SUPPORTS[item.value.id].name + ' Lv.' + item.value.lvl, subtitle: '拖动可更换镶嵌', tag: '辅助 · ' + supportTagText(item.value.id), body: supDesc(item.value.id, item.value.lvl), color: PURPLE });
+    else UIDetail.open({ title: SUPPORTS[item.value.id].name + ' Lv.' + item.value.lvl, subtitle: '拖动可更换镶嵌', tag: '辅助 · ' + supportTagText(item.value.id), body: supDesc(item.value.id, item.value.lvl), color: PURPLE,
+      icon: window.SkillIconRuntime ? SkillIconRuntime.itemMeta(item, { connected: ref.type === 'support' }) : null });
   }
   function ownPointer(e) { e.preventDefault(); e.stopImmediatePropagation(); }
   function eventCoord(e) {

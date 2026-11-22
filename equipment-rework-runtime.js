@@ -296,8 +296,8 @@
   };
 
   const baseHurtPlayer = hurtPlayer;
-  hurtPlayer = function(dmg, kind) {
-    if (player.diving || hitStopT > 0 || player.goldT > 0 || player.hurtT > 0) return baseHurtPlayer(dmg, kind);
+  hurtPlayer = function(dmg, kind, ...rest) {
+    if (player.diving || hitStopT > 0 || player.goldT > 0 || player.hurtT > 0) return baseHurtPlayer(dmg, kind, ...rest);
     if (hasItem('blotarmor') && S.armorLayers > 0) {
       S.armorLayers--;
       dmg *= 1 - itemV('blotarmor', 'dr') / 100;
@@ -310,7 +310,7 @@
       if (dmg <= 0.001) return;
     }
     const oldHp = player.hp;
-    baseHurtPlayer(dmg, kind);
+    baseHurtPlayer(dmg, kind, ...rest);
     if (hasItem('inkarmor')) {
       const lost = Math.max(0, oldHp - player.hp);
       S.inkStored = Math.min(player.maxhp * 0.5, S.inkStored + lost * itemV('inkarmor', 'store') / 100);

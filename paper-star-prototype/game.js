@@ -466,7 +466,7 @@
     ctx.setLineDash([3, 4]); ctx.strokeStyle = 'rgba(28,45,120,.35)'; ctx.lineWidth = 1; ctx.strokeRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h); ctx.setLineDash([]);
   }
   function drawHUD() {
-    text('我穿越到笔记本了', 21, 20, 15, C.ink, 'left', '700'); text('升星试验', 355, 20, 10, C.red, 'right', '700');
+    text('纸上涂鸦幻想', 21, 20, 15, C.ink, 'left', '700'); text('升星试验', 355, 20, 10, C.red, 'right', '700');
     text('生命', 20, 45, 10, C.gray); rect(55, 40, 132, 10, '#dfd6c8', C.ink, 1); rect(56, 41, 130 * Math.max(0, S.hp / 100), 8, C.red);
     text(`${Math.ceil(Math.max(0, S.hp))}/100`, 193, 45, 10, C.red);
     text(`Lv.${S.level}`, 250, 45, 11, C.ink, 'left', '700'); text(`${Math.floor(S.time)}″`, 354, 45, 12, C.ink, 'right', '700');
@@ -491,7 +491,7 @@
   }
   function drawStart() {
     rect(8, 6, 359, 655, 'rgba(245,241,230,.86)');
-    text('我穿越到笔记本了', 188, 85, 24, C.ink, 'center', '700'); text('纸 人 升 星 · 试 验 页', 188, 117, 12, C.red, 'center', '700');
+    text('纸上涂鸦幻想', 188, 85, 24, C.ink, 'center', '700'); text('纸 人 升 星 · 试 验 页', 188, 117, 12, C.red, 'center', '700');
     roughLine(75, 137, 300, 137, C.ink, 1.5); drawPlayer(188, 228, 2.2, true);
     text('不是换一张技能卡，而是换一块身体。', 188, 322, 15, C.ink, 'center', '700');
     text('三张同名同星部件，自动合成更高一星', 188, 355, 12, C.gray, 'center');
