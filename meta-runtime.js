@@ -499,7 +499,8 @@
       const current = entry.level * entry.per, next = (entry.level + 1) * entry.per;
       ctx.fillStyle = 'rgba(255,250,238,0.92)'; ctx.fillRect(24, y, 327, 76); jrect(24, y, 327, 76, maxed ? GRAY : INK, 1.4);
       text(entry.name + '  Lv.' + entry.level + '/' + entry.max, 36, y + 25, 13, INK, 'left', true);
-      text(entry.desc + ' +' + current + entry.unit + (maxed ? '' : ' → +' + next + entry.unit), 36, y + 51, 11, DARK);
+      const sign = entry.id === 'cd' ? '' : '+';
+      text(entry.desc + ' ' + sign + current + entry.unit + (maxed ? '' : ' → ' + sign + next + entry.unit), 36, y + 51, 11, DARK);
       button({ x: 269, y: y + 22, w: 68, h: 34 }, maxed ? '已满' : String(cost), !maxed && meta.ink >= cost);
     });
     if (!shown.length) text('暂无可升级项目', W / 2, 300, 13, GRAY, 'center');

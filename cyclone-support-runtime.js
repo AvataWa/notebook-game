@@ -15,7 +15,7 @@
       case 'cycloneline': return '同线命中 ' + (l >= 3 ? 2 : 3) + ' 只及以上直接刮蜡' + (l >= 5 ? '，刮蜡后保留 1 层' : '');
       case 'cycloneresidue': return '其他怪穿线受 30% 伤害\n并叠 1 层；残线持续 ' + (1.6 + 0.4 * (l - 1)).toFixed(1) + ' 秒';
       case 'cycloneshards': return '刮蜡向两端发蜡屑\n造成 ' + (40 + 10 * (l - 1)) + '% 刮蜡伤害并叠 1 层' + (l >= 3 ? '；折返' : '');
-      case 'cyclonedetonate': return '其他主动消耗 2 层蜡色引爆\n造成 ' + (60 + 10 * (l - 1)) + '% 刮蜡；单目标间隔 ' + Math.max(0.3, 0.6 - 0.05 * (l - 1)).toFixed(2) + ' 秒';
+      case 'cyclonedetonate': return '其他主动消耗 2 层蜡色引爆\n造成 ' + (60 + 10 * (l - 1)) + '% 刮蜡；同一目标触发间隔 ' + Math.max(0.3, 0.6 - 0.05 * (l - 1)).toFixed(2) + ' 秒';
       default: return baseSupDesc(id, l);
     }
   };

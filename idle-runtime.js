@@ -104,7 +104,7 @@
     S.round = [];
     const reduction = fullBuild() ? 1.2 : 0.6;
     for (const a of player.actives) a.t = Math.max(0, a.t - reduction);
-    floats.push({ x: player.x, y: player.y - 48, txt: '自动书写完成 · 冷却 -' + reduction + ' 秒', t: 0.9, color: INK, crit: true });
+    floats.push({ x: player.x, y: player.y - 48, txt: '自动书写完成 · 返还 ' + reduction + ' 秒当前冷却', t: 0.9, color: INK, crit: true });
     if (player.taken.idleround) {
       const restored = restoreShield(8);
       if (restored > 0) floats.push({ x: player.x, y: player.y - 64, txt: '轮转充盾 +' + Math.round(restored), t: 0.8, color: ARC });

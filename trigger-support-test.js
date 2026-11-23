@@ -1,4 +1,4 @@
-// 五类主动连携、独立触发冷却与红芯投枪下线专项测试
+// 五类主动连携、独立触发间隔与红芯投枪下线专项测试
 const fs = require('fs');
 const src = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'main.js', 'build-runtime.js', 'hades-runtime.js', 'hades-weapons-runtime.js', 'weapon-passives-expansion.js', 'form-passives-runtime.js', 'support-expansion-runtime.js', 'elemental-support-runtime.js', 'trigger-support-runtime.js', 'build-optimization-runtime.js', 'affix-dedup-runtime.js']
   .map(f => fs.readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
@@ -35,7 +35,7 @@ test('红芯及三条专属被动下线，五种连携可供全部主动使用',
   assert(!['hdualcore', 'hcorewound', 'hshardguard'].some(id => G.PASSIVES.some(p => p.id === id)), '红芯专属被动仍在词条池');
   assert(Object.keys(G.SUPPORTS).length === 67, '辅助总数不是 67');
   for (const id of ['onabsorb', 'ondive', 'onsurge', 'oncrit', 'onkill']) assert(G.supportUsable(id, 'cyclone') && G.supportUsable(id, 'tornado'), id + ' 未对全部主动开放');
-  assert(G.supDesc('oncrit', 1).includes('1.0 秒') && G.supDesc('onkill', 3).includes('0.8 秒'), '触发冷却文案错误');
+  assert(G.supDesc('oncrit', 1).includes('1.0 秒') && G.supDesc('onkill', 3).includes('0.8 秒'), '触发间隔文案错误');
 });
 
 test('吸墨、进入潜墨与墨潮都会实际触发所镶嵌主动', () => {

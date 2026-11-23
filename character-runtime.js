@@ -264,7 +264,7 @@
         if (count === 2 || count === 3) {
           const reduction = count === 2 ? 0.3 : 0.45;
           for (const a of player.actives) a.t = Math.max(0, a.t - reduction);
-          floats.push({ x: player.x, y: player.y - 48, txt: count + ' 色共鸣 · 冷却 -' + reduction + ' 秒', t: 0.7, color: INK });
+          floats.push({ x: player.x, y: player.y - 48, txt: count + ' 色共鸣 · 返还 ' + reduction + ' 秒当前冷却', t: 0.7, color: INK });
         }
         if (lvl() >= 2 && !S.colorRound[attr]) {
           S.colorRound[attr] = true;

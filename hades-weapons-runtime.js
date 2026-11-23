@@ -15,7 +15,7 @@
     piercerush: { name: '交叉贯枪', desc: '双枪影交叉贯穿，交叉点产生剪切爆发，角色原地施放' },
     spinlance: { name: '钉页旋枪', desc: '投出长枪钉在远处持续旋转，到期后飞回并切割沿途敌人' },
     shieldrush: { name: '三层盾印', desc: '获得三层盾印，受击消耗一层并减伤反击，结束时按剩余层数盾震' },
-    ricoshield: { name: '折跃飞盾', desc: '大盾在敌人之间弹射，最后返回；接住盾牌可立即再投' },
+    ricoshield: { name: '折跃飞盾', desc: '大盾在敌人之间弹射，最后返回；接住盾牌可刷新本技能当前冷却' },
     perfectarrow: { name: '完美一箭', desc: '自动完成蓄力，在完美区间释放高伤贯穿箭' },
     arrowfocus: { name: '群箭批注', desc: '标记目标并悬停箭阵，随后依次转向集火同一目标' },
     magfist: { name: '磁墨升拳', desc: '在远程目标点聚怪并浮空，随后上勾下砸，角色原地施放' },
@@ -47,7 +47,7 @@
   passive('shield_reflect', '盾面反批', '盾印格挡敌弹时将其原路弹回', 'shieldrush');
   passive('shield_bash', '碎页守城', '盾印结算时强化盾震，剩余层数提高范围与伤害', 'shieldrush');
   passive('ricoshield_double', '双盾轮转', '同时掷出第二面盾牌，单盾伤害 -20%', 'ricoshield');
-  passive('ricoshield_catch', '接盾震页', '接住盾牌时释放近身冲击并重置投掷', 'ricoshield');
+  passive('ricoshield_catch', '接盾震页', '接住盾牌时释放近身冲击，并刷新本技能当前冷却', 'ricoshield');
   passive('perfect_tail', '裂帛箭尾', '完美射击穿过目标后追加冰晶剑气', 'perfectarrow');
   passive('perfect_split', '一箭双星', '完美命中后向两侧分裂箭矢，射击附近目标', 'perfectarrow');
   passive('focus_more', '悬箭扩编', '集火箭矢 +4，悬停阵列扩大', 'arrowfocus');

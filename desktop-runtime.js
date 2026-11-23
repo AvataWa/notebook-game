@@ -94,13 +94,14 @@
       const titleX = r.x + 20 + (iconMeta ? 70 : 0);
       const titleW = r.w - 40 - (iconMeta ? 70 : 0);
       txt(cd.name, titleX, r.y + 66, 20, INK, 'left', true, titleW);
-      if (cd.typeLabel) drawTagChip(cd.typeLabel, titleX, r.y + 78, color, 12, titleW);
+      if (cd.roleLabel) drawTagChip(cd.roleLabel, titleX, r.y + 78, color, 12, titleW);
       ctx.font = '14px ' + FONT;
       const short = cd.shortDesc || String(cd.desc || '').replace(/^Lv1：/, '');
       const count = lines(short, r.x + 20, r.y + 136, r.w - 40, 22, 4);
       const detail = (cd.detailLines || []).join('');
       if (detail) { ctx.font = '12px ' + FONT; ctx.fillStyle = GRAY; lines(detail, r.x + 20, r.y + 146 + count * 22, r.w - 40, 18, 3); }
       txt(locked ? '0.5 秒后可选择' : '点击或按 ' + (i + 1) + ' 选择', r.x + 20, r.y + r.h - 24, 12, locked ? GRAY : color, 'left', true);
+      drawCardTypeBadge(cd, r, 15);
     });
   };
 
@@ -254,7 +255,8 @@
       const maxed = entry.level >= entry.max, cost = maxed ? 0 : entry.costs[entry.level];
       ctx.fillStyle = 'rgba(255,250,238,0.94)'; ctx.fillRect(r.x, r.y, r.w, r.h); jrect(r.x, r.y, r.w, r.h, maxed ? GRAY : INK, 1.6);
       txt(entry.name + '  Lv.' + entry.level + '/' + entry.max, r.x + 18, r.y + 32, 17, INK, 'left', true);
-      txt(entry.desc + ' +' + entry.level * entry.per + entry.unit + (maxed ? '' : ' → +' + (entry.level + 1) * entry.per + entry.unit), r.x + 18, r.y + 65, 14, DARK);
+      const sign = entry.id === 'cd' ? '' : '+';
+      txt(entry.desc + ' ' + sign + entry.level * entry.per + entry.unit + (maxed ? '' : ' → ' + sign + (entry.level + 1) * entry.per + entry.unit), r.x + 18, r.y + 65, 14, DARK);
       button({ x: r.x + r.w - 122, y: r.y + 66, w: 100, h: 38 }, maxed ? '已满' : cost + ' 墨点', () => m.upgradeTalent(entry.id), { enabled: !maxed && m.data.ink >= cost });
     });
     pager(entries.length, per, 620);

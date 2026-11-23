@@ -28,10 +28,10 @@
     if (PASSIVES.some(p => p.id === id)) return;
     PASSIVES.push({ id, name, desc, once: true, fx: () => { player.taken[id] = true; } });
   }
-  addPassive('hastyscript', '急就章', '每 10% 额外移速使主动冷却 -3%，最多 -36%');
+  addPassive('hastyscript', '急就章', '每 10% 额外移速使主动释放频率提升 3%，最多提升 36%');
   addPassive('movingwrite', '边走边写', '移动中每 10% 额外移速使主动伤害 +2%，最多 +24%；停笔保留 0.5 秒');
   addPassive('runningguard', '行间拖影', '持续移动 1 秒后，每 10% 额外移速提供 1.5% 减伤，最多 18%');
-  addPassive('stumblewrite', '踉跄疾书', '实际受伤后 3 秒移速 +40%，6 秒内置冷却；增速期间首次主动留下伤害墨痕');
+  addPassive('stumblewrite', '踉跄疾书', '每 6 秒最多触发一次；实际受伤后 3 秒移速 +40%，增速期间首次主动留下伤害墨痕');
 
   function supportLevel(a, id) {
     const sp = a && a.supports && a.supports.find(s => s.id === id);

@@ -155,8 +155,8 @@ test('墨刺累计三次定身普通怪，暴击与收割连携保持原描述�
   fresh('cyclone', ['areaspikes']); const e = target(); e.stunT = 0;
   G.R.spikeHit(e); G.R.spikeHit(e); assert(e.stunT === 0 && e.slowT > 0, '墨刺提前定身或没有减速');
   G.R.spikeHit(e); assert(e.stunT >= 0.35, '第三次墨刺没有定身');
-  assert(G.supDesc('oncrit', 1) === '暴击时额外施放本技能，触发冷却 1.0 秒', '暴击连携被改动');
-  assert(G.supDesc('onkill', 1) === '怪物死亡时额外施放本技能，触发冷却 1.0 秒', '收割连携被改动');
+  assert(G.supDesc('oncrit', 1) === '暴击时额外施放本技能，触发间隔 1.0 秒', '暴击连携被改动');
+  assert(G.supDesc('onkill', 1) === '怪物死亡时额外施放本技能，触发间隔 1.0 秒', '收割连携被改动');
   assert(near(G.T.cooldownFor({ lvl: 1 }, G.player.actives[0]), 1), '连携冷却被改动');
 });
 

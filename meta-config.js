@@ -8,7 +8,7 @@ const META_CONFIG = {
     { id: 'hp', name: '厚纸', desc: '最大生命', per: 5, unit: '', max: 5 },
     { id: 'speed', name: '疾行', desc: '移动速度', per: 1.5, unit: '%', max: 5 },
     { id: 'ink', name: '墨囊', desc: '墨水上限', per: 5, unit: '', max: 5 },
-    { id: 'cd', name: '熟练', desc: '主动技能冷却', per: 1, unit: '%', max: 5 }
+    { id: 'cd', name: '熟练', desc: '主动释放频率提升', per: 1, unit: '%', max: 5 }
   ],
   inkSpecs: [
     { id: 'dive', name: '潜墨专精', desc: '潜墨词条伤害' },

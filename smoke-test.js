@@ -34,6 +34,8 @@ eval(src + `
   get ebullets() { return ebullets; }
 };`);
 
+global.AffixDedupRuntime = window.AffixDedupRuntime;
+
 G.resetGame();
 G.applyOption(0);
 const realNow = Date.now;

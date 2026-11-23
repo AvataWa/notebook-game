@@ -170,7 +170,7 @@ const SKILL_DEFS = {
   arc:      { name: '电弧荧光笔', desc: '闪电在敌群间自动连锁' },
   spark:    { name: '慢速墨滴',   desc: '前两颗瞄准敌人；反弹后增伤 50% 并弱追踪' },
   ballista: { name: '图钉炮台',   desc: '自动射击；集火同一目标时逐发加速' },
-  boomerang:{ name: '回力橡皮擦', desc: '返程伤害 +35%；接回后当前冷却 -35%' },
+  boomerang:{ name: '回力橡皮擦', desc: '返程伤害 +35%；接回后返还本技能 35% 当前冷却' },
   vortex:   { name: '涂改带撕页', desc: '封住怪物所在区域，短暂延迟后整片撕起' },
   candle:   { name: '蜡烛头',     desc: '持续灼烧周围敌人，单圈伤害提升' },
   icespear: { name: '冰锥图钉',   desc: '优先 Boss/精英；对减速目标伤害 +25%' },
@@ -183,7 +183,7 @@ const SKILL_DEFS = {
   cola:     { name: '冰可乐新星', desc: '冻慢周围敌人；命中已减速目标追加碎冰' }
 };
 const SKILL_EVOLUTIONS = {
-  cyclone:  { 3: '质变：追加一条 60% 伤害的短直涂抹', 5: '觉醒：三重短直涂抹，施法间隔缩短 28%' },
+  cyclone:  { 3: '质变：追加一条 60% 伤害的短直涂抹', 5: '觉醒：三重短直涂抹，释放频率提升 28%' },
   volcanic: { 3: '质变：裂缝向左右分支', 5: '觉醒：延长火山带，末端大范围喷发' },
   tornado:  { 3: '质变：纸飞机额外分裂一代', 5: '觉醒：大飞机编队，连续分裂' },
   arc:      { 3: '质变：主电弧额外分叉', 5: '觉醒：连锁落点留下持续雷网' },
@@ -194,7 +194,7 @@ const SKILL_EVOLUTIONS = {
   cola:     { 3: '质变：新星后留下减速冰面', 5: '觉醒：冻结怪群并引发连环碎冰' }
 };
 function activeUpgradeDesc(id, lvl) {
-  let desc = (SKILL_EVOLUTIONS[id] && SKILL_EVOLUTIONS[id][lvl]) || '伤害 +15%，冷却 -4%';
+  let desc = (SKILL_EVOLUTIONS[id] && SKILL_EVOLUTIONS[id][lvl]) || '伤害 +15%，释放频率提升 4%';
   if ((SKILL_TAGS[id] || []).includes('proj') && (lvl === 2 || lvl === 4)) desc += '，弹数 +1';
   return desc;
 }
@@ -220,10 +220,28 @@ const ATTR_NAME = { phys: '物理', fire: '火', ice: '冰', thunder: '雷' };
 const TAG_NAME = { proj: '子弹', area: '范围', strike: '打击' };
 function skillTagText(id) { return (SKILL_TAGS[id] || []).map(t => TAG_NAME[t] || t).join(' / ') || '无标签'; }
 function supportTagText(id) { const tag = SUPPORTS[id] && SUPPORTS[id].tag; return tag === 'all' ? '通用' : (TAG_NAME[tag] || tag || '通用'); }
-function cardTypeLabel(c) {
+const CARD_TYPE_NAMES = { newActive: '新主动', newSupport: '新辅助', upgrade: '升级', general: '通用', heal: '恢复' };
+const CARD_TYPE_COLORS = { newActive: INK, newSupport: PURPLE, upgrade: '#d77b24', general: ALLY, heal: '#2f9e68' };
+function cardTypeKind(c) {
   if (!c) return '';
-  if (c.acquire && c.kind === 'active') return '新主动 · 入库 · ' + skillTagText(c.id);
-  if (c.acquire && c.kind === 'support') return '新辅助 · 入库 · ' + supportTagText(c.sup);
+  if (c.kind === 'start' || c.kind === 'active') return 'newActive';
+  if (c.kind === 'support') return 'newSupport';
+  if (c.kind === 'active+' || c.kind === 'support+' || c.kind === 'opaffix' || (c.kind === 'passive' && c.tag === '[形态]')) return 'upgrade';
+  if (c.kind === 'passive') return 'general';
+  if (c.kind === 'heal') return 'heal';
+  return '';
+}
+function cardTypeLabel(c) {
+  const kind = cardTypeKind(c);
+  if (!kind) return '';
+  const stored = c.acquire && (kind === 'newActive' || kind === 'newSupport') ? ' · 入库' : '';
+  return CARD_TYPE_NAMES[kind] + stored;
+}
+function cardTypeColor(c) {
+  return CARD_TYPE_COLORS[cardTypeKind(c)] || (c && c.tagColor) || INK;
+}
+function cardRoleLabel(c) {
+  if (!c) return '';
   if (c.kind === 'start' || c.kind === 'active' || c.kind === 'active+') return '主动 · ' + skillTagText(c.id || c.skill);
   if (c.kind === 'support' || c.kind === 'support+') return '辅助 · ' + supportTagText(c.sup);
   if (c.kind === 'passive') return c.tag === '[形态]' ? '形态 · 专属' : (c.tag === '[护盾]' ? '被动 · 护盾' : '被动 · 通用');
@@ -239,6 +257,19 @@ function drawTagChip(value, x, y, color = INK, size = 10, maxWidth = 999) {
   ctx.save(); ctx.globalAlpha = 0.1; ctx.fillStyle = color; ctx.fillRect(x, y, w, h);
   ctx.globalAlpha = 0.48; jrect(x, y, w, h, color, 1); ctx.restore();
   ctx.fillStyle = color; ctx.textAlign = 'left'; ctx.fillText(text, x + padX, y + size + padY, w - padX * 2);
+  return { x, y, w, h };
+}
+function drawCardTypeBadge(c, r, size = 13) {
+  const text = String(c && c.typeLabel || ''); if (!text) return null;
+  const color = c.tagColor || INK, h = size + 8;
+  ctx.save(); ctx.font = 'bold ' + size + 'px ' + FONT;
+  const w = Math.min(r.w - 24, ctx.measureText(text).width + 22);
+  const x = r.x + (r.w - w) / 2, y = r.y - h / 2;
+  ctx.fillStyle = 'rgba(255,250,238,0.99)'; ctx.fillRect(x, y, w, h);
+  jrect(x, y, w, h, color, 1.5);
+  ctx.fillStyle = color; ctx.textAlign = 'center';
+  ctx.fillText(text, x + w / 2, y + h / 2 + size * 0.35, w - 12);
+  ctx.restore();
   return { x, y, w, h };
 }
 function attrOf(aid) { return ATTR_COLOR[SKILL_ATTR[aid]] || INK; }
@@ -302,8 +333,8 @@ function supportUsable(sid, aid) {
 }
 function supDesc(id, l) {           // 辅助在 l 级时的效果描述
   switch (id) {
-    case 'brutal':  return '伤害 +' + 25 * l + '%，冷却 +' + 8 * l + '%';
-    case 'swift':   return '冷却 -' + 13 * l + '%';
+    case 'brutal':  return '伤害 +' + 25 * l + '%，释放频率降低 ' + 8 * l + '%';
+    case 'swift':   return '释放频率提升 ' + 13 * l + '%';
     case 'unleash': return '每第 3 次施放效果 x' + (1 + l);
     case 'focus':   return '命中使怪物受伤加深 +' + 15 * l + '%，持续 2 秒';
     case 'dot':     return '命中附加 ' + 18 * l + '%/秒 洇墨伤害，持续 3 秒';
@@ -320,10 +351,10 @@ function supDesc(id, l) {           // 辅助在 l 级时的效果描述
     case 'wide':    return '范围/半径 +' + 22 * l + '%';
     case 'saturate':return '范围伤害 +' + 20 * l + '%';
     case 'soak':    return '范围内怪物受伤加深 +' + 8 * l + '%';
-    case 'sheath':  return '范围技能冷却 -' + 10 * l + '%';
+    case 'sheath':  return '范围技能释放频率提升 ' + 10 * l + '%';
     case 'pressboss':return '范围技能对 Boss 伤害 +' + 15 * l + '%';
     case 'core':    return '区域中心一半半径内伤害 +' + 30 * l + '%';
-    case 'retick':  return '范围伤害频率 +' + 18 * l + '%';
+    case 'retick':  return '范围伤害频率提升 ' + 18 * l + '%';
     case 'linger':  return '范围持续时间 +' + 35 * l + '%';
     case 'reburst': return '范围结束后原地再爆发 ' + (50 + 25 * l) + '% 伤害';
     case 'stain':   return '怪物离开范围仍受余伤，持续 ' + (1 + 0.5 * l) + ' 秒';
@@ -332,7 +363,7 @@ function supDesc(id, l) {           // 辅助在 l 级时的效果描述
     case 'combo':   return '连续命中同一目标伤害递增 +' + 6 * l + '%，最多 5 层，2 秒未命中清零';
     case 'scrit':   return '打击暴击率 +' + 10 * l + '%';
     case 'counter': return '受击后 2 秒内打击伤害 +' + 30 * l + '%';
-    case 'rapid':   return '打击施放/攻击频率 +' + 15 * l + '%';
+    case 'rapid':   return '打击技能释放频率提升 ' + 15 * l + '%';
     case 'sweep':   return '打击范围 +' + 20 * l + '%';
     case 'followup':return '命中 0.4 秒后追加 ' + 40 * l + '% 伤害';
     case 'leech':   return '打击命中回复 ' + (0.3 * l).toFixed(1) + '% 最大生命，每秒最多 3 次';
@@ -341,20 +372,20 @@ function supDesc(id, l) {           // 辅助在 l 级时的效果描述
     case 'onabsorb':return '吸墨时额外施放本技能，触发伤害为 ' + (100 + 15 * (l - 1)) + '%';
     case 'ondive':  return '进入潜墨时额外施放本技能，触发伤害为 ' + (100 + 15 * (l - 1)) + '%';
     case 'onsurge': return '释放墨潮时额外施放本技能，触发伤害为 ' + (100 + 15 * (l - 1)) + '%';
-    case 'oncrit':  return '暴击时额外施放本技能，触发冷却 ' + (1 - 0.1 * (l - 1)).toFixed(1) + ' 秒';
-    case 'onkill':  return '怪物死亡时额外施放本技能，触发冷却 ' + (1 - 0.1 * (l - 1)).toFixed(1) + ' 秒';
+    case 'oncrit':  return '暴击时额外施放本技能，触发间隔 ' + (1 - 0.1 * (l - 1)).toFixed(1) + ' 秒';
+    case 'onkill':  return '怪物死亡时额外施放本技能，触发间隔 ' + (1 - 0.1 * (l - 1)).toFixed(1) + ' 秒';
   }
   return '';
 }
 const PASSIVES = [
   { id: 'dmg', name: '笔力', desc: '全部伤害 +10%', fx: () => player.dmgMul *= 1.1 },
-  { id: 'haste', name: '速写', desc: '全部技能冷却与墨潮蓄力时间 -6%', fx: () => player.cdMul *= 0.94 },
+  { id: 'haste', name: '速写', desc: '全部技能释放频率提升 6%，墨潮蓄力时间 -6%', fx: () => player.cdMul *= 0.94 },
   { id: 'spd', name: '碎步', desc: '移动速度 +6%', fx: () => player.speed *= 1.06 },
   { id: 'hpup', name: '厚纸', desc: '最大生命 +20 并回复 20', fx: () => { player.maxhp += 20; player.hp = Math.min(player.maxhp, player.hp + 20); } },
   { id: 'magnet', name: '灵感', desc: '普通怪物击杀经验 +15%', fx: () => player.xpMul *= 1.15 },
   { id: 'crit', name: '重墨', desc: '暴击率 +10%（双倍伤害）', fx: () => player.crit += 0.1 },
   { id: 'inkmaster', name: '泼墨', desc: '全部技能与弹反范围 +15%；弹反后 2 秒内下一主动伤害 +15%', once: true, fx: () => { player.taken.inkmaster = true; player.radMul *= 1.15; } },
-  { id: 'fountain', name: '笔芯连供', desc: '全部技能冷却与墨潮蓄力时间 -12%，但全部伤害 -8%', once: true, fx: () => { player.taken.fountain = true; player.cdMul *= 0.88; player.dmgMul *= 0.92; } },
+  { id: 'fountain', name: '笔芯连供', desc: '全部技能释放频率提升 12%，墨潮蓄力时间 -12%，但全部伤害 -8%', once: true, fx: () => { player.taken.fountain = true; player.cdMul *= 0.88; player.dmgMul *= 0.92; } },
   { id: 'inkarmor', name: '墨层护膜', desc: '站在己方墨迹上，受到伤害 -20%', once: true, fx: () => player.taken.inkarmor = true },
   { id: 'inkpower', name: '领地笔意', desc: '站在己方墨迹上，全部伤害 +20%', once: true, fx: () => player.taken.inkpower = true }
 ];
@@ -378,9 +409,9 @@ const ITEM_DEFS = typeof EQUIPMENT_ITEM_DEFS !== 'undefined' ? EQUIPMENT_ITEM_DE
   glove: { slot: 'hands', name: '红笔指套', atk: 10, hp: 0, fx: '暴击率 +15%，暴击伤害 x2.5' },
   compass: { slot: 'hands', name: '圆规护腕', atk: 10, hp: 0, fx: '每条辅助使对应技能范围 +5%' },
   shoes: { slot: 'feet', name: '弹簧拖鞋', atk: 0, hp: 20, fx: '移速 +12%，受击后移速再 +30%' },
-  tape: { slot: 'feet', name: '修正带鞋', atk: 0, hp: 25, fx: '每 30 秒抵挡一次致命伤害' },
+  tape: { slot: 'feet', name: '修正带鞋', atk: 0, hp: 25, fx: '每 30 秒最多抵挡一次致命伤害' },
   pendant: { slot: 'acc', name: '墨胆吊坠', atk: 8, hp: 20, fx: '墨水上限 +25，基础回墨 +0.5/秒' },
-  bookmark: { slot: 'acc', name: '灵感书签', atk: 6, hp: 15, fx: '升级回复 50 墨水并完成吸墨冷却' }
+  bookmark: { slot: 'acc', name: '灵感书签', atk: 6, hp: 15, fx: '每 3 次升级，随机提升 1 个未满级已装备辅助' }
 };
 const ITEM_KEYS = typeof EQUIPMENT_ITEM_KEYS !== 'undefined' ? EQUIPMENT_ITEM_KEYS : Object.keys(ITEM_DEFS);
 function equipped(key) { return SLOTS.map(s => player.equip[s]).find(eq => eq && eq.key === key) || null; }
@@ -2403,7 +2434,7 @@ function wrapCardDescription(text, maxWidth) {
 }
 function layoutCards(n) {
   const compact = n === 4;
-  const baseH = compact ? 86 : 94, gap = compact ? 8 : 10;
+  const baseH = compact ? 86 : 94, gap = compact ? 18 : 20;
   const cardW = compact ? 230 : 280, textW = cardW - 32;
   ctx.save();
   const heights = cards.map(c => {
@@ -2414,12 +2445,14 @@ function layoutCards(n) {
       : String(c.desc || '').replace(/^Lv1：/, '');
     c.shortDesc = short;
     c.typeLabel = cardTypeLabel(c);
+    c.roleLabel = cardRoleLabel(c);
+    if (c.typeLabel) c.tagColor = cardTypeColor(c);
     c.descLines = wrapCardDescription(short, textW).slice(0, 2);
     let detail = '';
     if (c.kind === 'active+') detail = SKILL_DEFS[c.skill].desc;
     else if (c.kind === 'support' || c.kind === 'support+') {
       if (['onabsorb', 'ondive', 'onsurge', 'oncrit', 'onkill'].includes(c.sup)) {
-        detail = '额外施放 · 不耗墨 · 不重置自动冷却';
+        detail = '额外施放 · 不耗墨 · 不刷新自动冷却';
       } else {
         const full = supDesc(c.sup, level);
         if (full !== short) detail = full;
@@ -4851,8 +4884,8 @@ function drawCards(title) {
     ctx.textAlign = 'left';
     ctx.fillStyle = INK; ctx.font = 'bold ' + (compact ? 14 : 15) + 'px ' + FONT;
     ctx.fillText(cd.name, titleX, r.y + (compact ? 32 : 31), titleW);
-    const tagOffset = cd.typeLabel ? 12 : 0;
-    if (cd.typeLabel) drawTagChip(cd.typeLabel, titleX, r.y + (compact ? 40 : 38), cd.tagColor, compact ? 9 : 10, titleW);
+    const tagOffset = cd.roleLabel ? 12 : 0;
+    if (cd.roleLabel) drawTagChip(cd.roleLabel, titleX, r.y + (compact ? 40 : 38), cd.tagColor, compact ? 9 : 10, titleW);
     ctx.fillStyle = DARK; ctx.font = (compact ? '11px ' : '12px ') + FONT;
     const lines = cd.descLines || wrapCardDescription(cd.shortDesc || cd.desc, r.w - 32).slice(0, 2);
     const descriptionY = r.y + (compact ? 59 : 68) + tagOffset;
@@ -4861,6 +4894,7 @@ function drawCards(title) {
     const detailY = descriptionY + lines.length * 12;
     (cd.detailLines || []).forEach((line, row) => ctx.fillText(line, r.x + 16, detailY + row * 10));
     ctx.fillText(inputLocked ? '0.5 秒后可选择' : '点按选择', r.x + 16, r.y + r.h - 5);
+    drawCardTypeBadge(cd, r, compact ? 12 : 13);
   });
 }
 

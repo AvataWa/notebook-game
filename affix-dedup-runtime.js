@@ -35,11 +35,11 @@
   supDesc = function(id, l) {
     switch (id) {
       case 'brutal': return '伤害 +' + 25 * l + '%，释放频率降低 ' + 8 * l + '%';
-      case 'swift': return '连续施放不同主动时，返还前一个技能 ' + 8 * l + '% 冷却；重复同一技能不触发';
+      case 'swift': return '连续施放不同主动时，返还前一个技能 ' + 8 * l + '% 当前冷却；重复同一技能不触发';
       case 'sharpen': return '子弹命中 125 范围内敌人时，伤害 +' + 35 * l + '%';
       case 'heavynib': return '子弹目标越远暴击率越高，600 距离时 +' + 20 * l + '%';
       case 'saturate': return '单次范围命中至少 3 敌时，伤害 +' + 25 * l + '%';
-      case 'sheath': return '范围技能结束时，每个命中过的不同敌人返还 ' + l + '% 冷却，最多 ' + 8 * l + '%';
+      case 'sheath': return '范围技能结束时，每个命中过的不同敌人返还本技能 ' + l + '% 当前冷却，最多 ' + 8 * l + '%';
       case 'heavyweight': return '距上次施放至少 2 秒时，本次打击伤害 +' + 40 * l + '%';
       case 'scrit': return '打击命中 110 范围内敌人时，暴击率 +' + 20 * l + '%';
       case 'sweep': return '打击范围 +' + 15 * l + '%；外圈命中将普通怪拖向中心';
@@ -54,7 +54,7 @@
       case 'icedmg': return '对减速目标冰伤 +' + 12 * l + '%；对冻结目标改为 +' + 24 * l + '%';
       case 'icecrit': return '冰霜暴击额外叠 1 层寒霜；满 3 层冻结普通怪 0.5 秒';
       case 'thunderdmg': return '连续命中不同敌人时，每个已有目标使雷伤 +' + 8 * l + '%，最多计算 3 个';
-      case 'thundercrit': return '雷电暴击额外传导 1 敌，造成 ' + (50 + 10 * (l - 1)) + '% 伤害，内置 0.5 秒';
+      case 'thundercrit': return '雷电暴击额外传导 1 敌，造成 ' + (50 + 10 * (l - 1)) + '% 伤害，每个技能独立计算 0.5 秒触发间隔';
       case 'thunderstatic': return '雷伤命中 4 个不同敌人后，在当前目标落下 ' + (60 + 20 * (l - 1)) + '% 静电雷';
       case 'areaspikes': return '每秒生成 ' + (1 + l) + ' 根墨刺，每根造成 25% 技能伤害并减速；累计命中 3 次定身普通怪';
       default: return baseSupDesc(id, l);

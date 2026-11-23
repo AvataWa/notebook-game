@@ -175,8 +175,8 @@ test('最终组合辅助：物理、火焰与雷电暴击保留各自机制', ()
     let rolls = 0; Math.random = () => rolls++ === 0 ? 0 : .99; hit(third, 100, 'arc');
     assert(near(dealt(third), 200) && near(dealt(fourth), 50), '雷电暴击传导错误');
   } finally { Math.random = oldRandom; }
-  assert(G.supDesc('oncrit', 1) === '暴击时额外施放本技能，触发冷却 1.0 秒', '暴击连携被改动');
-  assert(G.supDesc('onkill', 1) === '怪物死亡时额外施放本技能，触发冷却 1.0 秒', '收割连携被改动');
+  assert(G.supDesc('oncrit', 1) === '暴击时额外施放本技能，触发间隔 1.0 秒', '暴击连携被改动');
+  assert(G.supDesc('onkill', 1) === '怪物死亡时额外施放本技能，触发间隔 1.0 秒', '收割连携被改动');
 });
 
 test('Boss 头部和手部：条件增伤使用同一装备基准进行对照', () => {

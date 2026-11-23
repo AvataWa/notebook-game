@@ -44,21 +44,21 @@ const BOSS_SET_COLLECTION = (() => {
     ['hands', 'tapegrip', '封带握把', 12, 0, { dmg: 16 }, '对灰墨或减速状态的敌人伤害 +{dmg}%。', false],
     ['feet', 'tapeboots', '压带重靴', 0, 20, { speed: 10, kb: 40 }, '移速 +{speed}%；受到击退距离降低 {kb}%。', false],
     ['head', 'tapehelm', '巨灵带盔', 14, 25, { activeDmg: 20, setDmg: 40 }, '范围主动技能伤害 +{activeDmg}%；涂改带爆裂伤害 +{setDmg}%。', true],
-    ['body', 'tapearmor', '换带仓甲', 0, 60, { hurtDr: 15 }, '受击后 3 秒受伤降低 {hurtDr}%；受击生成减速涂改带，每 5 秒一次。', true],
+    ['body', 'tapearmor', '换带仓甲', 0, 60, { hurtDr: 15 }, '受击后 3 秒受伤降低 {hurtDr}%；受击生成减速涂改带，每 5 秒最多触发一次。', true],
     ['acc', 'tapecore', '巨灵带芯', 10, 25, { castInk: 6, hitInk: 2 }, '每施放 4 次主动技能回墨 {castInk}；涂改带每困住一敌回墨 {hitInk}，每次最多 8。', true]
   ]);
   add('judge', 3, '红笔判官', '朱笔终审', '#c84b4b', '终审红印', S[2], [
     ['hands', 'judgegloves', '判官指虎', 12, 0, { chargeDmg: 2 }, '主动技能命中同一目标可叠加审判；每层使对该目标的主动技能伤害 +{chargeDmg}%，最多 5 层。', false],
     ['feet', 'judgeboots', '长笔官靴', 0, 20, { speed: 12 }, '移速 +{speed}%；朝审判目标移动时不受其他小怪碰撞减速。', false],
     ['head', 'judgecrown', '朱笔判冠', 14, 25, { activeDmg: 20, setDmg: 40 }, '单体主动技能伤害 +{activeDmg}%；红叉处刑伤害 +{setDmg}%。', true],
-    ['body', 'judgerobe', '朱印官袍', 0, 60, { lowHpDr: 20 }, '生命低于 50% 时受伤降低 {lowHpDr}%；受击向攻击者附加 2 层审判，每 3 秒一次。', true],
+    ['body', 'judgerobe', '朱印官袍', 0, 60, { lowHpDr: 20 }, '生命低于 50% 时受伤降低 {lowHpDr}%；受击向攻击者附加 2 层审判，每 3 秒最多触发一次。', true],
     ['acc', 'judgeseal', '终审印章', 10, 25, { castInk: 4, hitInk: 2 }, '施放主动技能后首次命中回墨 {castInk}；红叉每处刑一敌回墨 {hitInk}，每次最多 8。', true]
   ]);
   add('dragon', 4, '空想巨龙', '空想星翼', '#9b72cf', '幻想龙珠', S[3], [
     ['hands', 'dragonclaw', '星墨龙爪', 12, 0, { projDmg: 16 }, '子弹与远程主动技能伤害 +{projDmg}%。', false],
     ['feet', 'dragonboots', '空想翼靴', 0, 20, { speed: 12 }, '移速 +{speed}%。', false],
     ['head', 'dragoncrown', '巨龙星冠', 14, 25, { activeDmg: 20, setDmg: 40 }, '范围主动技能伤害 +{activeDmg}%；幻想陨星伤害 +{setDmg}%。', true],
-    ['body', 'dragonhide', '幻翼龙皮', 0, 60, { speed: 20, hurtDr: 15 }, '受击后 3 秒移速 +{speed}%、受伤降低 {hurtDr}%；受击额外积累 2 层陨星进度，每 3 秒一次。', true],
+    ['body', 'dragonhide', '幻翼龙皮', 0, 60, { speed: 20, hurtDr: 15 }, '受击后 3 秒移速 +{speed}%、受伤降低 {hurtDr}%；受击额外积累 2 层陨星进度，每 3 秒最多触发一次。', true],
     ['acc', 'dragonorb', '幻想龙珠', 10, 25, { castInk: 6, hitInk: 2 }, '每施放 4 次主动技能回墨 {castInk}；陨星每命中一敌回墨 {hitInk}，单次最多 8。', true]
   ]);
   add('knights', 5, '涂鸦骑士团长', '涂鸦列队', '#4f7f68', '团长军徽', S[4], [
@@ -73,7 +73,7 @@ const BOSS_SET_COLLECTION = (() => {
     ['feet', 'elementboots', '液行靴', 0, 20, { speed: 12 }, '移速 +{speed}%；在己方墨迹上不受灰墨减速影响。', false],
     ['head', 'elementcrown', '元素液冠', 14, 25, { activeDmg: 20, setDmg: 40 }, '区域与持续主动技能伤害 +{activeDmg}%；元素墨爆伤害 +{setDmg}%。', true],
     ['body', 'elementarmor', '淤积墨甲', 0, 60, { inkDr: 16, shield: 8 }, '位于己方墨迹上受伤降低 {inkDr}%；墨爆后获得 {shield}% 最大生命纸甲。', true],
-    ['acc', 'elementcore', '元素墨核', 10, 25, { grayInk: 2, hitInk: 1 }, '每覆盖一片灰墨回墨 {grayInk}，每 1.5 秒一次；墨爆每命中一敌回墨 {hitInk}，最多 8。', true]
+    ['acc', 'elementcore', '元素墨核', 10, 25, { grayInk: 2, hitInk: 1 }, '每覆盖一片灰墨回墨 {grayInk}，每 1.5 秒最多触发一次；墨爆每命中一敌回墨 {hitInk}，最多 8。', true]
   ]);
   add('origami', 7, '折纸龙王', '千纸龙翼', '#527ac6', '龙王纸心', S[6], [
     ['hands', 'origamiclaw', '折刃护爪', 12, 0, { projDmg: 16 }, '子弹主动技能伤害 +{projDmg}%。', false],
@@ -86,14 +86,14 @@ const BOSS_SET_COLLECTION = (() => {
     ['hands', 'eraserfist', '碎屑拳套', 12, 0, { diveDmg: 20 }, '潜墨结束后 3 秒内主动技能伤害 +{diveDmg}%。', false],
     ['feet', 'eraserboots', '摩擦跑鞋', 0, 20, { speed: 12, efficiency: 20 }, '移速 +{speed}%；潜墨擦除灰墨效率 +{efficiency}%。', false],
     ['head', 'eraserband', '暴走头带', 14, 25, { diveDmg: 20, setDmg: 40 }, '潜墨结束后 3 秒主动技能伤害再 +{diveDmg}%；碎屑爆发伤害 +{setDmg}%。', true],
-    ['body', 'eraserarmor', '橡皮厚甲', 0, 60, { hurtDr: 15, charge: 25 }, '受击后 3 秒受伤降低 {hurtDr}%；受击获得 {charge} 点摩擦（满 100 后下次主动技能触发碎屑爆发），每 3 秒一次。', true],
-    ['acc', 'eraserpack', '碎屑收集器', 10, 25, { grayInk: 2, hitInk: 1 }, '每擦除一片灰墨回墨 {grayInk}，每 1.5 秒一次；碎屑每命中一敌回墨 {hitInk}，最多 8。', true]
+    ['body', 'eraserarmor', '橡皮厚甲', 0, 60, { hurtDr: 15, charge: 25 }, '受击后 3 秒受伤降低 {hurtDr}%；受击获得 {charge} 点摩擦（满 100 后下次主动技能触发碎屑爆发），每 3 秒最多触发一次。', true],
+    ['acc', 'eraserpack', '碎屑收集器', 10, 25, { grayInk: 2, hitInk: 1 }, '每擦除一片灰墨回墨 {grayInk}，每 1.5 秒最多触发一次；碎屑每命中一敌回墨 {hitInk}，最多 8。', true]
   ]);
   add('abyss', 9, '万墨之渊', '深渊万墨', '#55486f', '渊底墨胆', S[8], [
     ['hands', 'abyssgrip', '触手握笔', 12, 0, { grayDmg: 16 }, '对位于灰墨上的敌人伤害 +{grayDmg}%。', false],
     ['feet', 'abyssboots', '渊行足', 0, 20, { speed: 10, graySlow: 40 }, '移速 +{speed}%；灰墨对玩家的减速效果降低 {graySlow}%。', false],
     ['head', 'abysscrown', '深渊王冠', 14, 25, { activeDmg: 20, setDmg: 40 }, '区域与持续主动技能伤害 +{activeDmg}%；深渊触手伤害 +{setDmg}%。', true],
-    ['body', 'abyssarmor', '万墨渊甲', 0, 60, { hurtDr: 15 }, '受击后 3 秒受伤降低 {hurtDr}%；受击获得 2 层深渊（满 5 层后下次主动技能召唤触手），每 3 秒一次。', true],
+    ['body', 'abyssarmor', '万墨渊甲', 0, 60, { hurtDr: 15 }, '受击后 3 秒受伤降低 {hurtDr}%；受击获得 2 层深渊（满 5 层后下次主动技能召唤触手），每 3 秒最多触发一次。', true],
     ['acc', 'abyssgall', '渊底墨胆', 10, 25, { castInk: 4, hitInk: 2 }, '施放主动技能后首次命中回墨 {castInk}；触手每命中一敌回墨 {hitInk}，最多 10。', true]
   ]);
   add('author', 10, '笔记本之主', '终页作者', '#8a6847', '作者书签', S[9], [
@@ -107,7 +107,7 @@ const BOSS_SET_COLLECTION = (() => {
     ['hands', 'feralclaw', '裂纸爪', 12, 0, { backDmg: 20 }, '从目标侧后方命中时主动技能伤害 +{backDmg}%。', false],
     ['feet', 'feralboots', '六足猎靴', 0, 20, { speed: 12, diveSpeed: 10 }, '移速 +{speed}%；潜墨移动速度额外 +{diveSpeed}%。', false],
     ['head', 'feralcrown', '荒原猎冠', 14, 25, { diveDmg: 20, setDmg: 40 }, '潜墨结束后 3 秒主动技能伤害 +{diveDmg}%；荒原扑杀伤害 +{setDmg}%。', true],
-    ['body', 'feralhide', '荒原兽皮', 0, 60, { speed: 20, hurtDr: 15 }, '受击后 3 秒移速 +{speed}%、受伤降低 {hurtDr}%；受击获得 2 层猎踪（退出潜墨时每层触发一次扑杀），每 3 秒一次。', true],
+    ['body', 'feralhide', '荒原兽皮', 0, 60, { speed: 20, hurtDr: 15 }, '受击后 3 秒移速 +{speed}%、受伤降低 {hurtDr}%；受击获得 2 层猎踪（退出潜墨时每层触发一次扑杀），每 3 秒最多触发一次。', true],
     ['acc', 'feralbell', '猎踪铃铛', 10, 25, { diveInk: 6, hitInk: 2 }, '潜墨结束回墨 {diveInk}；扑杀每命中一敌回墨 {hitInk}，最多 8。', true]
   ]);
   add('turtle', 12, '墨壳山龟', '墨壳山甲', '#5c785a', '壳心墨珠', S[11], [
@@ -128,7 +128,7 @@ const BOSS_SET_COLLECTION = (() => {
     ['hands', 'rhinofist', '钉角拳套', 12, 0, { chargeDmg: 25 }, '车阵套装：直线移动每 100 像素获得 1 层冲势；有冲势时主动技能伤害 +{chargeDmg}%。最多 3 层，明显转向会清空。', false],
     ['feet', 'rhinoboots', '六足车靴', 0, 20, { speed: 14, efficiency: 30 }, '移速 +{speed}%；直线移动时，冲势积累效率 +{efficiency}%。', false],
     ['head', 'rhinocrown', '钉角头盔', 14, 25, { activeDmg: 20, setDmg: 50 }, '冲击类主动技能，以及位移后 3 秒内的主动技能伤害 +{activeDmg}%；钉角车道伤害 +{setDmg}%。', true],
-    ['body', 'rhinoarmor', '车阵重甲', 0, 60, { hurtDr: 15 }, '受击后 3 秒受伤降低 {hurtDr}%；受击获得 2 层冲势（满 3 层后下次主动技能释放车道），每 3 秒一次。', true],
+    ['body', 'rhinoarmor', '车阵重甲', 0, 60, { hurtDr: 15 }, '受击后 3 秒受伤降低 {hurtDr}%；受击获得 2 层冲势（满 3 层后下次主动技能释放车道），每 3 秒最多触发一次。', true],
     ['acc', 'rhinoaxis', '双轨轴心', 10, 25, { chargeInk: 6, hitInk: 1 }, '冲势达到 3 层时回墨 {chargeInk}；车道每命中一敌回墨 {hitInk}，单条最多 8。', true]
   ]);
   add('pods', 15, '百荚育母树', '百荚根网', '#798848', '育母树心', S[14], [
@@ -182,7 +182,7 @@ const BOSS_SET_COLLECTION = (() => {
     origamiboots: [{ setSpeedDmg: 2, setSpeedDmgCap: 20 }, '每 10% 额外移速使折返纸刃伤害 +{setSpeedDmg}%，最多 +{setSpeedDmgCap}%。'],
     eraserboots: [{ diveSpeed: 15 }, '潜墨移动速度额外 +{diveSpeed}%。'],
     abyssboots: [{ graySpeed: 15 }, '位于灰墨时额外移速 +{graySpeed}%。'],
-    authorshoes: [{ speedCd: 1, speedCdCap: 12 }, '每 10% 额外移速使主动技能冷却时间 -{speedCd}%，最多 -{speedCdCap}%。'],
+    authorshoes: [{ speedCd: 1, speedCdCap: 12 }, '每 10% 额外移速使主动释放频率提升 {speedCd}%，最多提升 {speedCdCap}%。'],
     turtleboots: [{ speedDr: 1, speedDrCap: 12 }, '每 10% 额外移速提供 {speedDr}% 减伤，最多 {speedDrCap}%。'],
     flowerboots: [{ setSpeedDmg: 2, setSpeedDmgCap: 20 }, '每 10% 额外移速使捕笼与根须伤害 +{setSpeedDmg}%，最多 +{setSpeedDmgCap}%。'],
     rhinoboots: [{ moveSpeed: 15 }, '持续移动 1 秒后额外移速 +{moveSpeed}%。'],

@@ -108,7 +108,7 @@ test('六个护盾词条仅挂机者可用，标签与唯一性正确', () => {
   for (const id of ids) assert(passive(id).available(), id + ' 没有向挂机者开放');
   assert(!passive('idlemax').once && !passive('idleregen').once, '可叠加词条被错误设为唯一');
   for (const id of ids.slice(2)) assert(passive(id).once, id + ' 应为唯一词条');
-  assert(G.cardTypeLabel({ kind: 'passive', tag: '[护盾]' }) === '被动 · 护盾', '护盾词条标签错误');
+  assert(G.cardTypeLabel({ kind: 'passive', tag: '[护盾]' }) === '通用', '护盾词条应归入通用标签');
   p.characterId = 'single';
   for (const id of ids) assert(!passive(id).available(), id + ' 泄漏到了其他角色');
 });
