@@ -37,7 +37,7 @@ eval(src + `
   castInkSurge, chargeTurf, hurtPlayer, hurtEnemy, update, spawnEnemy, cardTypeLabel, PASSIVES,
   get player() { return player; }, get enemies() { return enemies; }, get bullets() { return bullets; },
   get lightnings() { return lightnings; }, get cards() { return cards; }, get floats() { return floats; }, get keys() { return keys; },
-  get state() { return state; }, set state(v) { state = v; },
+  get state() { return state; }, set state(v) { state = v; }, get joyHome() { return JOY_HOME; },
   get M() { return window.__metaRuntime; }, get C() { return window.CharacterRuntime; },
   get I() { return window.IdleRuntime; }
 };`);
@@ -184,12 +184,15 @@ test('三级只有满盾时移动速度提高 10%', () => {
   assert(near(shieldX, withoutShield.x * 1.1, 0.02), '满盾移动速度加成错误：' + shieldX + '/' + withoutShield.x);
 });
 
-test('手机界面显示脚下护盾数值与自动轮转，不显示旧倒计时', () => {
+test('挂机者手机摇杆水平居中，移除技能与自动施放按钮且不影响其他角色', () => {
   fresh(2); drawTexts.length = 0; G.render();
-  assert(!drawTexts.includes('吸墨') && !drawTexts.includes('潜墨') && !drawTexts.includes('墨潮'), '手机操作按钮仍然显示');
-  assert(drawTexts.some(t => t.includes('自动书写 0/2')), '自动轮转状态没有显示');
+  assert(G.joyHome.x === 187.5, '挂机者默认摇杆没有位于屏幕水平正中');
+  assert(!drawTexts.includes('吸墨') && !drawTexts.includes('潜墨') && !drawTexts.includes('墨潮'), '手机技能按钮仍然显示');
+  assert(!drawTexts.some(t => t.includes('自动施法') || t.includes('自动书写')), '自动施放状态按钮仍然显示');
   assert(drawTexts.includes('盾 40/40'), '脚下护盾数值没有显示');
   assert(!drawTexts.some(t => t.includes('护盾恢复') || t.includes('修正带护盾已就绪')), '旧护盾倒计时仍然存在');
+  G.C.requestRun(); G.C.selectCharacter('draft'); G.C.confirmSelection();
+  assert(G.joyHome.x === 72, '其他角色的摇杆位置被挂机者布局影响');
 });
 
 console.log(failed ? 'IDLE_CHARACTER_TEST_FAILURES: ' + failed : 'IDLE_CHARACTER_TEST_OK (' + passed + '/' + passed + ')');

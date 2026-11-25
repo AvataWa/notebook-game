@@ -91,19 +91,31 @@ test('恢复生命按 30% 概率替换构筑卡且不增加选项数量', () => 
     assert(G.player.hp === 100, '恢复卡使生命超过上限');
   } finally { Math.random = oldRandom; }
 });
-test('左下固定摇杆只在左侧启动并决定方向', () => {
-  fresh(); const home = G.joyHome;
-  pointer('pointerdown', 1, home.x, home.y);
-  pointer('pointermove', 1, home.x + 40, home.y);
-  assert(G.joy.active && G.joy.bx === home.x && G.joy.by === home.y && G.joy.dx > 0, '固定摇杆没有响应左手拖动');
+test('普通角色在左侧识别区按下时，以触点作为浮动摇杆中心', () => {
+  fresh(); const home = G.joyHome, startX = home.x + 15, startY = home.y - 12;
+  pointer('pointerdown', 1, startX, startY);
+  pointer('pointermove', 1, startX + 40, startY);
+  assert(G.joy.active && G.joy.bx === startX && G.joy.by === startY && G.joy.dx > 0, '浮动摇杆没有以触点为中心响应拖动');
   G.update(0.016);
   assert(G.player.x > 0, '摇杆向右拖但角色没有向右移动');
-  pointer('pointerup', 1, home.x + 40, home.y);
+  pointer('pointerup', 1, startX + 40, startY);
   assert(!G.joy.active && G.joy.dx === 0, '松开摇杆后仍保持移动输入');
 });
-test('右手空白区域不会抢走摇杆输入', () => {
+test('普通角色右手空白区域不会抢走摇杆输入', () => {
   fresh(); pointer('pointerdown', 2, 195, 390);
   assert(!G.joy.active, '右侧空白区域错误启动了摇杆');
+});
+test('挂机者整个下半屏均可生成浮动摇杆，上半屏与养成按钮除外', () => {
+  fresh(); G.player.characterId = 'idle';
+  pointer('pointerdown', 20, 300, 300);
+  assert(!G.joy.active, '挂机者上半屏错误启动了摇杆');
+  pointer('pointerdown', 21, 300, 400);
+  assert(G.joy.active && G.joy.bx === 300 && G.joy.by === 400, '挂机者右侧下半屏没有以触点生成摇杆');
+  pointer('pointermove', 21, 335, 430);
+  assert(G.joy.dx > 0 && G.joy.dy > 0, '挂机者浮动摇杆方向错误');
+  pointer('pointerup', 21, 335, 430);
+  pointer('pointerdown', 22, 187.5, G.buildY + 18);
+  assert(!G.joy.active, '养成按钮被下半屏摇杆热区抢走');
 });
 test('保持左手移动时右手可以释放吸墨和潜墨', () => {
   fresh(); const home = G.joyHome;

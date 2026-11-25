@@ -44,7 +44,8 @@ const BATTLE = typeof BATTLE_CONFIG !== 'undefined' ? BATTLE_CONFIG : {
   player: { radius: 12, hp: 100, speed: 168, maxInk: 100, hitInvuln: 0.65 },
   feedback: { squash: 0.22, knockback: 150, levelupDelay: 0.5 },
   melee: { total: 0.55, active: 0.2, triggerExtra: 32 },
-  enemyAttack: { earlyMin: 2.5, earlyMax: 3, lateMin: 1.5, lateMax: 2, maxStage: 10 },
+  enemyAttack: { earlyMin: 2.5, earlyMax: 3, lateMin: 1.5, lateMax: 2, maxStage: 10,
+    tokens: [{ stage: 1, normal: 4, heavy: 1 }, { stage: 4, normal: 5, heavy: 1 }, { stage: 7, normal: 6, heavy: 1 }, { stage: 13, normal: 7, heavy: 2 }] },
   spawning: { baseNormal: 20, perStage: 10 },
   ink: {
     ownSpeed: 1.12, hostileSpeed: 0.58, enemyOwnSpeed: 1.12, enemyFriendlySpeed: 0.82,
@@ -858,8 +859,12 @@ function inkStats() {
 }
 const gestureCooldowns = { cross: 0, redraw: 0, v: 0, zig: 0, circle: 0 };
 const ABSORB_RULE = BATTLE.absorb;
-// 左手固定摇杆，右手拇指操作三个技能；按钮扩大并错层排列，减少误触
+// 左手在识别区按下后生成浮动摇杆，右手拇指操作技能；按钮扩大并错层排列，减少误触
 const JOY_HOME = { x: 72, y: H - 174, r: 52 };
+function syncJoystickHome() {
+  if (joy.active || isDesktopLayout()) return;
+  JOY_HOME.x = player && player.characterId === 'idle' ? W / 2 : 72;
+}
 const absorbRect = { x: W - 88, y: H - 157, w: 74, h: 64 }; // 向下多延伸 12 像素，扩大右手拇指热区
 const specialRect = { x: W - 172, y: H - 157, w: 74, h: 52 };
 const diveRect = { x: W - 88, y: H - 221, w: 74, h: 52 };
@@ -1046,6 +1051,27 @@ function enemyAttackDelay() {
   const max = rule.earlyMax + (rule.lateMax - rule.earlyMax) * progress;
   return (min + Math.random() * (max - min)) * (player.metaEnemyAttackMul || 1);
 }
+function enemyAttackLimits(stage = curSt()) {
+  const tiers = BATTLE.enemyAttack.tokens;
+  let limits = tiers[0];
+  for (const tier of tiers) if (stage >= tier.stage) limits = tier;
+  return limits;
+}
+function enemyAttackCounts() {
+  const counts = { normal: 0, heavy: 0 };
+  for (const e of enemies) {
+    if (e.dead || e.boss || e.shade) continue;
+    const meleeActive = e.swingT > 0, shotActive = e.shotWindup > 0 || e.burstLeft > 0;
+    if (!meleeActive && !shotActive) continue;
+    const heavy = (meleeActive && e.swingUnparryable) || (shotActive && e.heavyBurst);
+    counts[heavy ? 'heavy' : 'normal']++;
+  }
+  return counts;
+}
+function canEnemyAttack(heavy = false) {
+  const kind = heavy ? 'heavy' : 'normal';
+  return enemyAttackCounts()[kind] < enemyAttackLimits()[kind];
+}
 function initEnemyCombat(e, d0) {
   e.swingCd = enemyAttackDelay(); e.swingT = 0; e.swingHit = false; e.swingDamage = false; e.swingA = 0;
   e.shotCd = enemyAttackDelay(); e.shotWindup = 0; e.burstLeft = 0; e.burstT = 0;
@@ -1093,7 +1119,9 @@ function updateShooter(e, dt) {
   } else {
     e.shotCd -= dt;
     if (e.shotCd <= 0 && d < 540) {
-      e.shotCount++; e.heavyBurst = e.type === 'eliteCrossbow' && e.shotCount % 3 === 0;
+      const heavy = e.type === 'eliteCrossbow' && (e.shotCount + 1) % 3 === 0;
+      if (!canEnemyAttack(heavy)) return;
+      e.shotCount++; e.heavyBurst = heavy;
       e.aimA = Math.atan2(dy, dx); e.shotWindup = d0.shotWindup;
     }
   }
@@ -1128,10 +1156,10 @@ function updateMeleeSwing(e, dt) {
       }
     }
   } else if (e.swingCd <= 0 && d < range + player.r + BATTLE.melee.triggerExtra) {
+    const heavy = e.type === 'scissors' && (e.attackCount + 1) % 3 === 0;
+    if (!canEnemyAttack(heavy)) return;
     e.swingCd = enemyAttackDelay(); e.swingT = BATTLE.melee.total; e.swingHit = false; e.swingDamage = false;
-    e.attackCount++;
-    const heavyCount = enemies.filter(other => other.swingUnparryable && other.swingT > 0).length;
-    e.swingUnparryable = e.type === 'scissors' && e.attackCount % 3 === 0 && heavyCount < 2;
+    e.attackCount++; e.swingUnparryable = heavy;
     e.swingUnparryNoticed = false;
     e.swingA = Math.atan2(player.y - e.y, player.x - e.x);
   }
@@ -2815,17 +2843,21 @@ canvas.addEventListener('pointerdown', e => {
   }
   if (state === 'over' || state === 'win') { resetGame(); return; }
   if (state !== 'play') return;
-  // 技能按钮优先且使用独立触点：摇杆保持移动时，另一根手指仍可释放技能
-  if (pointInRect(p, absorbRect)) { castAbsorb(); return; }
-  if (pointInRect(p, specialRect)) {
-    if (startInkSurgeCharge(e.pointerId) && canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
-    return;
+  // 普通角色的技能按钮优先且使用独立触点；挂机者没有这三个隐形热区。
+  if (player.characterId !== 'idle') {
+    if (pointInRect(p, absorbRect)) { castAbsorb(); return; }
+    if (pointInRect(p, specialRect)) {
+      if (startInkSurgeCharge(e.pointerId) && canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+    if (pointInRect(p, diveRect)) { toggleDive(); return; }
   }
-  if (pointInRect(p, diveRect)) { toggleDive(); return; }
-  if (joy.active) return;
-  if (!isDesktopLayout() && Math.hypot(p.x - JOY_HOME.x, p.y - JOY_HOME.y) <= JOY_HOME.r + 26) {
-    // 只有左下固定摇杆区域接管移动，右侧空白区域不会抢技能手指
-    joy.active = true; joy.id = e.pointerId; joy.bx = JOY_HOME.x; joy.by = JOY_HOME.y; joy.dx = 0; joy.dy = 0;
+  if (joy.active || pointInRect(p, buildRect)) return;
+  const idleLowerHalf = player.characterId === 'idle' && p.y >= H / 2;
+  const normalJoystickArea = Math.hypot(p.x - JOY_HOME.x, p.y - JOY_HOME.y) <= JOY_HOME.r + 26;
+  if (!isDesktopLayout() && (idleLowerHalf || normalJoystickArea)) {
+    // 触点即摇杆中心；挂机者可在整个下半屏启动，养成按钮仍独立响应。
+    joy.active = true; joy.id = e.pointerId; joy.bx = p.x; joy.by = p.y; joy.dx = 0; joy.dy = 0;
   }
 });
 canvas.addEventListener('pointermove', e => {
@@ -4815,9 +4847,7 @@ function drawHUD() {
     ctx.globalAlpha = 1;
   });
   setSeed(16800);
-  if (player.characterId === 'idle' && window.IdleRuntime) {
-    IdleRuntime.drawHUD(false);
-  } else {
+  if (player.characterId !== 'idle') {
     const icons = window.SkillIconRuntime;
     const absorbReady = player.absorbCd <= 0;
     ctx.fillStyle = player.absorbT > 0 ? 'rgba(210,225,255,0.96)' : 'rgba(255,250,238,0.94)';
@@ -4850,7 +4880,7 @@ function drawHUD() {
     ctx.font = '8px ' + FONT;
     ctx.fillText(player.diving ? '无敌 · ' + diveInkCost() + '/秒' : (player.diveCd > 0 ? player.diveCd.toFixed(1) + ' 秒' : '位移'), diveTextX, diveRect.y + 34, icons ? diveRect.w - 40 : diveRect.w);
   }
-  // 固定左下摇杆始终可见，让玩家明确左手移动、右手技能的分区
+  // 静止时显示默认摇杆位置，按下后移至实际触点，明确移动与技能分区
   const jx = joy.active ? joy.bx : JOY_HOME.x, jy = joy.active ? joy.by : JOY_HOME.y;
   ctx.globalAlpha = joy.active ? 0.48 : 0.24;
   setSeed(99); jcircle(jx, jy, JOY_HOME.r, DARK, 2);

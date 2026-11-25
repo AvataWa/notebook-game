@@ -35,6 +35,7 @@
     const d = selectedDef(), level = savedLevel(d.id);
     S = fresh();
     player.characterId = d.id; player.characterLevel = level;
+    syncJoystickHome();
     const pool = d.id === 'single' ? CHARACTER_CONFIG.singleStarters.filter(id => SKILL_DEFS[id]) : [];
     const initial = d.id === 'single' ? pool[Math.floor(Math.random() * pool.length)] : d.initial;
     player.actives = [makeActive(initial, d.id === 'single' ? 2 : 1)];

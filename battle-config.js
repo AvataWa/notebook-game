@@ -41,7 +41,14 @@ const BATTLE_CONFIG = {
     earlyMax: 3,            // 第 1 关随机出招间隔上限
     lateMin: 1.5,           // 第 10 关随机出招间隔下限
     lateMax: 2,             // 第 10 关随机出招间隔上限
-    maxStage: 10
+    maxStage: 10,
+    // 普通攻击与不可弹反重击分别限制同时出招数；近战和远程共用对应名额
+    tokens: [
+      { stage: 1, normal: 4, heavy: 1 },
+      { stage: 4, normal: 5, heavy: 1 },
+      { stage: 7, normal: 6, heavy: 1 },
+      { stage: 13, normal: 7, heavy: 2 }
+    ]
   },
 
   spawning: {

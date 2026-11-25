@@ -7,7 +7,7 @@
 
   function updateControls() {
     if (!active()) {
-      Object.assign(JOY_HOME, { x: 72, y: H - 174, r: 52 });
+      syncJoystickHome();
       Object.assign(absorbRect, { x: W - 88, y: H - 157, w: 74, h: 64 });
       Object.assign(specialRect, { x: W - 172, y: H - 157, w: 74, h: 52 });
       Object.assign(diveRect, { x: W - 88, y: H - 221, w: 74, h: 52 });
