@@ -71,7 +71,8 @@ const OPERATION_AFFIXES = [
   { skill: 'absorb', id: 'bulletink', name: '反击领地', desc: '子弹弹反生成脚下彩墨并造成 30 点范围伤害，每 0.8 秒最多触发一次' },
   { skill: 'absorb', id: 'parryshield', name: '墨盾', desc: '弹反成功后 1 秒受到的伤害 -25%' },
   { skill: 'absorb', id: 'parryheal', name: '化伤为墨', desc: '弹反成功回复 2 点生命，每次吸墨最多 6 点' },
-  { skill: 'absorb', id: 'surgegrowth', name: '潮能蓄势', desc: '弹反使下一墨潮范围 +8%，最多 5 层' }
+  { skill: 'absorb', id: 'surgegrowth', name: '潮能蓄势', desc: '弹反使下一墨潮范围 +8%，最多 5 层' },
+  { skill: 'absorb', id: 'surgepower', name: '潮能凝墨', desc: '弹反成功使下一次墨潮伤害 +15%，最多 5 层；释放后清空' }
 ];
 
 function equipmentDef(slot, name, atk, hp, v, text) { return { slot, name, atk, hp, v, text }; }

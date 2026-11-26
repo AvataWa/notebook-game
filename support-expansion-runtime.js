@@ -3,6 +3,7 @@
   'use strict';
 
   const AREA_SKILLS = new Set(['cyclone', 'volcanic', 'arc', 'vortex', 'candle', 'inkrain', 'ruler', 'chalk', 'brand', 'cola', 'spinlance', 'inkgrenade']);
+  const SELF_CENTERED_SKILLS = new Set(['vortex', 'candle', 'cola']);
   const NATURAL_RETURN = new Set(['bloodcore', 'ricoshield', 'boomerang']);
   const NO_BOLT_BEHAVIOR = new Set(['bloodcore', 'ricoshield']);
   const NEW_SUPPORT_IDS = [
@@ -51,6 +52,7 @@
   supportUsable = function(sid, aid) {
     if (sid === 'chain' && (aid === 'arc' || aid === 'brand')) return true;
     if (sid === 'dur' && aid === 'ballista') return true;
+    if (sid === 'areagravity' && SELF_CENTERED_SKILLS.has(aid)) return false;
     if (NEW_SUPPORT_IDS.includes(sid)) {
       const tags = SKILL_TAGS[aid] || [];
       if (sid.startsWith('area')) return AREA_SKILLS.has(aid) && tags.includes('area');
@@ -72,7 +74,7 @@
         case 'areastorm': c.areaStorm = l; break;
         case 'areaspikes': c.areaSpikes = l; break;
         case 'areaouter': c.areaOuter = l; break;
-        case 'areagravity': c.areaGravity = l; break;
+        case 'areagravity': c.areaGravity = SELF_CENTERED_SKILLS.has(a.id) ? 0 : l; break;
         case 'areadeath': c.areaDeath = l; break;
         case 'areastack': c.areaStack = l; break;
         case 'projrepeat': c.repeatShot = l; break;

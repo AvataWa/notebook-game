@@ -10,7 +10,7 @@ global.document = { getElementById: () => fakeCanvas }; global.requestAnimationF
 eval(src + `
 ;globalThis.G = {
   resetGame, addInkStain, hurtPlayer, hurtEnemy, spawnEnemy, castAbsorb, reflectEnemyBullet,
-  updateMeleeSwing, castInkSurge, toggleDive, diveInkCost, update, inkStats, render,
+  updateMeleeSwing, castInkSurge, chargeParry, toggleDive, diveInkCost, update, inkStats, render,
   get player() { return player; }, get enemies() { return enemies; }, get keys() { return keys; },
   get PASSIVES() { return PASSIVES; }, get OPERATION_AFFIXES() { return OPERATION_AFFIXES; },
   get BATTLE() { return BATTLE; }, set state(v) { state = v; }
@@ -29,10 +29,10 @@ test('战斗配置提供潜墨消耗与强化弹反回墨', () => {
   assert(G.BATTLE.absorb.bulletInk === 3 && G.BATTLE.absorb.meleeInk === 8, '弹反回墨参数未生效');
   assert(G.BATTLE.surge.chargeTime === 1.2 && G.BATTLE.surge.minScale === 0.6 && G.BATTLE.surge.maxScale === 1.2, '墨潮蓄力时间或范围倍率未生效');
 });
-test('通用池保留 10 条被动，并有 62 条操作辅助', () => {
+test('通用池保留 10 条被动，并有 63 条操作辅助', () => {
   assert(G.PASSIVES.length === 10, '通用被动数量不是 10');
   assert(!G.PASSIVES.some(p => p.id === 'twin'), '双生画笔仍在通用池');
-  assert(G.OPERATION_AFFIXES.length === 62, '操作辅助数量不是 62');
+  assert(G.OPERATION_AFFIXES.length === 63, '操作辅助数量不是 63');
   assert(['inkarmor', 'inkpower'].every(id => G.PASSIVES.some(n => n.id === id)), '原墨迹大节点未合并');
   assert(['parrycharge', 'parrywell', 'divepaint', 'surgeecho'].every(id => G.OPERATION_AFFIXES.some(n => n.id === id)), '原操作大节点未合并');
 });
@@ -65,11 +65,20 @@ test('余潮使墨潮释放后保留 20% 充能', () => {
   fresh(); G.player.taken.surgeecho = true; G.player.special = 100; G.player.specialAnnounced = true;
   assert(G.castInkSurge() && near(G.player.special, 20), '墨潮余潮保留充能错误');
 });
+test('潮能凝墨弹反叠层，只强化并成功消费下一次墨潮', () => {
+  fresh(); const e = enemy('stick', 80, 0); e.hp = e.maxhp = 10000; G.player.taken.surgepower = true;
+  G.chargeParry(); assert(G.player.surgePower === 1 && !G.castInkSurge() && G.player.surgePower === 1, '充能不足时误清凝墨层数');
+  for (let i = 0; i < 5; i++) G.chargeParry();
+  assert(G.player.surgePower === 5 && G.player.special === 100, '弹反叠层上限或墨潮充能错误');
+  const hp = e.hp; assert(G.castInkSurge(), '满充能墨潮释放失败');
+  assert(near(hp - e.hp, G.BATTLE.surge.damage * 1.75), '五层凝墨没有提供 75% 增伤：' + (hp - e.hp));
+  assert(G.player.surgePower === 0 && G.player.special === 0, '成功释放后没有消费凝墨层数');
+});
 test('入墨起笔立即减少全部主动当前冷却', () => {
   fresh(); active(); G.player.actives[0].t = 5; G.player.taken.divepaint = true;
   assert(G.toggleDive(), '无法进入潜墨');
   assert(near(G.player.actives[0].t, 4.65), '入墨起笔没有减少 0.35 秒冷却');
   G.render();
 });
-console.log(failed ? 'BATTLE_BUILD_TEST_FAILURES: ' + failed : 'BATTLE_BUILD_TEST_OK (8/8)');
+console.log(failed ? 'BATTLE_BUILD_TEST_FAILURES: ' + failed : 'BATTLE_BUILD_TEST_OK (9/9)');
 process.exit(failed ? 1 : 0);

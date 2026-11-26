@@ -197,6 +197,7 @@ const SKILL_EVOLUTIONS = {
 function activeUpgradeDesc(id, lvl) {
   let desc = (SKILL_EVOLUTIONS[id] && SKILL_EVOLUTIONS[id][lvl]) || '伤害 +15%，释放频率提升 4%';
   if ((SKILL_TAGS[id] || []).includes('proj') && (lvl === 2 || lvl === 4)) desc += '，弹数 +1';
+  if (id === 'candle' || id === 'cola') desc += '，范围 +8%';
   return desc;
 }
 /* 技能标签：proj=子弹 area=范围 strike=打击（辅助按标签过滤，双标签可吃两系） */
@@ -888,7 +889,7 @@ function resetGame() {
   player = {
     x: 0, y: 0, r: BATTLE.player.radius, hp: BATTLE.player.hp, maxhp: BATTLE.player.hp, speed: BATTLE.player.speed, faceA: 0,
     trailX: 0, trailY: 0, diving: false, special: 0, specialAnnounced: false,
-    surgeCharging: false, surgeChargeT: 0, surgePointerId: null, surgeGrowth: 0,
+    surgeCharging: false, surgeChargeT: 0, surgePointerId: null, surgeGrowth: 0, surgePower: 0,
     lastSeenX: 0, lastSeenY: 0, grayTick: 0, noInkT: 0, turf: 0,
     trailChargeBudget: BATTLE.ink.trailChargePerSecond,
     captureInkBudget: BATTLE.ink.captureInkPerSecond,
@@ -932,11 +933,12 @@ function recomputeEquip() {
   player.ink = Math.min(player.maxInk, player.ink + Math.max(0, player.maxInk - oldMaxInk));
 }
 function skillCalc(a) {
-  // 主动等级：每级伤害 +15%、冷却 -4%；子弹技能 Lv2、Lv4 各增加 1 弹数
+  // 主动等级：每级伤害 +15%、冷却 -4%；自身光环/新星每级范围 +8%；子弹技能 Lv2、Lv4 各增加 1 弹数
   const isStrike = (SKILL_TAGS[a.id] || []).includes('strike');
   const isProjectile = (SKILL_TAGS[a.id] || []).includes('proj');
+  const selfArea = a.id === 'candle' || a.id === 'cola';
   let dmg = 1 + 0.15 * (a.lvl - 1), cd = 1 - 0.04 * (a.lvl - 1);
-  let count = isProjectile ? Math.floor(a.lvl / 2) : 0, rad = 1, pierce = 0, chain = 0, dot = 0, proj = 1, areaT = 1, unleash = 0, vuln = 0;
+  let count = isProjectile ? Math.floor(a.lvl / 2) : 0, rad = selfArea ? 1 + 0.08 * (a.lvl - 1) : 1, pierce = 0, chain = 0, dot = 0, proj = 1, areaT = 1, unleash = 0, vuln = 0;
   let bdmg = 0, bcrit = 0, brad = 0, lifeMul = 0, homing = 0, blast = 0;
   let admg = 0, soak = 0, bossMul = 0, core = 0, retick = 0, lingerT = 0, reburst = 0, stain = 0;
   let sdmg = 0, firstblood = 0, combo = 0, scrit = 0, counter = 0;
@@ -1706,6 +1708,11 @@ function castInkSurge(radius = BATTLE.surge.radius, full = false) {
   if (hasAffix('surge', 'surgedamage')) damage *= 1.3;
   if (full && hasAffix('surge', 'fulldamage')) damage *= 1.55;
   if (full && hasAffix('surge', 'inkburst') && player.ink >= 25) { player.ink -= 25; damage *= 1.8; }
+  const surgePower = Math.min(5, player.surgePower || 0);
+  if (surgePower > 0) {
+    damage *= 1 + surgePower * 0.15;
+    floats.push({ x: player.x, y: player.y - 52, txt: '凝墨墨潮 ×' + surgePower, t: 0.9, color: col, crit: true });
+  }
   novas.push({ x: player.x, y: player.y, t: BATTLE.surge.visual, max: radius, col, outerDamage: hasAffix('surge', 'outerdamage') });
   shakeT = Math.max(shakeT, 0.42);
   for (const e of enemies) {
@@ -1753,6 +1760,7 @@ function castInkSurge(radius = BATTLE.surge.radius, full = false) {
   inkSurgePainting = false;
   if (hasAffix('surge', 'surgeecho')) chargeTurf(BATTLE.traits.surgeRetain);
   player.surgeGrowth = 0;
+  player.surgePower = 0;
   if (player.diving && !hasAffix('dive', 'divecast')) exitDive();
   return true;
 }
@@ -1814,6 +1822,7 @@ function chargeParry() {
     player.absorbHeal += 2; player.hp = Math.min(player.maxhp, player.hp + 2);
   }
   if (hasAffix('absorb', 'surgegrowth')) player.surgeGrowth = Math.min(5, player.surgeGrowth + 1);
+  if (hasAffix('absorb', 'surgepower')) player.surgePower = Math.min(5, (player.surgePower || 0) + 1);
   if (hasAffix('surge', 'chargeparry') && player.surgeCharging) player.surgeChargeT = Math.min(surgeChargeTime(), player.surgeChargeT + surgeChargeTime() * 0.25);
 }
 function reflectEnemyBullet(eb) {
@@ -3442,6 +3451,7 @@ function update(dt) {
 
   for (const dr of drops) {
     dr.bob += dt * 4;
+    dr.dropT = (dr.dropT || 0) + dt;
     if (!window.__buildRuntime && Math.hypot(player.x - dr.x, player.y - dr.y) < 20) {
       dr.got = true;
       const it = ITEM_DEFS[dr.item];
@@ -4258,6 +4268,64 @@ function drawPlayerResources() {
   if (window.IdleRuntime) IdleRuntime.drawResources(resourceArc, player.x, centerY);
   ctx.restore();
 }
+function bossMaterialName(dr) {
+  if (dr.material === 'cores') return '领主墨核';
+  if (dr.bossSet === 'scribble') return '乱线残角';
+  const set = typeof BOSS_SET_COLLECTION !== 'undefined' && BOSS_SET_COLLECTION.byId[dr.bossSet];
+  return (set && set.special) || '领主素材';
+}
+function drawBossMaterialDrop(dr, bobY) {
+  const gold = '#d5a12d', pale = '#ffe7a0', darkGold = '#6f4817';
+  const age = Math.max(0, dr.dropT || 0), reveal = Math.min(1, age / 0.35);
+  const pulse = 0.5 + 0.5 * Math.sin(dr.bob * 1.35), beamH = 112 * reveal;
+  ctx.save();
+  setSeed(19000 + Math.floor(dr.x * 3 + dr.y * 7));
+  // 暗金式竖直光柱：多层半透明笔触，不使用会盖住战场的实心色块。
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = gold;
+  ctx.globalAlpha = 0.09 + pulse * 0.025; ctx.fillRect(dr.x - 20, dr.y - beamH, 40, beamH + 8);
+  ctx.globalAlpha = 0.15 + pulse * 0.035; ctx.fillRect(dr.x - 10, dr.y - beamH, 20, beamH + 6);
+  ctx.globalAlpha = 0.34; ctx.fillRect(dr.x - 2, dr.y - beamH, 4, beamH + 4);
+  ctx.globalCompositeOperation = 'source-over';
+  // 落地金环与一次性扩散环，明确材料的地面位置。
+  ctx.globalAlpha = 0.82; ctx.strokeStyle = gold; ctx.lineWidth = 2.2;
+  ctx.beginPath(); ctx.ellipse(dr.x, dr.y + 5, 23 + pulse * 3, 9 + pulse, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.globalAlpha = 0.34; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.ellipse(dr.x, dr.y + 5, 17, 6, 0, 0, Math.PI * 2); ctx.stroke();
+  const burst = Math.max(0, 1 - age / 0.7);
+  if (burst > 0) {
+    ctx.globalAlpha = burst * 0.85; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(dr.x, dr.y + 5, 24 + (1 - burst) * 58, 9 + (1 - burst) * 20, 0, 0, Math.PI * 2); ctx.stroke();
+    for (let i = 0; i < 10; i++) {
+      const a = i / 10 * Math.PI * 2, r0 = 18 + (1 - burst) * 18, r1 = r0 + 15 * burst;
+      jline(dr.x + Math.cos(a) * r0, dr.y + Math.sin(a) * r0 * 0.45,
+        dr.x + Math.cos(a) * r1, dr.y + Math.sin(a) * r1 * 0.45, pale, 1.6);
+    }
+  }
+  // 沿光柱上升的少量闪点，保持手绘纸面质感。
+  for (let i = 0; i < 4; i++) {
+    const phase = dr.bob * 0.22 + i * 1.7, sy = dr.y - 15 - ((phase * 24) % 78);
+    const sx = dr.x + Math.sin(phase * 2.1) * (10 + i * 2);
+    ctx.globalAlpha = 0.42 + 0.35 * Math.sin(phase) ** 2;
+    jline(sx - 3, sy, sx + 3, sy, pale, 1.2); jline(sx, sy - 3, sx, sy + 3, pale, 1.2);
+  }
+  // 中央材料图标：墨核用菱形，特殊材料用交叉笔尖符号。
+  ctx.globalAlpha = 1; ctx.fillStyle = darkGold; ctx.beginPath();
+  ctx.moveTo(dr.x, bobY - 15); ctx.lineTo(dr.x + 13, bobY); ctx.lineTo(dr.x, bobY + 15); ctx.lineTo(dr.x - 13, bobY); ctx.closePath(); ctx.fill();
+  jline(dr.x, bobY - 15, dr.x + 13, bobY, pale, 2); jline(dr.x + 13, bobY, dr.x, bobY + 15, gold, 2);
+  jline(dr.x, bobY + 15, dr.x - 13, bobY, pale, 2); jline(dr.x - 13, bobY, dr.x, bobY - 15, gold, 2);
+  if (dr.material === 'cores') { jcircle(dr.x, bobY, 5, pale, 1.8); jcircle(dr.x, bobY, 2, gold, 1.2); }
+  else { jline(dr.x - 5, bobY + 5, dr.x + 5, bobY - 5, pale, 2.2); jline(dr.x - 5, bobY - 5, dr.x + 5, bobY + 5, gold, 1.6); }
+  // 两种材料错层显示名称，避免 Boss 双掉落时文字互相覆盖。
+  const label = bossMaterialName(dr) + ' ×' + Math.max(1, Math.floor(dr.amount || 1));
+  ctx.font = 'bold 13px ' + FONT;
+  const textWidth = ctx.measureText(label).width || 80, bw = Math.max(82, textWidth + 18);
+  const ly = dr.y - (dr.material === 'horns' ? 102 : 76);
+  ctx.globalAlpha = 0.94; ctx.fillStyle = '#fff6dc'; ctx.fillRect(dr.x - bw / 2, ly - 14, bw, 23);
+  ctx.globalAlpha = 1; jrect(dr.x - bw / 2, ly - 14, bw, 23, darkGold, 1.6);
+  ctx.fillStyle = darkGold; ctx.textAlign = 'center'; ctx.fillText(label, dr.x, ly + 2, bw - 10);
+  ctx.restore();
+}
 function render() {
   ctx.setTransform(viewScale, 0, 0, viewScale, 0, 0);
   ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
@@ -4356,8 +4424,11 @@ function render() {
   for (const dr of drops) {
     const bobY = dr.y + Math.sin(dr.bob) * 3;
     setSeed(7000 + Math.floor(dr.x));
-    jrect(dr.x - 8, bobY - 8, 16, 16, PICKUP, 2);
-    jline(dr.x - 4, bobY, dr.x + 4, bobY, PICKUP, 2);
+    if (dr.kind === 'material' && dr.bossSet) drawBossMaterialDrop(dr, bobY);
+    else {
+      jrect(dr.x - 8, bobY - 8, 16, 16, PICKUP, 2);
+      jline(dr.x - 4, bobY, dr.x + 4, bobY, PICKUP, 2);
+    }
   }
   // 被擦掉的小怪：纸色粗笔擦除 + 少量纸屑，活怪随后绘制避免被遮住
   for (const er of erases) {

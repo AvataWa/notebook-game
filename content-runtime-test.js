@@ -1,4 +1,4 @@
-// 62 条操作辅助、32 件四品质装备与手动替换的综合回归
+// 63 条操作辅助、32 件四品质装备与手动替换的综合回归
 const fs = require('fs');
 const src = ['battle-config.js', 'enemy-config.js', 'content-config.js', 'main.js', 'build-runtime.js']
   .map(f => fs.readFileSync(__dirname + '/' + f, 'utf8').replace("'use strict';", '')).join('\n');
@@ -32,12 +32,12 @@ function assert(ok, msg) { if (!ok) throw new Error(msg); }
 function fresh() { G.resetGame(); G.state = 'play'; G.player.xpNext = 999999; G.player.hp = G.player.maxhp = 9999; G.player.actives = [{ id: 'cyclone', lvl: 1, supports: [], t: 999, uc: 0 }]; }
 function equip(key, rarity = 0) { const slot = G.EQUIPMENT_ITEM_DEFS[key].slot; G.player.equip[slot] = { key, rarity }; G.recomputeEquip(); }
 
-test('内容数量完整：10 被动、62 辅助、37 装备，潜墨 22 条', () => {
+test('内容数量完整：10 被动、63 辅助、37 装备，潜墨 22 条', () => {
   fresh();
   assert(G.PASSIVES.length === 10, '通用被动数量错误');
-  assert(G.OPERATION_AFFIXES.length === 62, '专属辅助数量错误');
-  assert(new Set(G.OPERATION_AFFIXES.map(a => a.id)).size === 62, '辅助 ID 重复');
-  for (const [skill, count] of [['dive', 22], ['surge', 20], ['absorb', 20]]) assert(G.OPERATION_AFFIXES.filter(a => a.skill === skill).length === count, skill + ' 数量错误');
+  assert(G.OPERATION_AFFIXES.length === 63, '专属辅助数量错误');
+  assert(new Set(G.OPERATION_AFFIXES.map(a => a.id)).size === 63, '辅助 ID 重复');
+  for (const [skill, count] of [['dive', 22], ['surge', 20], ['absorb', 21]]) assert(G.OPERATION_AFFIXES.filter(a => a.skill === skill).length === count, skill + ' 数量错误');
   assert(Object.keys(G.EQUIPMENT_ITEM_DEFS).length === 37, '装备数量错误');
   for (const slot of ['head', 'body', 'hands', 'feet', 'acc']) {
     const expected = slot === 'head' || slot === 'acc' ? 8 : 7;

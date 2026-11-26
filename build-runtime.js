@@ -399,16 +399,8 @@
   window.__drawWorldExtras = function() {
     for (const dr of drops) {
       const bobY = dr.y + Math.sin(dr.bob) * 3;
-      if (dr.kind === 'material') {
-        const color = dr.material === 'horns' ? '#c28a24' : '#8b52b5';
-        ctx.globalAlpha = 0.2; ctx.fillStyle = color; ctx.fillRect(dr.x - 12, bobY - 12, 24, 24); ctx.globalAlpha = 1;
-        setSeed(7100 + Math.floor(dr.x)); jcircle(dr.x, bobY, 11, color, 2.4);
-        if (dr.material === 'horns') { jline(dr.x - 7, bobY + 6, dr.x + 6, bobY - 8, color, 3); jline(dr.x - 1, bobY, dr.x + 8, bobY + 5, color, 2); }
-        else { jcircle(dr.x, bobY, 5, color, 1.8); jline(dr.x - 7, bobY, dr.x + 7, bobY, color, 1.2); }
-        ctx.fillStyle = color; ctx.font = 'bold 9px ' + FONT; ctx.textAlign = 'center';
-        ctx.fillText((dr.material === 'horns' ? '残角' : '墨核') + ' ×' + dr.amount, dr.x, bobY - 17);
-        continue;
-      }
+      // Boss 材料由主渲染统一绘制暗金光柱、图标与完整名称，避免重复标签。
+      if (dr.kind === 'material') continue;
       const rarity = RARITY_LIST[rarityIndex(dr)];
       ctx.globalAlpha = 0.25; ctx.fillStyle = rarity.color; ctx.fillRect(dr.x - 10, bobY - 10, 20, 20); ctx.globalAlpha = 1;
       setSeed(7000 + Math.floor(dr.x)); jrect(dr.x - 10, bobY - 10, 20, 20, rarity.color, 2.6);

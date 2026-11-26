@@ -136,5 +136,24 @@ test('群箭数量和飞盾数值辅助真实生效', () => {
   G.W.updateRicoshields(0.2); assert(hp - e.hp > 29 && shield.bounces === 1, '飞盾削尖笔尖没有增伤');
 });
 
+test('蜡烛头与冰可乐新星升级和范围辅助都扩大真实命中半径', () => {
+  for (const [id, baseRadius] of [['candle', 125], ['cola', 150]]) {
+    fresh(id); G.player.actives[0].lvl = 3; const e = target(baseRadius * 1.08, 0), hp = e.hp;
+    cast(); assert(e.hp < hp, id + ' 升级范围没有改变真实命中');
+    fresh(id, ['wide']); const wideTarget = target(baseRadius * 1.1, 0), wideHp = wideTarget.hp;
+    cast(); assert(wideTarget.hp < wideHp, id + ' 浓墨重彩没有扩大真实命中');
+    assert(G.supportUsable('wide', id) && !G.supportUsable('areagravity', id), id + ' 范围或牵引匹配错误');
+  }
+});
+
+test('跟随角色的区域不再提供或结算引力草稿', () => {
+  for (const id of ['vortex', 'candle', 'cola']) {
+    fresh(id, ['areagravity']);
+    assert(!G.supportUsable('areagravity', id) && !calc().areaGravity, id + ' 旧配装仍结算跟随牵引');
+  }
+  fresh('cyclone', ['areagravity']);
+  assert(G.supportUsable('areagravity', 'cyclone') && calc().areaGravity === 1, '固定蜡笔目标区域的牵引被误删');
+});
+
 console.log(failed ? 'SUPPORT_EXPANSION_TEST_FAILURES: ' + failed : 'SUPPORT_EXPANSION_TEST_OK (' + passed + '/' + passed + ')');
 process.exit(failed ? 1 : 0);

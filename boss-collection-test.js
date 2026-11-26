@@ -76,6 +76,15 @@ test('每个正式主线 Boss 只生成墨核和首次专属制作材料', () =>
   }
 });
 
+test('Boss 材料使用暗金光柱与错层名称标签，且仍可正常拾取', () => {
+  fresh(); B.spawnBossRewards({ stage: 2, x: 0, y: 0, bossTookHit: true });
+  drawTexts.length = 0; G.update(0.1); G.render();
+  assert(G.drops.every(dr => dr.dropT > 0), '材料掉落动画时间没有推进');
+  assert(drawTexts.some(t => t.includes('领主墨核 ×2')) && drawTexts.some(t => t.includes('巨灵带芯 ×1')), '暗金材料名称或数量没有绘制');
+  for (const dr of G.drops.slice()) B.collectMaterial(dr);
+  assert(M.data.bossSets.correction.cores === 2 && M.data.bossSets.correction.horns === 1, '视觉调整破坏材料拾取');
+});
+
 test('制作材料实际拾取后永久入库，失败不清除', () => {
   fresh(); const set = C.byId.correction; B.spawnBossRewards({ stage: 2, x: 0, y: 0, bossTookHit: true });
   assert(M.data.bossSets.correction.cores === 0 && !M.data.inventory.some(x => set.all.includes(x.key)), '未拾取已入库');
