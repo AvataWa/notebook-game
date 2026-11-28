@@ -193,8 +193,9 @@
   function marked(e) { return !!(e && e.bossSetMarks && Object.values(e.bossSetMarks).some(t => t > gameTime)); }
   function addShield(percent, label) {
     const cap = player.maxhp * .6, amount = player.maxhp * percent / 100;
-    player.bossPaperShield = Math.min(cap, (player.bossPaperShield || 0) + amount);
-    floats.push({ x: player.x, y: player.y - 37, txt: (label || '纸甲') + ' +' + Math.round(amount), t: .55, color: ARC, weak: true });
+    const before = player.bossPaperShield || 0;
+    player.bossPaperShield = Math.min(cap, before + amount);
+    addPaperShieldFloat(player.bossPaperShield - before);
   }
   function refundFor(id, key, prop, cap, bucket) {
     if (!hasItem(key) || !bucket || (bucket.ink || 0) >= cap) return 0;

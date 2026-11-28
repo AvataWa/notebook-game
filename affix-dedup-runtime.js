@@ -11,7 +11,7 @@
     proc: false
   };
   const DURATION = { cyclone: 1.2, volcanic: 1.2, arc: 1.2, vortex: 5, candle: 1.2, inkrain: 2.5,
-    ruler: 1.2, chalk: 1.2, brand: 4, cola: 1.2, spinlance: 3.6, inkgrenade: 1.2, absolve: 3 };
+    ruler: 1.2, chalk: 1.2, brand: 4, cola: 1.2, spinlance: 3.6, inkgrenade: 1.2 };
   const ELEMENTAL_DMG = ['physdmg', 'firedmg', 'icedmg', 'thunderdmg'];
   const ELEMENTAL_CRIT = ['physcrit', 'firecrit', 'icecrit', 'thundercrit'];
 
@@ -157,7 +157,6 @@
           if (previous && previous.id !== a.id) {
             const refund = BATTLE.activeCooldowns[previous.id] * skillCalc(previous).cd * 0.08 * c.rotationSwift;
             previous.t = Math.max(0, previous.t - refund);
-            floats.push({ x: player.x, y: player.y - 42, txt: '轮转返笔', t: 0.55, color: c.col || INK, weak: true });
           }
         }
         S.lastSkill = a.id;
@@ -334,7 +333,6 @@
       const ratio = Math.min(0.08 * rec.lvl, rec.ids.size * 0.01 * rec.lvl);
       if (ratio > 0) {
         a.t = Math.max(0, a.t - BATTLE.activeCooldowns[a.id] * skillCalc(a).cd * ratio);
-        floats.push({ x: player.x, y: player.y - 42, txt: '收笔 +' + Math.round(ratio * 100) + '%', t: 0.55, color: INK, weak: true });
       }
     }
     S.sheathCasts = S.sheathCasts.filter(rec => !rec.done);

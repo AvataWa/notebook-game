@@ -6,7 +6,7 @@
     const dedup = new Set(['brutal', 'swift', 'sharpen', 'heavynib', 'saturate', 'sheath', 'heavyweight', 'scrit',
       'sweep', 'linger', 'dur', 'physdmg', 'physcrit', 'physvuln', 'firedmg', 'firecrit', 'fireblast',
       'icedmg', 'icecrit', 'thunderdmg', 'thundercrit', 'thunderstatic', 'areaspikes']);
-    if (dedup.has(id)) return supDesc(id, n);
+    if (dedup.has(id) || id === 'onabsorb') return supDesc(id, n);
     const text = {
       brutal: `伤害 +${25 * n}%，释放频率降低 ${8 * n}%`,
       swift: `释放频率提升 ${13 * n}%`,
@@ -63,7 +63,7 @@
     if (card.kind === 'active+') body = `${SKILL_DEFS[card.skill].desc}\n\n本次强化：${activeUpgradeDesc(card.skill, +String(card.name).match(/Lv(\d+)/)?.[1] || 1)}`;
     if (card.kind === 'support' || card.kind === 'support+') {
       const level = card.kind === 'support' ? 1 : (+String(card.name).match(/Lv(\d+)/)?.[1] || 1);
-      subtitle = `${SUPPORTS[card.sup].name} → ${SKILL_DEFS[card.skill].name}`;
+      subtitle = `${window.CharacterRuntime ? CharacterRuntime.supportName(card.sup) : SUPPORTS[card.sup].name} → ${SKILL_DEFS[card.skill].name}`;
       body = supDesc(card.sup, level);
     }
     const role = cardRoleLabel(card), category = cardTypeLabel(card);
@@ -74,14 +74,14 @@
     const def = SKILL_DEFS[a.id];
     const lines = [def.desc, `等级 Lv.${a.lvl}`, `辅助 ${a.supports.length}/${supportCap()}`];
     if (!a.supports.length) lines.push('尚未镶嵌辅助技能');
-    for (const sp of a.supports) lines.push(`◆ ${SUPPORTS[sp.id].name} Lv.${sp.lvl} · ${supportTagText(sp.id)}`, supDesc(sp.id, sp.lvl));
+    for (const sp of a.supports) lines.push(`◆ ${window.CharacterRuntime ? CharacterRuntime.supportName(sp.id) : SUPPORTS[sp.id].name} Lv.${sp.lvl} · ${supportTagText(sp.id)}`, supDesc(sp.id, sp.lvl));
     show({ title: def.name, subtitle: '完整机制', tag: '主动 · ' + skillTagText(a.id), body: lines.join('\n'), color: attrOf(a.id),
       icon: window.SkillIconRuntime ? { id: a.id, kind: 'active', level: a.lvl, state: a.supports.length + '/' + supportCap() } : null });
   }
   function affixDetail(entry) {
     const def = entry.def || entry;
     const passive = entry.kind === 'passive' || !def.skill;
-    const type = passive ? (def.shield ? '被动 · 护盾' : '被动 · 通用') : ({ dive: '潜墨 · 操作', surge: '墨潮 · 操作', absorb: '吸墨 · 操作' })[def.skill];
+    const type = passive ? (def.shield ? '被动 · 护盾' : '被动 · 通用') : ({ dive: '潜墨 · 操作', surge: '墨潮 · 操作', absorb: player.characterId === 'colors' ? '彩墨 · 操作' : '吸墨 · 操作' })[def.skill];
     show({ title: def.name + (entry.count > 1 ? ` ×${entry.count}` : ''), tag: type, body: def.desc, color: passive && def.shield ? ARC : (passive ? DARK : INK) });
   }
   function itemDetail(eq, slot, growth) {

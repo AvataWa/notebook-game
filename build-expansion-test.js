@@ -109,8 +109,8 @@ test('静电四个不同目标、额外导电和雷网均进入真实结算', ()
   assert(G.EL.state.nets.length === 1 && G.EL.state.nets[0].damage === 20, '雷网没有记录路径或伤害');
 });
 
-test('二十九个形态被动全部注册、一次获取且只在前置主动存在时出现', () => {
-  const forms = Object.keys(G.F.forms); assert(forms.length === 29, '形态被动不是 29 个');
+test('二十八个形态被动全部注册、一次获取且只在前置主动存在时出现', () => {
+  const forms = Object.keys(G.F.forms); assert(forms.length === 28, '形态被动不是 28 个');
   for (const skill of forms) {
     const p = G.PASSIVES.find(x => x.id === 'form_' + skill);
     fresh(skill === 'cyclone' ? 'pageslash' : 'cyclone');
@@ -120,7 +120,7 @@ test('二十九个形态被动全部注册、一次获取且只在前置主动�
   }
 });
 
-test('二十九个形态均可实际施放并更新，实体坐标保持有限', () => {
+test('二十八个形态均可实际施放并更新，实体坐标保持有限', () => {
   for (const skill of Object.keys(G.F.forms)) {
     fresh(skill); G.player.taken['form_' + skill] = true; target();
     const result = cast(); assert(result !== false, skill + ' 形态施放失败');

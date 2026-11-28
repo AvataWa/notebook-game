@@ -568,7 +568,10 @@
     if (summaryTab === 'affixes') {
       const entries = [];
       for (const p of PASSIVES) if ((build.passives[p.id] || 0) > 0) entries.push({ kind: 'passive', def: p, count: build.passives[p.id] });
-      for (const a of OPERATION_AFFIX_LIST) if ((build.affixes[a.skill] && build.affixes[a.skill][a.id]) || build.taken[a.id]) entries.push({ kind: 'operation', def: a });
+      for (const original of OPERATION_AFFIX_LIST) {
+        const a = window.CharacterRuntime ? CharacterRuntime.operationAffix(original) : original;
+        if (a && ((build.affixes[a.skill] && build.affixes[a.skill][a.id]) || build.taken[a.id])) entries.push({ kind: 'operation', def: a });
+      }
       return entries;
     }
     if (summaryTab === 'damage') {

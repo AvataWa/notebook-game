@@ -36,11 +36,11 @@ function target(x, y) {
   const e = G.enemies[G.enemies.length - 1]; e.hp = e.maxhp = 9999; e.stunT = 999; e.r = 4; return e;
 }
 
-test('主动池为 18 个且不含涂鸦小鬼，赦免粉笔保留环绕激光纸蝶', () => {
+test('主动池为 17 个，涂鸦小鬼与赦免粉笔均已移除', () => {
   fresh();
-  assert(Object.keys(G.SKILL_DEFS).length === 18, '主动数量不是 18');
+  assert(Object.keys(G.SKILL_DEFS).length === 17, '主动数量不是 17');
   assert(!G.SKILL_DEFS.srs, '涂鸦小鬼仍在主动池');
-  assert(G.SKILL_DEFS.absolve && G.SKILL_DEFS.absolve.desc.includes('激光纸蝶'), '赦免粉笔的环绕激光纸蝶被误删');
+  assert(!G.SKILL_DEFS.absolve, '赦免粉笔仍在主动池');
 });
 
 test('连笔短直线独立落在怪物身上，同线近敌叠两层而线外敌人不受影响', () => {

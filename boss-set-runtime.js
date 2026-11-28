@@ -10,7 +10,7 @@
   const BASE_HIT = {
     cyclone: 11, volcanic: 26, tornado: 15, chainclip: 13, arc: 22, spark: 12,
     ballista: 12, boomerang: 18, vortex: 10, candle: 7, icespear: 30, inkrain: 8,
-    ruler: 22, chalk: 45, pinburst: 12, absolve: 30, brand: 9, cola: 20,
+    ruler: 22, chalk: 45, pinburst: 12, brand: 9, cola: 20,
     bloodcore: 34, doommark: 24, shieldrush: 28, starfall: 30
   };
   const S = {
@@ -169,7 +169,7 @@
           const amount = Math.min(10 - tail.inkReturned, itemV('huntergall', 'ink'));
           tail.inkReturned += amount;
           const gained = refundInk(amount);
-          if (gained > 0) floats.push({ x: e.x, y: e.y - e.r - 8, txt: '墨+' + (Math.round(gained * 10) / 10), t: 0.55, color: COL, weak: true });
+          addPlayerInkFloat(gained, COL);
         }
         if (setCount() >= 5 && !tail.reflected) { tail.reflected = true; reflectTail(tail, e); }
       }

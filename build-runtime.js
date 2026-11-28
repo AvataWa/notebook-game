@@ -112,7 +112,7 @@
     if (!(e.parryKbT > 0)) { e.kbx = kx / kd * KNOCK_V * kbMul; e.kby = ky / kd * KNOCK_V * kbMul; }
     if (dotDps) { e.dotDps = Math.max(e.dotDps, dotDps); e.dotT = 3; e.dotSkill = skillId || 'other'; }
     sparks.push({ x: e.x + (Math.random() - 0.5) * e.r, y: e.y + (Math.random() - 0.5) * e.r, t: 0.18, color: hitCol || INK });
-    floats.push({ x: e.x + (Math.random() - 0.5) * 40, y: e.y - e.r - 8 - Math.random() * 18, txt: Math.round(dmg) + (crit ? '!' : ''), t: 0.7, color: hitCol || INK, crit, weak: !!weakFloat });
+    addEnemyDamageFloat(e, dmg, crit, hitCol, weakFloat, skillId);
     if (e.hp <= 0) killEnemy(e);
   };
 
@@ -411,13 +411,15 @@
       jcircle(d.x, d.y, 22 + Math.sin(d.t * 8) * 3, inkFriendlyColor, 1.2); ctx.globalAlpha = 1;
     }
   };
+  function rerollVisible() {
+    return hasItem('rerollnote') || (window.CharacterRuntime && CharacterRuntime.hasRerolls());
+  }
   render = function() {
     baseRender();
-    if (state === 'levelup' && (hasItem('rerollnote') || (window.CharacterRuntime && CharacterRuntime.hasRerolls()))) {
-      const lastCard = cardRects[cardRects.length - 1];
-      if (window.DesktopRuntime && DesktopRuntime.active) rerollRect.x = W / 2 - rerollRect.w / 2;
-      else rerollRect.x = 122;
-      rerollRect.y = Math.min(H - 45, (lastCard ? lastCard.y + lastCard.h : 532) + 12);
+    if (state === 'levelup' && rerollVisible()) {
+      const desktop = !!(window.DesktopRuntime && DesktopRuntime.active);
+      rerollRect.x = skipOptionRect.x + skipOptionRect.w + (desktop ? 20 : 10);
+      rerollRect.y = skipOptionRect.y;
       ctx.fillStyle = 'rgba(255,250,238,0.9)'; ctx.fillRect(rerollRect.x, rerollRect.y, rerollRect.w, rerollRect.h);
       jrect(rerollRect.x, rerollRect.y, rerollRect.w, rerollRect.h, player.itemRerolls > 0 ? INK : GRAY, 2);
       ctx.fillStyle = player.itemRerolls > 0 ? INK : GRAY; ctx.textAlign = 'center'; ctx.font = 'bold 12px ' + FONT;
@@ -436,7 +438,8 @@
       if (window.DesktopRuntime && DesktopRuntime.active) { DesktopRuntime.handleEquipmentPointer(e); return; }
       if (pointInRect(p, equipmentReplaceRect)) resolveEquipment(true);
       else if (pointInRect(p, equipmentKeepRect)) resolveEquipment(false);
-    } else if (state === 'levelup' && pointInRect(p, rerollRect)) {
+    } else if (state === 'levelup' && rerollVisible() && pointInRect(p, rerollRect)) {
+      // 刷新按钮隐藏时，旧热区不能继续截获同一位置的「放弃本次」。
       e.preventDefault(); e.stopImmediatePropagation(); rerollOptions();
     }
   }, true);

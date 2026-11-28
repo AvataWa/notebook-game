@@ -188,10 +188,10 @@ test('装备品质框在世界层绘制，不覆盖 HUD 和升级卡片', () => 
   assert(drop >= 0 && hud >= 0 && card >= 0, '缺少掉落、HUD 或升级卡片绘制');
   assert(drop < hud && drop < card, '装备品质框仍绘制在 HUD 或卡片之上');
 });
-test('装备运行层同样保留墨迹持续伤害弱跳字', () => {
+test('装备运行层将同怪同来源的持续伤害累计为一条弱跳字', () => {
   fresh(); G.spawnEnemy('stick', 50, 0); G.addInkStain(50, 0, 10, 40, '#1a2b8f');
   G.updateInkStains.dotT = 0; G.updateInkStains.poolT = 0; G.updateInkStains(0);
-  assert(G.floats.length === 2 && G.floats.every(f => f.weak), '装备运行层覆盖了弱跳字标记');
+  assert(G.floats.length === 1 && G.floats[0].weak && G.floats[0].txt === '5', '持续伤害没有正确累计');
 });
 test('吸墨纸甲旧灰墨抗减速效果已移除', () => {
   fresh(); G.addHostileInk(10, 0, 10, 50); equip('blotarmor', 0);

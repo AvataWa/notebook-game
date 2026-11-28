@@ -74,7 +74,6 @@
     if (!marked.length) return false;
     for (const target of marked) {
       target.hadesDoom = { t: 1.5, total: 1.5, dmg: 48 * c.dmg, c, sources: Object.create(null) };
-      floats.push({ x: target.x, y: target.y - target.r - 28, txt: '死线', t: 0.7, color: c.col, crit: true });
       sparks.push({ x: target.x, y: target.y, t: 0.24, color: c.col });
     }
     novas.push({ x: player.x, y: player.y, t: 0.45, max: 130 * c.rad, col: c.col, c });
@@ -163,7 +162,6 @@
     const base = e.hadesRamDmg * (multiplier || 1) * (second ? 1.5 : 1);
     e.hadesWallCd = gameTime + 0.45;
     hurtEnemy(e, base, 0, e.x - e.kbx * 0.02, e.y - e.kby * 0.02, 0, 0, 0, CORE_COL, false, 'ramruler');
-    floats.push({ x: e.x, y: e.y - e.r - 18, txt: '撞墙！', t: 0.65, color: CORE_COL, crit: true });
     shakeT = Math.max(shakeT, 0.1);
     if (has('hwallwave')) {
       for (const other of enemies) {
@@ -337,7 +335,6 @@
       if (distance >= 27) continue;
       player.hadesCoreAmmo++;
       hadesState.shards.splice(i, 1);
-      floats.push({ x: player.x, y: player.y - 34, txt: '红芯回收', t: 0.65, color: CORE_COL, weak: true });
     }
   }
   const baseUpdate = update;

@@ -74,10 +74,11 @@
 
   function breakNova() {
     novas.push({ x: player.x, y: player.y, t: 0.35, max: 52, col: ARC });
-    floats.push({ x: player.x, y: player.y - 48, txt: '护盾破碎', t: 0.75, color: ARC });
-    if (!player.taken.idleburst) return;
+    const burst = !!player.taken.idleburst;
+    floats.push({ x: player.x, y: player.y - 62, txt: burst ? '护盾破碎 · 破膜新星' : '护盾破碎',
+      t: burst ? 0.9 : 0.75, color: ARC, crit: burst });
+    if (!burst) return;
     novas.push({ x: player.x, y: player.y, t: 0.45, max: 150, col: ARC });
-    floats.push({ x: player.x, y: player.y - 62, txt: '破膜新星', t: 0.9, color: ARC, crit: true });
     const damage = 30 + shieldMax() * 0.5;
     for (const e of enemies) {
       if (e.dead || Math.hypot(e.x - player.x, e.y - player.y) > 150 + e.r) continue;
@@ -104,11 +105,7 @@
     S.round = [];
     const reduction = fullBuild() ? 1.2 : 0.6;
     for (const a of player.actives) a.t = Math.max(0, a.t - reduction);
-    floats.push({ x: player.x, y: player.y - 48, txt: '自动书写完成 · 返还 ' + reduction + ' 秒当前冷却', t: 0.9, color: INK, crit: true });
-    if (player.taken.idleround) {
-      const restored = restoreShield(8);
-      if (restored > 0) floats.push({ x: player.x, y: player.y - 64, txt: '轮转充盾 +' + Math.round(restored), t: 0.8, color: ARC });
-    }
+    if (player.taken.idleround) restoreShield(8);
     if (level() < 5 || !last) return;
     /* 直接调用施法，不经过 afterCast：免费重播不会推进下一轮，也不会形成死循环。 */
     S.replaying = true;

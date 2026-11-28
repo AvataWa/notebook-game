@@ -26,11 +26,11 @@ eval(src + `
 // 本套件专测移动布局；正式网页默认 PC，测试中显式切回触屏模式。
 isDesktopLayout = () => false; resize();
 ;globalThis.G = {
-  resetGame, applyOption, buildOptions, update, render, floatPopScale, floatIsFlashing, drawPlayerResources,
-  layoutCards, drawCards, cardTypeLabel, cardTypeColor, cardRoleLabel, drawCardTypeBadge, drawCoreDamageZone, drawOuterSurgeDamageZone,
+  resetGame, applyOption, skipOption, buildOptions, update, render, floatPopScale, floatIsFlashing, drawPlayerResources,
+  layoutCards, drawCards, drawSkipOptionButton, cardTypeLabel, cardTypeColor, cardRoleLabel, drawCardTypeBadge, drawCoreDamageZone, drawOuterSurgeDamageZone,
   spawnEnemy, drawMeleeTelegraph, enemySwingRange,
   get state() { return state; }, set state(v) { state = v; }, get player() { return player; }, get cards() { return cards; }, get enemies() { return enemies; },
-  get cardRects() { return cardRects; }, get erupts() { return erupts; }, get novas() { return novas; }, get floats() { return floats; },
+  get cardRects() { return cardRects; }, get skipOptionRect() { return skipOptionRect; }, get erupts() { return erupts; }, get novas() { return novas; }, get floats() { return floats; },
   set hitStop(v) { hitStopT = v; },
   get joy() { return joy; }, get levelupDelay() { return levelupDelayT; },
   get levelupPickAfter() { return levelupPickAfter; }, set levelupPickAfter(v) { levelupPickAfter = v; },
@@ -60,6 +60,28 @@ test('经验满后等待 0.5 秒才弹出升级三选一', () => {
   assert(drawTexts.some(t => t.txt === '0.5 秒后可选择'), '输入锁期间缺少不可选提示');
   G.levelupPickAfter = 0; G.applyOption(0);
   assert(G.state === 'play' && G.cards.length === 0, '输入锁结束后无法正常选卡');
+});
+test('升级可放弃本次奖励，遵守输入锁且保留连续升级与开局选择', () => {
+  fresh(); G.state = 'levelup'; G.buildOptions(); G.player.itemRerolls = 2;
+  const level = G.player.level;
+  const snapshot = JSON.stringify({ actives: G.player.actives, hp: G.player.hp, maxhp: G.player.maxhp,
+    ink: G.player.ink, taken: G.player.taken, affixes: G.player.affixes });
+  G.levelupPickAfter = Date.now() + 10000;
+  assert(G.skipOption() === false && G.state === 'levelup' && G.cards.length === 3, '输入锁期间可以放弃或卡片被清空');
+  drawTexts.length = 0; G.drawSkipOptionButton();
+  assert(drawTexts.some(t => t.txt === '放弃本次'), '升级界面没有绘制放弃按钮');
+  G.levelupPickAfter = 0;
+  assert(G.skipOption() && G.state === 'play' && G.cards.length === 0 && G.cardRects.length === 0, '放弃后没有安全回到战斗');
+  assert(JSON.stringify({ actives: G.player.actives, hp: G.player.hp, maxhp: G.player.maxhp,
+    ink: G.player.ink, taken: G.player.taken, affixes: G.player.affixes }) === snapshot, '放弃错误发放了技能或属性');
+  assert(G.player.itemRerolls === 2 && G.player.goldT >= 1, '放弃消耗了刷新次数或缺少选卡后的保护');
+  G.player.xp = G.player.xpNext; G.update(0.1); G.update(0.41);
+  assert(G.state === 'levelup' && G.player.level === level + 1 && G.cards.length === 3, '放弃吞掉了后续升级');
+  G.levelupPickAfter = 0; G.drawSkipOptionButton();
+  const p = center(G.skipOptionRect); pointer('pointerdown', 90, p.x, p.y);
+  assert(G.state === 'play' && G.cards.length === 0, '放弃按钮点击热区没有生效');
+  G.resetGame(); G.levelupPickAfter = 0;
+  assert(G.state === 'start' && G.skipOption() === false && G.cards.length === 3, '开局起手技能也能被放弃');
 });
 test('墨潮蓄力暂停升级三选一，释放或取消后继续倒计时并弹出', () => {
   for (const end of ['pointerup', 'pointercancel']) {

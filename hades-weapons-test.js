@@ -34,10 +34,10 @@ function take(id) { G.cards = [{ kind: 'passive', id }]; G.state = 'levelup'; G.
 function cast() { const a = G.player.actives[0]; return G.fireSkill(a, G.skillCalc(a)); }
 function repeat(fn, n, dt) { for (let i = 0; i < n; i++) fn(dt); }
 
-test('内容池达到二十九主动、八十四被动和六十七辅助，四十条武器被动均有前置', () => {
+test('内容池达到二十八主动、八十三被动和六十七辅助，四十条武器被动均有前置', () => {
   fresh('cyclone');
-  assert(Object.keys(G.SKILL_DEFS).length === 29, '主动总数不是 29');
-  assert(G.PASSIVES.length === 84, '被动总数不是 84');
+  assert(Object.keys(G.SKILL_DEFS).length === 28 && !G.SKILL_DEFS.absolve, '主动总数不是 28 或赦免粉笔仍存在');
+  assert(G.PASSIVES.length === 83, '被动总数不是 83');
   assert(Object.keys(G.SUPPORTS).length === 67, '辅助总数不是 67');
   const ids = ['slash_echo','slash_pull','slash_charge','slash_crack','pierce_long','pierce_return','pierce_ramp','pierce_pin',
     'spin_double','spin_pull','spin_spear','spin_blast','shield_reflect','shield_bash','shield_ink','shield_charge',
@@ -50,9 +50,9 @@ test('内容池达到二十九主动、八十四被动和六十七辅助，四�
   }
 });
 
-test('二十九主动共用唯一基础冷却表，修改表值会直接改变实际间隔', () => {
+test('二十八主动共用唯一基础冷却表，修改表值会直接改变实际间隔', () => {
   const table = G.BATTLE.activeCooldowns, ids = Object.keys(G.SKILL_DEFS);
-  assert(Object.keys(table).length === 29, '基础冷却表不是 29 项');
+  assert(Object.keys(table).length === 28 && !table.absolve, '基础冷却表不是 28 项或仍包含赦免粉笔');
   for (const id of ids) assert(Number.isFinite(table[id]) && table[id] > 0, id + ' 缺少有效基础冷却');
   fresh('piercerush'); target(100, 0);
   const a = G.player.actives[0], previous = table.piercerush;

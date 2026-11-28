@@ -39,7 +39,7 @@ function hit(e, skill) { G.hurtEnemy(e, 1, 0, e.x, e.y, 0, 0, 0, '#000', false, 
 
 test('内容池增加两个主动和四条有前置条件的被动，红笔减分已移除', () => {
   fresh('cyclone');
-  assert(Object.keys(G.SKILL_DEFS).length === 20 && !G.SKILL_DEFS.weakmark, '主动总数不是 20 或红笔减分仍存在');
+  assert(Object.keys(G.SKILL_DEFS).length === 19 && !G.SKILL_DEFS.weakmark && !G.SKILL_DEFS.absolve, '主动总数不是 19 或已删除技能仍存在');
   assert(G.PASSIVES.length === 14, '被动总数不是 14');
   assert(!G.PASSIVES.some(p => ['hweakspread','hdoublequestion'].includes(p.id)), '红笔减分联动被动仍存在');
   assert(!G.SKILL_DEFS.ramruler && !G.SKILL_DEFS.rulerwall, '撞墙主动仍在内容池');

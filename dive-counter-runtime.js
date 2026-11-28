@@ -26,6 +26,7 @@
     if (!player.diving || player.preciseDiveUsed || (player.preciseDiveWindowT || 0) <= 0) return false;
     player.preciseDiveUsed = true;
     player.preciseDiveWindowT = 0;
+    player.preciseDiveSuccessT = gameTime; // 四色笔记据此开启第四段的精准派生窗口。
     player.preciseDiveSlowT = Math.max(player.preciseDiveSlowT || 0, SLOW_DURATION);
     const damage = ABSORB_RULE.meleeDamage * 0.8 * player.dmgMul * (1 + player.eqAtk / 100) * (player.metaDiveMul || 1);
     novas.push({ x: player.x, y: player.y, t: DURATION, max: MAX_RADIUS * player.radMul,

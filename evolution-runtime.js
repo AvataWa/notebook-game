@@ -1,9 +1,9 @@
-/* 老主动等级进化：回形针、炮台、毒墨雨、赦免粉笔。 */
+/* 老主动等级进化：回形针、炮台、毒墨雨。 */
 (() => {
   'use strict';
 
   const S = {
-    castId: 0, mergeT: 0, puddles: [], preClouds: []
+    mergeT: 0, puddles: [], preClouds: []
   };
 
   function derivedC(c, skill) {
@@ -40,11 +40,6 @@
       for (let i = cloudStart; i < clouds.length; i++) {
         clouds[i].evoLevel = a.lvl;
         clouds[i].evoMerges = 0;
-      }
-    } else if (a.id === 'absolve') {
-      for (const e of enemies) {
-        if (e.dead || e.absolveC !== c) continue;
-        e.absolveEvo = { lvl: a.lvl, transfers: a.lvl >= 3 ? 1 : 0, castId: ++S.castId };
       }
     }
     return result;
@@ -165,55 +160,6 @@
     for (let i = S.puddles.length - 1; i >= 0; i--) if (S.puddles[i].t <= 0) S.puddles.splice(i, 1);
   }
 
-  function transferAbsolve(e, mark, c) {
-    if (!mark || mark.transfers <= 0 || e.boss) return;
-    let best = null, hp = -1;
-    for (const other of enemies) {
-      if (other.dead || other.boss || other === e) continue;
-      const d2 = (other.x - e.x) ** 2 + (other.y - e.y) ** 2;
-      if (d2 <= 220 * 220 && other.hp > hp) { best = other; hp = other.hp; }
-    }
-    if (!best) return;
-    best.absolveUntil = gameTime + 1.5;
-    best.absolveC = c;
-    best.absolveEvo = { lvl: mark.lvl, transfers: 0, castId: mark.castId };
-    lightnings.push({
-      x1: best.x, y1: best.y - 220, x2: best.x, y2: best.y,
-      t: 0.25, delay: 0, prog: 1, c, col: c.col, evoDerived: true
-    });
-    floats.push({ x: best.x, y: best.y - best.r - 20, txt: '赦免传递', t: 0.65, color: c.col || ARC });
-  }
-
-  const baseKillEnemy = killEnemy;
-  killEnemy = function(e) {
-    const marked = !e.boss && e.absolveUntil >= gameTime && e.absolveC;
-    const mark = marked ? e.absolveEvo : null, c = marked ? e.absolveC : null;
-    const minionStart = minions.length;
-    const result = baseKillEnemy(e);
-    if (marked) {
-      for (let i = minionStart; i < minions.length; i++) {
-        if (minions[i].ghost) minions[i].evoLvl = mark ? mark.lvl : 1;
-      }
-      transferAbsolve(e, mark, c);
-    }
-    return result;
-  };
-
-  function refractAbsolve(l) {
-    const m = l.sourceMinion, target = l.tgt;
-    if (!m || (m.evoLvl || 0) < 5 || !target || target.dead || gameTime < (m.evoRefractReady || 0)) return;
-    const other = nearestEnemy(target.x, target.y, 160, target);
-    if (!other && !(target.elite || target.boss)) return;
-    const next = other || target;
-    m.evoRefractReady = gameTime + 0.8;
-    lightnings.push({
-      x1: target.x, y1: target.y, x2: next.x, y2: next.y,
-      t: 0.18, delay: 0.08, prog: 0, tgt: next,
-      dmg: l.dmg * (other ? 0.4 : 0.25), c: derivedC(l.c, 'absolve'),
-      col: l.col, absolveRefraction: true, evoDerived: true
-    });
-  }
-
   const baseUpdate = update;
   update = function(dt) {
     if (state === 'play') {
@@ -226,7 +172,6 @@
       S.mergeT -= dt;
       if (S.mergeT <= 0) { S.mergeT += 0.12; mergeClouds(); }
       S.preClouds = clouds.slice();
-      for (const l of lightnings) l.evoSeen = true;
     }
     baseUpdate(dt);
     if (state !== 'play') return;
@@ -235,11 +180,6 @@
     }
     S.preClouds = [];
     updatePuddles(dt);
-    for (const l of lightnings) {
-      if (l.evoSeen) continue;
-      l.evoSeen = true;
-      if (l.absolveLaser) refractAbsolve(l);
-    }
   };
 
   function drawPuddles() {
@@ -260,11 +200,10 @@
   const baseResetGame = resetGame;
   resetGame = function() {
     baseResetGame();
-    S.castId = 0; S.mergeT = 0; S.puddles.length = 0; S.preClouds.length = 0;
+    S.mergeT = 0; S.puddles.length = 0; S.preClouds.length = 0;
   };
 
   window.EvolutionRuntime = {
-    state: S, beforeChainHit, afterChainHit, updateTotems, mergeClouds,
-    addPuddle, transferAbsolve, refractAbsolve
+    state: S, beforeChainHit, afterChainHit, updateTotems, mergeClouds, addPuddle
   };
 })();

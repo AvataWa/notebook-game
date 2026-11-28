@@ -42,9 +42,10 @@ function target(x, y, kind) {
 function cast() { const a = G.player.actives[0]; return G.fireSkill(a, G.skillCalc(a)); }
 function repeat(fn, n, dt) { for (let i = 0; i < n; i++) fn(dt); }
 
-test('29 个主动完整重分为物理/火/冰/雷，数量 8/7/7/7', () => {
-  const expected = { phys: 8, fire: 7, ice: 7, thunder: 7 }, actual = { phys: 0, fire: 0, ice: 0, thunder: 0 };
-  assert(Object.keys(G.SKILL_DEFS).length === 29, '主动总数不是 29');
+test('28 个主动完整重分为物理/火/冰/雷，数量 8/7/7/6', () => {
+  const expected = { phys: 8, fire: 7, ice: 7, thunder: 6 }, actual = { phys: 0, fire: 0, ice: 0, thunder: 0 };
+  assert(Object.keys(G.SKILL_DEFS).length === 28, '主动总数不是 28');
+  assert(!G.SKILL_DEFS.absolve, '赦免粉笔仍在主动池');
   for (const id of Object.keys(G.SKILL_DEFS)) actual[G.SKILL_ATTR[id]]++;
   assert(JSON.stringify(actual) === JSON.stringify(expected), '属性数量错误：' + JSON.stringify(actual));
   for (const key of Object.keys(expected)) assert(G.ATTR_COLOR[key], key + ' 缺少属性色');
@@ -95,25 +96,6 @@ test('流星粉笔头 0.45 秒落下，并在最后 0.1 秒最后修正落点', 
   e.x = 210; e.y = 40; G.update(0.3); assert(!er.aimLocked && er.x === 120, '过早锁定落点');
   e.x = 260; e.y = 80; G.update(0.06);
   assert(er.aimLocked && er.x === 260 && er.y === 80, '最后 0.1 秒没有修正到最新位置');
-});
-
-test('赦免标记期间任意来源击杀都转化为小鬼，Boss 不转化', () => {
-  fresh('absolve'); const e = target(100, 0); cast(); e.hp = 1;
-  G.hurtEnemy(e, 5, 0, 0, 0, 0, 0, 0, false, 'cyclone');
-  assert(e.dead && G.minions.filter(m => m.ghost).length === 1, '非光柱击杀没有触发赦免');
-});
-
-test('赦免转化纸蝶环绕目标并用激光造成真实伤害', () => {
-  fresh('absolve'); const marked = target(40, 0); cast(); marked.hp = 1;
-  G.hurtEnemy(marked, 5, 0, 0, 0, 0, 0, 0, false, 'cyclone');
-  const m = G.minions.find(v => v.ghost), e = target(140, 0);
-  m.x = 80; m.y = 0; m.orbitA = Math.PI; m.paperTarget = e; m.atkCd = 0;
-  const hp = e.hp; G.update(0.05); G.update(0.05);
-  assert(G.lightnings.some(l => l.absolveLaser && l.tgt === e), '赦免纸蝶没有向目标发射激光');
-  assert(e.hp < hp, '赦免纸蝶激光没有造成真实伤害');
-  for (let i = 0; i < 20; i++) G.update(0.05);
-  const dist = Math.hypot(e.x - m.x, e.y - m.y);
-  assert(dist >= 45 && dist <= 85 && m.paperTarget === e, '赦免纸蝶没有稳定环绕锁定目标：' + dist);
 });
 
 test('橡皮筋烙印每跳增伤 8%，最多 40%，转移保留层数', () => {

@@ -218,8 +218,7 @@
     recordSkillDamage(pool.skill, dealt);
     e.hp -= amount;
     e.flash = Math.max(e.flash || 0, 0.06);
-    if (pool.showFloat) floats.push({ x: e.x, y: e.y - e.r - 5,
-      txt: Math.max(1, Math.round(amount)), t: 0.45, color: pool.col, weak: true });
+    if (pool.showFloat) addEnemyDamageFloat(e, amount, false, pool.col, true, pool.skill);
     if (e.hp <= 0) killEnemy(e);
   }
   function updatePools(dt) {
@@ -259,7 +258,7 @@
     const result = baseHurtPlayer(dmg, ...rest);
     if (player.taken.stumblewrite && player.hp < oldHp && S.hurtCdT <= 0) {
       S.hurtSpeedT = 3; S.hurtCdT = 6; S.hurtTrailReady = true;
-      floats.push({ x: player.x, y: player.y - 40, txt: '踉跄疾书', t: 0.75, color: inkFriendlyColor, crit: true });
+      floats.push({ x: player.x, y: player.y - 84, txt: '踉跄疾书', t: 0.65, color: inkFriendlyColor, weak: true });
     }
     return result;
   };

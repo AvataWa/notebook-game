@@ -92,10 +92,10 @@ test('错误触点不能释放，取消蓄力不消耗墨潮', () => {
   assert(G.cancelInkSurgeCharge(4), '正确触点无法取消蓄力');
   assert(G.player.special === 100 && G.novas.length === 0 && !G.player.surgeCharging, '取消蓄力消耗资源或误放技能');
 });
-test('墨迹持续伤害产生的全部跳字都标记为弱反馈', () => {
+test('墨迹持续伤害累计为一条弱反馈跳字', () => {
   fresh(); G.spawnEnemy('stick', 50, 0); G.addInkStain(50, 0, 10, 40, '#1a2b8f');
   G.updateInkStains(0);
-  assert(G.floats.length === 2 && G.floats.every(f => f.weak), '墨迹持续伤害仍使用普通命中跳字');
+  assert(G.floats.length === 1 && G.floats[0].weak && G.floats[0].txt === '5', '墨迹持续伤害未累计为弱跳字');
 });
 console.log(failed ? 'INK_TEST_FAILURES: ' + failed : 'INK_TEST_OK (14/14)');
 process.exit(failed ? 1 : 0);

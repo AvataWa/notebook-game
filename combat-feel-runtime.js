@@ -14,7 +14,7 @@
 
   try { muted = globalThis.localStorage && localStorage.getItem('notebook-muted') === '1'; } catch (_) { /* 无存储时仅本次有效 */ }
 
-  const SLASH = new Set(['cyclone', 'vortex', 'pageslash', 'ruler', 'absolve']);
+  const SLASH = new Set(['cyclone', 'vortex', 'pageslash', 'ruler']);
   const PIERCE = new Set(['tornado', 'chainclip', 'boomerang', 'icespear', 'pinburst', 'bloodcore', 'piercerush', 'spinlance', 'ricoshield', 'perfectarrow', 'arrowfocus', 'heatrail']);
   const BLAST = new Set(['volcanic', 'cola', 'chalk', 'brand', 'doommark', 'inkgrenade', 'magfist', 'shieldrush', 'surge', 'absorb', 'dive']);
   const SUSTAIN = new Set(['candle', 'vortex', 'inkrain', 'clouds', 'fields']);

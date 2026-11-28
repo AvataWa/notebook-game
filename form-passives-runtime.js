@@ -17,7 +17,6 @@
     ruler: ['十字裂地', '单排地刺改为十字裂地，横向造成 65% 伤害'],
     chalk: ['三连粉笔雨', '单颗流星改为 3 颗连续小流星，每颗 45% 伤害'],
     pinburst: ['环形蜂群', '扇形射击改为 360° 环形射击，单钉 75% 伤害'],
-    absolve: ['双生赦免', '转化产生 2 只小鬼，每只继承 55% 伤害与持续时间'],
     brand: ['三角烙印', '连接 3 个目标形成三角，连线同样造成持续伤害'],
     cola: ['回卷冰浪', '新星扩散后再向内回卷，造成 60% 伤害并减速'],
     doommark: ['死线传染', '死线结算后跳向附近新目标，50% 伤害，最多 2 次'],
@@ -166,7 +165,6 @@
         12 * c.dmg * (1 + c.bdmg) * 0.75, 'pin', Object.assign(projOpts(c, 0.9), { hits: 1 + c.pierce, aoe: 8 * c.dmg * (1 + c.bdmg), aoeR: 40 * c.rad }));
       return true;
     }
-    if (a.id === 'absolve') return baseFireSkill(a, c);
     if (a.id === 'brand') {
       const first = baseTarget(350 * c.rad); if (!first) return false;
       const points = [first]; for (let i = 0; i < 2; i++) { const n = nearest(first.x, first.y, 250 * c.rad, points); if (n) points.push(n); }
@@ -260,16 +258,6 @@
         next.formDoomJumps = (e.formDoomJumps || 0) + 1; next.formDoomArmed = true; }
     }
     return result;
-  };
-
-  const baseKillEnemy = killEnemy;
-  killEnemy = function(e) {
-    const old = minions.length;
-    baseKillEnemy(e);
-    if (has('absolve') && e.absolveUntil >= gameTime && e.absolveC && !e.boss && minions.length > old) {
-      const c = e.absolveC, first = minions[old]; first.dmg *= 0.55; first.t *= 0.55;
-      minions.push(Object.assign({}, first, { x: first.x + 16, y: first.y + 8, atkCd: 0.2 }));
-    }
   };
 
   function updateForm(dt) {

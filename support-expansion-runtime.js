@@ -175,7 +175,7 @@
       rec.n++; rec.t = gameTime;
       if (rec.n % 3 === 0) {
         dmg *= 1 + 0.4 + 0.4 * c.thirdStrike;
-        floats.push({ x: e.x, y: e.y - e.r - 20, txt: '收笔！', t: 0.55, color: c.col || INK, crit: true });
+        floats.push({ x: e.x, y: e.y - e.r - 20, txt: '收笔！', t: 0.55, color: c.col || INK, weak: true });
       }
     }
     const result = baseAreaHit(e, dmg, c, sx, sy, zoneR, dist);

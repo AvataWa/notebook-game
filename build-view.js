@@ -37,7 +37,10 @@
       const result = [];
       const counts = player.passiveCounts || {};
       for (const p of PASSIVES) if (counts[p.id] > 0) result.push({ kind: 'passive', def: p, count: counts[p.id] });
-      for (const a of OPERATION_AFFIX_LIST) if (hasAffix(a.skill, a.id)) result.push({ kind: 'operation', def: a });
+      for (const original of OPERATION_AFFIX_LIST) {
+        const a = window.CharacterRuntime ? CharacterRuntime.operationAffix(original) : original;
+        if (a && hasAffix(a.skill, a.id)) result.push({ kind: 'operation', def: a });
+      }
       return result;
     }
     return SLOTS.filter(slot => player.equip[slot]).map(slot => ({ slot, eq: player.equip[slot] }));
@@ -101,7 +104,7 @@
   }
   function drawAffixEntry(entry, rect) {
     const isPassive = entry.kind === 'passive', def = entry.def;
-    const title = isPassive ? (def.shield ? '护盾被动' : '通用被动') : ({ dive: '潜墨辅助', surge: '墨潮辅助', absorb: '吸墨辅助' })[def.skill];
+    const title = isPassive ? (def.shield ? '护盾被动' : '通用被动') : ({ dive: '潜墨辅助', surge: '墨潮辅助', absorb: player.characterId === 'colors' ? '彩墨辅助' : '吸墨辅助' })[def.skill];
     const entryColor = isPassive && def.shield ? ARC : (isPassive ? DARK : INK);
     buildCard(rect, entryColor);
     ctx.textAlign = 'left'; ctx.fillStyle = entryColor; ctx.font = 'bold 13px ' + FONT;

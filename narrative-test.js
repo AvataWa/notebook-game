@@ -87,11 +87,11 @@ test('真实手机开始按钮与回车都会先进入黑屏', () => {
   G.N.finishIntro();
 });
 
-test('八角色、十页、十 Boss 与四主动进化文案完整', () => {
+test('八角色、十页、十 Boss 与三主动进化文案完整', () => {
   const c = G.N.copy;
   assert(Object.keys(c.CHARACTER_LINES).length === 8, '角色数量错误');
   assert(c.PAGES.length === 10 && Object.keys(c.BOSS_INTROS).length === 10, '页面或 Boss 数量错误');
-  assert(Object.keys(c.EVOLUTIONS).join(',') === 'chainclip,ballista,inkrain,absolve', '进化覆盖错误');
+  assert(Object.keys(c.EVOLUTIONS).join(',') === 'chainclip,ballista,inkrain', '进化覆盖错误');
   for (const id of Object.keys(c.EVOLUTIONS)) assert(c.EVOLUTIONS[id][3] && c.EVOLUTIONS[id][5], id + ' 进化等级缺失');
 });
 
@@ -124,7 +124,7 @@ test('后续开局仅一条回归文本和一条角色文本', () => {
   assert(G.N.copy.RETURNING.includes(intro.lines[0].text), '未使用回归文本');
   assert(G.N.copy.CHARACTER_LINES.summon.slice(1).includes(intro.lines[1].text), '后续角色短句错误');
   G.N.finishIntro();
-  assert(G.player.characterId === 'summon' && G.player.actives[0].id === 'absolve', '后续开局角色未生效');
+  assert(G.player.characterId === 'summon' && G.player.actives[0].id === 'icespear', '后续开局角色未生效');
 });
 
 test('关闭叙事后选角直接开局，设置状态持久化', () => {

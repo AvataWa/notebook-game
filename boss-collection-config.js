@@ -197,7 +197,7 @@ const BOSS_SET_COLLECTION = (() => {
   }
   const baseHit = { cyclone: 11, volcanic: 26, tornado: 15, chainclip: 13, arc: 22, spark: 12,
     ballista: 12, boomerang: 18, vortex: 10, candle: 7, icespear: 30, inkrain: 8,
-    ruler: 22, chalk: 45, pinburst: 12, absolve: 30, brand: 9, cola: 20,
+    ruler: 22, chalk: 45, pinburst: 12, brand: 9, cola: 20,
     bloodcore: 34, doommark: 24, shieldrush: 28, starfall: 30, pageslash: 22, crosspike: 26,
     dualpin: 10, tripleshield: 18, ricoshield: 20, perfectshot: 34, pinvolley: 9, magnetupper: 28,
     stickymine: 24, strafe: 8 };

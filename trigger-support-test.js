@@ -31,7 +31,7 @@ function target(x = 50) {
 
 test('红芯及三条专属被动下线，五种连携可供全部主动使用', () => {
   fresh();
-  assert(Object.keys(G.SKILL_DEFS).length === 29 && !G.SKILL_DEFS.bloodcore && !G.SKILL_DEFS.weakmark, '红芯投枪或红笔减分仍在主动池');
+  assert(Object.keys(G.SKILL_DEFS).length === 28 && !G.SKILL_DEFS.bloodcore && !G.SKILL_DEFS.weakmark && !G.SKILL_DEFS.absolve, '已删除主动仍在主动池');
   assert(!['hdualcore', 'hcorewound', 'hshardguard'].some(id => G.PASSIVES.some(p => p.id === id)), '红芯专属被动仍在词条池');
   assert(Object.keys(G.SUPPORTS).length === 67, '辅助总数不是 67');
   for (const id of ['onabsorb', 'ondive', 'onsurge', 'oncrit', 'onkill']) assert(G.supportUsable(id, 'cyclone') && G.supportUsable(id, 'tornado'), id + ' 未对全部主动开放');

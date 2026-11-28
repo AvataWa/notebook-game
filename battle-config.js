@@ -140,7 +140,6 @@ const BATTLE_CONFIG = {
     ruler: 2,           // 裂地直尺
     chalk: 2.4,         // 流星粉笔头
     pinburst: 1.3,      // 蜂群大头钉
-    absolve: 2,         // 赦免粉笔
     brand: 2.5,         // 橡皮筋烙印
     cola: 1.8,          // 冰可乐新星
 

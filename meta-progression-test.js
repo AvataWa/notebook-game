@@ -36,7 +36,7 @@ test('非法存档回退默认值，首页只保留上局文案与功能入口',
   assert(G.state === 'metaHome', '初始状态不是局外手账');
   assert(M.data.ink === 0 && M.data.paper === 0 && M.data.rank === 0, '默认资源或段位错误');
   assert(M.data.inventory.length === 0 && !M.data.inherited && M.data.rankScores.length === 0, '默认背包或成绩席不为空');
-  assert(Object.keys(G.SKILL_DEFS).length === 18, '基础主动技能不是 18 个');
+  assert(Object.keys(G.SKILL_DEFS).length === 17 && !G.SKILL_DEFS.absolve, '基础主动技能不是 17 个或赦免粉笔仍存在');
   drawTexts.length = 0; G.render();
   assert(drawTexts.includes('纸上涂鸦幻想') && drawTexts.includes('天赋') && drawTexts.includes('文具盒 0'), '局外首页未完整绘制');
   assert(drawTexts.some(s => s.includes('开始游戏')) && drawTexts.includes(M.rankInfo().name), '开局或当前段位缺失');

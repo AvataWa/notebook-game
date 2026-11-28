@@ -22,6 +22,7 @@ eval(src + `
   render, buildOptions,
   get state() { return state; }, set state(v) { state = v; },
   get cards() { return cards; }, get cardRects() { return cardRects; }, get cardDetailRects() { return cardDetailRects; },
+  get skipOptionRect() { return skipOptionRect; },
   get player() { return player; }, set levelupPickAfter(v) { levelupPickAfter = v; },
   get meta() { return window.__metaRuntime; }, get build() { return window.__buildView; },
   get copy() { return window.UICopy; }, get detail() { return window.UIDetail; },
@@ -58,6 +59,17 @@ test('三选一没有详情热区，输入锁结束后点卡片直接选择', ()
   assert(!G.detail.isOpen && G.state === 'levelup', '输入锁失效或误开详情');
   G.levelupPickAfter = 0; p = center(G.cardRects[1]); pointer(p.x, p.y);
   assert(G.state === 'play' && G.cards.length === 0, '解锁后无法正常选卡');
+});
+
+test('隐藏刷新热区不会吞掉放弃，解锁后返回战斗且后续升级正常', () => {
+  levelup(); G.player.itemRerolls = 0; G.render();
+  const p = center(G.skipOptionRect); pointer(p.x, p.y);
+  assert(G.state === 'levelup' && G.cards.length === 3, '输入锁期间点击放弃提前关闭了选卡');
+  G.levelupPickAfter = 0; pointer(p.x, p.y);
+  assert(G.state === 'play' && G.cards.length === 0, '隐藏刷新热区吞掉了解锁后的放弃点击');
+  levelup(); G.levelupPickAfter = 0; G.render();
+  const next = center(G.skipOptionRect); pointer(next.x, next.y);
+  assert(G.state === 'play' && G.cards.length === 0, '放弃一次后，后续升级无法再次放弃');
 });
 
 test('死亡先显示战斗失败，点击屏幕后才进入构筑结算', () => {

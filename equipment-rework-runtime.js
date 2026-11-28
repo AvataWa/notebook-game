@@ -110,7 +110,7 @@
           unleash: 0, followup: 0, reburst: 0
         });
         for (let i = 0; i < 1 + empty; i++) baseFireSkill(a, copyC);
-        floats.push({ x: player.x, y: player.y - 38, txt: '临摹 ×' + (1 + empty), t: 0.7, color: c.col || INK, crit: true });
+        floats.push({ x: player.x, y: player.y - 84, txt: '临摹 ×' + (1 + empty), t: 0.65, color: c.col || INK, weak: true });
         novas.push({ x: player.x, y: player.y, t: 0.25, max: 45, col: c.col || INK });
       }
       if (hasItem('parrygrip') && S.parryShots > 0) {
@@ -119,7 +119,6 @@
           const target = nearestEnemy(player.x, player.y, 540);
           shootAt(player.x, player.y, target, itemV('parrygrip', 'dmg') * power(), INK, { life: 1.8 });
         }
-        floats.push({ x: player.x, y: player.y - 32, txt: '返墨 ×' + n, t: 0.65, color: INK });
       }
       if (hasItem('surgeglove') && S.surgeEye) {
         const eye = S.surgeEye, target = nearestEnemy(eye.x, eye.y, 600);
@@ -201,7 +200,6 @@
         S.parryCount = 0;
         if (S.decoys.length >= 3) S.decoys.shift();
         S.decoys.push({ x: player.x, y: player.y, t: 4 });
-        floats.push({ x: player.x, y: player.y - 34, txt: '勇者纸影', t: 0.7, color: INK });
       }
     }
   };
@@ -233,31 +231,56 @@
     if (hasItem('inkarmor') && S.inkStored > 0) {
       const stored = S.inkStored; S.inkStored = 0;
       blast(player.x, player.y, stored, BATTLE.surge.radius * 0.75, inkFriendlyColor, 0.08);
-      floats.push({ x: player.x, y: player.y - 40, txt: '墨囊反击 ' + Math.round(stored), t: 0.75, color: INK, crit: true });
+      floats.push({ x: player.x, y: player.y - 124, txt: '墨囊反击 ' + Math.round(stored), t: 0.75, color: INK, weak: true });
     }
     return result;
   };
 
+  function recallBlankBlades() {
+    if (!hasItem('blankshoes') || !S.blankBlades.length) return;
+    const blades = S.blankBlades.splice(0);
+    S.noProc = true;
+    try {
+      for (const blade of blades) {
+        S.recalls.push({ x1: blade.x, y1: blade.y, x2: player.x, y2: player.y, t: 0.28, total: 0.28 });
+        for (const e of enemies) {
+          if (e.dead || pointSegmentDistance(e.x, e.y, blade.x, blade.y, player.x, player.y) > e.r + 13) continue;
+          hurtEnemy(e, itemV('blankshoes', 'dmg') * power(), 0, blade.x, blade.y,
+            0, -1, 0, PAPER_BLUE, false, 'other');
+        }
+      }
+    } finally { S.noProc = false; }
+  }
   const baseCastAbsorb = castAbsorb;
   castAbsorb = function() {
     const result = baseCastAbsorb();
-    if (result && hasItem('blankshoes') && S.blankBlades.length) {
-      const blades = S.blankBlades.splice(0);
-      S.noProc = true;
-      try {
-        for (const blade of blades) {
-          S.recalls.push({ x1: blade.x, y1: blade.y, x2: player.x, y2: player.y, t: 0.28, total: 0.28 });
-          for (const e of enemies) {
-            if (e.dead || pointSegmentDistance(e.x, e.y, blade.x, blade.y, player.x, player.y) > e.r + 13) continue;
-            hurtEnemy(e, itemV('blankshoes', 'dmg') * power(), 0, blade.x, blade.y,
-              0, -1, 0, PAPER_BLUE, false, 'other');
-          }
-        }
-      } finally { S.noProc = false; }
-      floats.push({ x: player.x, y: player.y - 35, txt: '纸刃召回 ×' + blades.length, t: 0.7, color: PAPER_BLUE });
-    }
+    if (result) recallBlankBlades();
     return result;
   };
+  function onColorSlash() {
+    // 四色笔记不经过 chargeParry，以下仅是彩墨斩的专属装备入口，不附带任何弹反效果。
+    recallBlankBlades();
+    if (hasItem('parrygrip')) S.parryShots = Math.min(3, S.parryShots + 1);
+    if (hasItem('cloak')) {
+      S.parryCount++;
+      if (S.parryCount >= 3) {
+        S.parryCount = 0;
+        if (S.decoys.length >= 3) S.decoys.shift();
+        S.decoys.push({ x: player.x, y: player.y, t: 4 });
+      }
+    }
+  }
+  function onColorSurge(x, y, radius) {
+    if (hasItem('inklens') && S.lensMarks.length) {
+      const marks = S.lensMarks.splice(0);
+      for (let i = 0; i < marks.length; i++) blast(marks[i].x, marks[i].y, itemV('inklens', 'dmg') * power(), 58, inkFriendlyColor, 0.06 + i * 0.035);
+    }
+    if (hasItem('inkarmor') && S.inkStored > 0) {
+      const stored = S.inkStored; S.inkStored = 0;
+      blast(x, y, stored, radius * 0.75, inkFriendlyColor, 0.08);
+      floats.push({ x, y: y - 104, txt: '墨囊反击 ' + Math.round(stored), t: 0.75, color: INK, weak: true });
+    }
+  }
 
   const baseEnterDive = enterDive;
   enterDive = function() {
@@ -272,7 +295,6 @@
       const points = S.trackPoints.splice(0);
       for (let i = 0; i < points.length; i++)
         blast(points[i].x, points[i].y, itemV('trackshoes', 'dmg') * power(), 48, inkFriendlyColor, 0.04 + i * 0.08);
-      floats.push({ x: player.x, y: player.y - 35, txt: '墨轨爆破 ×' + points.length, t: 0.7, color: INK });
     }
     S.trackDistance = 0; S.trackPoints.length = 0;
   };
@@ -420,7 +442,7 @@
         S.armorCd = 0.15; S.armorAcc += eraseGray(player.x, player.y, 26);
         while (S.armorAcc >= 60 && S.armorLayers < 3) {
           S.armorAcc -= 60; S.armorLayers++;
-          floats.push({ x: player.x, y: player.y - 30, txt: '纸甲 +' + S.armorLayers, t: 0.55, color: PAPER_BLUE });
+          addPaperShieldFloat(1);
         }
       }
       if (hasItem('erasershoes') && player.diving && S.eraserCd <= 0) {
@@ -504,6 +526,8 @@
   window.__equipmentRework = {
     state: S,
     onLevelUp,
+    onColorSlash,
+    onColorSurge,
     blast,
     eraseGray,
     inTriangle,

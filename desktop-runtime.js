@@ -103,6 +103,7 @@
       txt(locked ? '0.5 秒后可选择' : '点击或按 ' + (i + 1) + ' 选择', r.x + 20, r.y + r.h - 24, 12, locked ? GRAY : color, 'left', true);
       drawCardTypeBadge(cd, r, 15);
     });
+    drawSkipOptionButton();
   };
 
   const baseDrawBuildButton = drawBuildButton;
@@ -149,9 +150,11 @@
       ctx.globalAlpha = Math.min(1, toastValue.t);
       txt(toastValue.txt, W / 2, H - 132 - i * 23, 15, DARK, 'center', true); ctx.globalAlpha = 1;
     });
+    const colors = player.characterId === 'colors';
+    const paletteCount = colors && window.CharacterRuntime ? Object.keys(CharacterRuntime.state.colorPalette).length : 0;
     const controls = player.characterId === 'idle' ? [] : [
-      [absorbRect, 'absorb', '左键', player.absorbT > 0 ? '吸墨中' : '吸墨 · 弹反', player.absorbCd <= 0 ? INK : GRAY, player.absorbCd > 0 ? player.absorbCd.toFixed(1) : '', player.absorbCd > 0],
-      [specialRect, 'surge', '右键', player.surgeCharging ? '蓄力 ' + Math.round(inkSurgeChargeRatio() * 100) + '%' : (player.special >= 100 ? '墨潮 · 长按' : '墨潮 ' + Math.floor(player.special) + '%'), player.special >= 100 ? INK : GRAY, player.surgeCharging ? Math.round(inkSurgeChargeRatio() * 100) : Math.floor(player.special), player.special < 100 && !player.surgeCharging],
+      [absorbRect, 'absorb', '左键', colors ? '彩墨斩 · 采色' : (player.absorbT > 0 ? '吸墨中' : '吸墨 · 弹反'), player.absorbCd <= 0 ? INK : GRAY, player.absorbCd > 0 ? player.absorbCd.toFixed(1) : '', player.absorbCd > 0],
+      [specialRect, 'surge', '右键', player.surgeCharging ? '蓄力 ' + Math.round(inkSurgeChargeRatio() * 100) + '%' : (player.special >= 100 ? (colors ? '墨潮 · 点击 ' + paletteCount + ' 色' : '墨潮 · 长按') : '墨潮 ' + Math.floor(player.special) + '%'), player.special >= 100 ? INK : GRAY, player.surgeCharging ? Math.round(inkSurgeChargeRatio() * 100) : Math.floor(player.special), player.special < 100 && !player.surgeCharging],
       [diveRect, 'dive', 'Space', player.diving ? '潜墨中' : '潜墨', player.ink > 0 && player.diveCd <= 0 ? INK : GRAY, player.diveCd > 0 ? player.diveCd.toFixed(1) : '', !(player.ink > 0 && player.diveCd <= 0) && !player.diving]
     ];
     for (const [r, id, key, label, color, iconState, disabled] of controls) {
@@ -163,7 +166,9 @@
       txt(label, textX, r.y + 42, icons ? 11 : 13, color, 'left', true, icons ? r.w - 64 : r.w - 24);
     }
     if (player.characterId === 'idle' && window.IdleRuntime) IdleRuntime.drawHUD(true);
-    txt(player.characterId === 'idle' ? 'WASD / 方向键移动　·　技能自动施放　·　Tab 养成　·　Esc 暂停' : 'WASD / 方向键移动　·　左键 / E 吸墨　·　右键 / Q 墨潮　·　空格潜墨　·　Esc 暂停', 26, H - 30, 13, DARK, 'left');
+    txt(player.characterId === 'idle' ? 'WASD / 方向键移动　·　技能自动施放　·　Tab 养成　·　Esc 暂停'
+      : (colors ? 'WASD / 方向键移动　·　左键 / E 彩墨斩　·　右键 / Q 瞬发墨潮　·　空格潜墨　·　Esc 暂停'
+        : 'WASD / 方向键移动　·　左键 / E 吸墨　·　右键 / Q 墨潮　·　空格潜墨　·　Esc 暂停'), 26, H - 30, 13, DARK, 'left');
   };
 
   function drawHome() {
@@ -319,7 +324,10 @@
     if (meta().summaryTab === 'affixes') {
       const result = [];
       for (const p of PASSIVES) if ((s.build.passives[p.id] || 0) > 0) result.push({ kind: 'passive', def: p, count: s.build.passives[p.id] });
-      for (const a of OPERATION_AFFIX_LIST) if ((s.build.affixes[a.skill] && s.build.affixes[a.skill][a.id]) || s.build.taken[a.id]) result.push({ kind: 'operation', def: a });
+      for (const original of OPERATION_AFFIX_LIST) {
+        const a = window.CharacterRuntime ? CharacterRuntime.operationAffix(original) : original;
+        if (a && ((s.build.affixes[a.skill] && s.build.affixes[a.skill][a.id]) || s.build.taken[a.id])) result.push({ kind: 'operation', def: a });
+      }
       return result;
     }
     if (meta().summaryTab === 'damage') {

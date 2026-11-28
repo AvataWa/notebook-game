@@ -183,7 +183,6 @@
       case 'ruler': ctx.save(); ctx.translate(cx, cy); ctx.rotate(-.55); ctx.strokeRect(-.12 * size, -.37 * size, .24 * size, .74 * size); for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(-.12 * size, i * .12 * size); ctx.lineTo(.02 * size, i * .12 * size); ctx.stroke(); } ctx.restore(); break;
       case 'chalk': A(-.28, -.32, .1, .12); P([[.02, .03], [.25, .03], [.32, .31], [.08, .31]], true); burst(.18, .3, .2, 6); break;
       case 'pinburst': for (const a of [-.65, -.3, 0, .3, .65]) { const x = Math.sin(a) * .36, y = -Math.cos(a) * .36; L(0, .28, x, y); C(x, y, .045, true); } break;
-      case 'absolve': C(-.15, 0, .16); C(.15, 0, .16); L(0, -.25, 0, .3); L(-.32, .27, .32, -.27); break;
       case 'brand': ctx.beginPath(); ctx.ellipse(cx, cy, .33 * size, .21 * size, -.35, 0, Math.PI * 2); ctx.stroke(); typeGlyph('active', cx, cy, size * .45, color); break;
       case 'cola': P([[-.15, -.23], [.15, -.23], [.2, .3], [-.2, .3]]); L(-.09, -.34, .09, -.34); L(-.09, -.34, -.09, -.23); for (const a of [0, Math.PI / 3, Math.PI * 2 / 3]) L(Math.cos(a) * .35, Math.sin(a) * .35, -Math.cos(a) * .35, -Math.sin(a) * .35); break;
       case 'doommark': L(-.32, 0, -.08, .25); L(-.08, .25, .36, -.3); L(-.36, -.3, .32, .32); break;

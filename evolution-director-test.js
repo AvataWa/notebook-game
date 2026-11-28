@@ -82,8 +82,8 @@ function optionPool() {
   ];
 }
 
-test('四个主动均有三级与五级进化文案', () => {
-  for (const id of ['chainclip', 'ballista', 'inkrain', 'absolve']) {
+test('三个保留主动均有三级与五级进化文案', () => {
+  for (const id of ['chainclip', 'ballista', 'inkrain']) {
     assert(G.SKILL_EVOLUTIONS[id] && G.SKILL_EVOLUTIONS[id][3] && G.SKILL_EVOLUTIONS[id][5], id + ' 缺少进化');
   }
 });
@@ -153,34 +153,6 @@ test('移动积雨云与等级进化共存并实际移动', () => {
   for (const other of G.clouds) { other.x += 1000; other.y += 1000; }
   G.update(0.5);
   assert(Math.hypot(cl.x - x, cl.y - y) > 5, '移动积雨云没有移动');
-});
-
-test('赦免标记只传递一次且新纸蝶继承五级', () => {
-  fresh('absolve', 5); const first = target(100, 0, 500), second = target(160, 0, 400), third = target(180, 0, 300);
-  cast();
-  assert(first.absolveEvo.transfers === 1, '首目标没有一次传递次数');
-  G.killEnemy(first);
-  assert(second.absolveUntil > 0 && second.absolveEvo.transfers === 0, '标记没有传递或传递次数未清零');
-  assert(G.minions.filter(m => m.ghost).every(m => m.evoLvl === 5), '纸蝶未继承五级');
-  G.killEnemy(second);
-  assert(!(third.absolveUntil > 0), '标记发生了第二次传递');
-});
-
-test('赦免激光折射伤害、冷却与 Boss 回折正确', () => {
-  fresh('absolve', 5); const normal = target(100), other = target(180);
-  const m = { evoLvl: 5, evoRefractReady: 0 };
-  const laser = { sourceMinion: m, tgt: normal, dmg: 100, c: G.skillCalc(G.player.actives[0]), col: '#5b5bd6' };
-  const before = G.lightnings.length;
-  G.E.refractAbsolve(laser);
-  assert(G.lightnings.length === before + 1, '附近有其他目标时未折射');
-  const refracted = G.lightnings[G.lightnings.length - 1];
-  assert(refracted.tgt === other && near(refracted.dmg, 40) && refracted.absolveRefraction, '折射目标或 40% 伤害错误');
-  G.E.refractAbsolve(laser);
-  assert(G.lightnings.length === before + 1, '折射没有遵守 0.8 秒冷却');
-  other.dead = true; normal.boss = true; G.gameTime = 1;
-  G.E.refractAbsolve(laser);
-  const returned = G.lightnings[G.lightnings.length - 1];
-  assert(returned.tgt === normal && near(returned.dmg, 25), 'Boss 无其他目标时未以 25% 回折');
 });
 
 test('抽卡导演保留满栏 0.65 权重并设置进化与数值权重', () => {
